@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Portal — Storias</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap">
+  <style>
+    :root {
+      --bg:#F5F1E8; --surface:#EDE8DC; --border:#D5CCBA;
+      --fg:#1C1410; --muted:#6B5F52; --accent:#C94F1A;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--fg);font-family:'Geist',system-ui,sans-serif;
+         min-height:100vh;-webkit-font-smoothing:antialiased}
+
+    /* NAV */
+    nav{display:flex;align-items:center;justify-content:space-between;
+        padding:0 40px;height:64px;border-bottom:1px solid var(--border);
+        background:rgba(245,241,232,.92);backdrop-filter:blur(12px);}
+    .logo{font-size:18px;font-weight:800;letter-spacing:-.04em;font-family:'Geist',sans-serif}
+    .logo span{color:var(--accent)}
+    .user-info{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+    .user-info img{width:30px;height:30px;border-radius:50%;border:1px solid var(--border)}
+    .btn-out{font-size:12px;color:var(--muted);text-decoration:none;
+             padding:6px 12px;border:1px solid var(--border);border-radius:6px;
+             transition:all .15s}
+    .btn-out:hover{color:var(--fg);border-color:var(--muted)}
+
+    /* CONTENT */
+    main{max-width:860px;margin:0 auto;padding:64px 24px}
+    .greeting{margin-bottom:52px}
+    .greeting h1{font-size:clamp(24px,4vw,36px);font-weight:800;
+                 letter-spacing:-.03em;margin-bottom:8px}
+    .greeting p{font-size:14px;color:var(--muted)}
+
+    /* CARDS */
+    .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+    .card{background:var(--surface);border:1px solid var(--border);
+          border-radius:14px;padding:28px 24px;text-decoration:none;
+          color:inherit;display:flex;flex-direction:column;
+          transition:border-color .15s,transform .15s,box-shadow .15s}
+    .card:hover{border-color:var(--accent);transform:translateY(-4px);
+                box-shadow:0 8px 24px rgba(201,79,26,.12)}
+    .card-num{font-size:10px;font-weight:700;letter-spacing:.12em;
+              text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+    .card-title{font-size:16px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px}
+    .card-desc{font-size:13px;color:var(--muted);line-height:1.6;flex:1;margin-bottom:20px}
+    .card-badge{display:inline-block;font-size:11px;font-weight:600;
+                padding:4px 10px;border-radius:99px;margin-bottom:16px}
+    .badge-basic{background:rgba(201,79,26,.1);color:var(--accent);border:1px solid rgba(201,79,26,.25)}
+    .badge-pro{background:rgba(99,102,241,.08);color:#6366F1;border:1px solid rgba(99,102,241,.2)}
+    .badge-enterprise{background:rgba(180,120,30,.1);color:#A07020;border:1px solid rgba(180,120,30,.25)}
+    .price{font-size:20px;font-weight:800}
+    .price span{font-size:12px;font-weight:400;color:var(--muted)}
+    .cta{margin-top:16px;font-size:12px;font-weight:600;color:var(--accent)}
+
+    /* DEMO NOTICE */
+    .notice{margin-top:52px;padding:16px 20px;background:rgba(201,79,26,.05);
+            border:1px solid rgba(201,79,26,.15);border-radius:10px;
+            font-size:13px;color:var(--muted);line-height:1.6}
+    .notice strong{color:var(--fg)}
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Sto<span>.</span></div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="user-info">
+      {% if picture %}
+        <img src="{{ picture }}" alt="{{ name }}">
+      {% endif %}
+      {{ name }} · {{ email }}
+    </div>
+    <a href="/logout" class="btn-out">Salir</a>
+  </div>
+</nav>
+
+<main>
+  <div class="greeting">
+    <h1>Hola, {{ name }} 👋</h1>
+    <p>Seleccioná el tipo de portal que querés ver. Son demos interactivas.</p>
+  </div>
+
+  <div class="cards">
+    <a class="card" href="/demo/opcion1">
+      <div class="card-num">Opción 01</div>
+      <span class="card-badge badge-basic">Basic · $30/cliente/mes</span>
+      <div class="card-title">Portal cliente con aprobación</div>
+      <div class="card-desc">El cliente de la agencia ve, edita y aprueba sus historias antes de publicar. Ideal para agencias que quieren dar control al cliente final.</div>
+      <div class="price">$30 <span>/ cliente / mes</span></div>
+      <div class="cta">Ver demo →</div>
+    </a>
+    <a class="card" href="/demo/opcion2">
+      <div class="card-num">Opción 02</div>
+      <span class="card-badge badge-pro">Pro · $50/cliente/mes</span>
+      <div class="card-title">Panel de empleados + Meta stats</div>
+      <div class="card-desc">Los empleados de la agencia gestionan todas las cuentas. Estadísticas de Meta, aprobación de contenido, vista por cliente.</div>
+      <div class="price">$50 <span>/ cliente / mes</span></div>
+      <div class="cta">Ver demo →</div>
+    </a>
+    <a class="card" href="/demo/opcion3">
+      <div class="card-num">Opción 03</div>
+      <span class="card-badge badge-enterprise">Enterprise · $90/cliente/mes</span>
+      <div class="card-title">Aprobación por WhatsApp</div>
+      <div class="card-desc">El empleado genera el contenido, hace clic en "Enviar" y el cliente recibe un link por WhatsApp. Abre el link, toca "Aprobar" en 30 segundos — sin app, sin cuenta, sin contraseña.</div>
+      <div class="price">$90 <span>/ cliente / mes</span></div>
+      <div class="cta">Ver demo →</div>
+    </a>
+  </div>
+
+  <div class="notice">
+    <strong>Modo demo:</strong> estas pantallas simulan el producto final. El contenido es de ejemplo — la versión real se conecta al Drive de la agencia, Meta API e Instagram de cada cliente.
+  </div>
+</main>
+
+</body>
+</html>

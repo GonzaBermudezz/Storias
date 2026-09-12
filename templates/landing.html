@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Storias</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --bg:       #F5F1E8;
+      --bg2:      #EDE8DC;
+      --surface:  #E8E2D4;
+      --border:   #D5CCBA;
+      --fg:       #1C1410;
+      --muted:    #6B5F52;
+      --muted2:   #9A8E82;
+      --accent:   #C94F1A;
+      --accent2:  #A83D12;
+      --accent-bg:#FAE8DF;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'DM Sans', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; height: 64px;
+      background: rgba(245,241,232,.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px; font-weight: 900;
+      letter-spacing: -.02em; color: var(--fg);
+    }
+    .logo span { color: var(--accent); }
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      border-radius: 8px; font-size: 14px; font-weight: 600;
+      padding: 9px 20px; cursor: pointer; text-decoration: none;
+      transition: all .15s; border: none; font-family: 'DM Sans', sans-serif;
+    }
+    .btn-ghost {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { color: var(--fg); border-color: var(--muted2); }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(201,79,26,.25); }
+    .btn-lg { padding: 13px 28px; font-size: 15px; border-radius: 10px; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: flex-start; justify-content: center;
+      padding: 120px 48px 80px;
+      max-width: 1100px; margin: 0 auto;
+      position: relative;
+    }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--accent);
+      background: var(--accent-bg); border: 1px solid rgba(201,79,26,.2);
+      border-radius: 99px; padding: 6px 16px; margin-bottom: 32px;
+    }
+    .eyebrow::before {
+      content: '';
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); flex-shrink: 0;
+    }
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(44px, 7vw, 82px);
+      font-weight: 900; letter-spacing: -.03em; line-height: 1.0;
+      text-wrap: balance; max-width: 14ch;
+      margin-bottom: 28px; color: var(--fg);
+    }
+    h1 em {
+      font-style: italic; color: var(--accent);
+    }
+    .hero-sub {
+      font-size: clamp(16px, 2vw, 18px); color: var(--muted);
+      max-width: 46ch; line-height: 1.7; margin-bottom: 44px;
+    }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* Decoración lateral */
+    .hero-deco {
+      position: absolute; right: 48px; top: 50%;
+      transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 12px;
+      opacity: .5;
+    }
+    @media (max-width: 768px) { .hero-deco { display: none; } }
+    .deco-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 20px; width: 220px;
+      font-size: 12px; color: var(--muted);
+    }
+    .deco-card strong { display: block; font-size: 18px; font-weight: 700;
+                         color: var(--fg); margin-bottom: 2px; font-family: 'DM Sans', sans-serif; }
+    .deco-bar { height: 4px; border-radius: 99px; background: var(--border); margin-top: 10px; overflow: hidden; }
+    .deco-fill { height: 100%; background: var(--accent); border-radius: 99px; }
+
+    /* ── DIVIDER ── */
+    .divider {
+      border: none; border-top: 1px solid var(--border);
+      max-width: 1000px; margin: 0 auto;
+    }
+
+    /* ── SECTION ── */
+    .section { padding: 96px 48px; max-width: 1000px; margin: 0 auto; }
+    .section-label {
+      font-size: 11px; font-weight: 600; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: 14px;
+    }
+    .section h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(28px, 4vw, 44px); font-weight: 800;
+      letter-spacing: -.02em; line-height: 1.1;
+      text-wrap: balance; max-width: 18ch;
+      margin-bottom: 14px;
+    }
+    .section-sub {
+      font-size: 15px; color: var(--muted);
+      max-width: 52ch; line-height: 1.7; margin-bottom: 56px;
+    }
+
+    /* ── FEATURES ── */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 2px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+    }
+    .feat {
+      background: var(--bg); padding: 32px 28px;
+      transition: background .15s;
+    }
+    .feat:hover { background: var(--bg2); }
+    .feat-icon { font-size: 26px; margin-bottom: 16px; }
+    .feat h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; color: var(--fg); }
+    .feat p { font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+    /* ── STEPS ── */
+    .steps { display: flex; flex-direction: column; }
+    .step {
+      display: grid; grid-template-columns: 56px 1fr;
+      gap: 24px; padding: 32px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: start;
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--accent-bg); border: 1px solid rgba(201,79,26,.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: var(--accent);
+      font-family: 'Playfair Display', serif; flex-shrink: 0;
+    }
+    .step h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .step p { font-size: 14px; color: var(--muted); line-height: 1.65; }
+
+    /* ── CTA FINAL ── */
+    .cta-block {
+      margin: 0 48px 80px;
+      max-width: 904px; margin-left: auto; margin-right: auto;
+      background: var(--fg); color: var(--bg);
+      border-radius: 20px; padding: 64px 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 40px; flex-wrap: wrap;
+    }
+    .cta-block h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(26px, 4vw, 40px); font-weight: 900;
+      letter-spacing: -.03em; line-height: 1.1;
+      text-wrap: balance; max-width: 16ch;
+    }
+    .cta-block h2 em { font-style: italic; color: #F2B490; }
+    .cta-block p { font-size: 14px; color: rgba(245,241,232,.6); margin-top: 10px; max-width: 34ch; }
+    .btn-cta-inv {
+      background: var(--bg); color: var(--fg); white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .btn-cta-inv:hover { background: var(--bg2); transform: translateY(-1px); }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center; padding: 32px 24px;
+      font-size: 12px; color: var(--muted2);
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: inherit; text-decoration: none; }
+    footer a:hover { color: var(--accent); }
+
+    @media (max-width: 640px) {
+      nav { padding: 0 20px; }
+      .hero { padding: 100px 20px 60px; }
+      .section { padding: 64px 20px; }
+      .cta-block { padding: 40px 28px; margin: 0 20px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Sto<span>.</span></div>
+  <div class="nav-actions">
+    {% if logged_in %}
+      <a href="/portal" class="btn btn-accent">Mi portal →</a>
+      <a href="/logout" class="btn btn-ghost">Salir</a>
+    {% else %}
+      <a href="#como" class="btn btn-ghost">Cómo funciona</a>
+      <a href="/login" class="btn btn-accent">
+        Ingresar con Google
+      </a>
+    {% endif %}
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="eyebrow">Automatización de Instagram Stories</div>
+  <h1>Publicá historias <em>sin</em> levantar un dedo</h1>
+  <p class="hero-sub">
+    Subís las fotos a Drive. Storias genera el copy con IA, el cliente lo aprueba en un click, y se publica solo en Instagram.
+  </p>
+  <div class="hero-actions">
+    {% if logged_in %}
+      <a href="/portal" class="btn btn-accent btn-lg">Ir a mi portal →</a>
+    {% else %}
+      <a href="/login" class="btn btn-accent btn-lg">Empezar gratis</a>
+      <a href="#como" class="btn btn-ghost btn-lg">Ver cómo funciona</a>
+    {% endif %}
+  </div>
+
+  <!-- Decoración derecha -->
+  <div class="hero-deco">
+    <div class="deco-card">
+      <strong>+340%</strong>
+      alcance promedio vs. publicación manual
+      <div class="deco-bar"><div class="deco-fill" style="width:78%"></div></div>
+    </div>
+    <div class="deco-card">
+      <strong>4 hs</strong>
+      ahorradas por semana por cliente
+      <div class="deco-bar"><div class="deco-fill" style="width:60%"></div></div>
+    </div>
+    <div class="deco-card">
+      <strong>150+</strong>
+      cuentas gestionadas simultáneamente
+      <div class="deco-bar"><div class="deco-fill" style="width:90%"></div></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- FEATURES -->
+<div class="section">
+  <div class="section-label">Qué hace</div>
+  <h2>Todo el flujo, automatizado</h2>
+  <p class="section-sub">Desde la foto en Drive hasta la historia publicada en Instagram. Sin apps extra, sin copiar textos, sin depender de que alguien se acuerde.</p>
+  <div class="features">
+    <div class="feat">
+      <div class="feat-icon">📁</div>
+      <h3>Se conecta a tu Drive</h3>
+      <p>Seguís subiendo fotos como siempre. Storias las lee automáticamente cuando es hora de publicar.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">✍️</div>
+      <h3>Genera el copy con IA</h3>
+      <p>Analiza cada imagen y escribe historias con el tono de tu marca. Sin prompts, sin copiar y pegar.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">✅</div>
+      <h3>El cliente aprueba</h3>
+      <p>Antes de publicar, el cliente ve las historias en su panel y las aprueba o edita en segundos.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">📲</div>
+      <h3>Publica en Instagram</h3>
+      <p>Se publica solo en el día y horario configurado. Sin tocar el teléfono.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">📊</div>
+      <h3>Estadísticas de Meta</h3>
+      <p>Alcance, impresiones y engagement de cada historia, directo desde la API de Meta.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🏷️</div>
+      <h3>White-label disponible</h3>
+      <p>Para agencias: cada cliente ve su panel con su logo. Sin mención de Storias.</p>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- CÓMO FUNCIONA -->
+<div class="section" id="como">
+  <div class="section-label">Cómo funciona</div>
+  <h2>Tres pasos y listo</h2>
+  <p class="section-sub">Sin instalaciones ni configuraciones complicadas. En 5 minutos está andando.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <h3>Conectás tu Drive y tu Instagram</h3>
+        <p>Una sola vez. Storias guarda los permisos y no vuelve a pedirlos. Login con tu cuenta de Google.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <h3>Subís fotos a la carpeta de Drive</h3>
+        <p>El mismo flujo que ya tenés. Storias las detecta sola y genera el copy de cada historia con IA.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <h3>Aprobás y se publica</h3>
+        <p>Revisás el contenido en tu panel en 30 segundos, confirmás, y Storias lo publica en el horario acordado.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CTA FINAL -->
+<div class="cta-block">
+  <div>
+    <h2>Empezá hoy, es <em>gratis</em></h2>
+    <p>Sin tarjeta de crédito. Conectás Google y en 5 minutos está andando.</p>
+  </div>
+  {% if logged_in %}
+    <a href="/portal" class="btn btn-lg btn-cta-inv">Ir a mi portal →</a>
+  {% else %}
+    <a href="/login" class="btn btn-lg btn-cta-inv">Ingresar con Google →</a>
+  {% endif %}
+</div>
+
+<footer>
+  © 2026 Storias · Bermudez Avaca Muslera Automations ·
+  <a href="mailto:avaca.matias1@gmail.com">avaca.matias1@gmail.com</a>
+</footer>
+
+</body>
+</html>

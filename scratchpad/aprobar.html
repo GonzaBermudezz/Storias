@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Aprobar Historias · Sto.</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; background: #000; }
+    body { font-family: system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+
+    /* ── STORY VIEWER ── */
+    #viewer {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      background: #000;
+    }
+
+    /* Progress bars */
+    #progress-bars {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+      display: flex; gap: 4px; padding: 10px 12px 0;
+      padding-top: max(10px, env(safe-area-inset-top));
+    }
+    .prog-bar {
+      flex: 1; height: 2.5px; background: rgba(255,255,255,.35); border-radius: 99px; overflow: hidden;
+    }
+    .prog-bar-fill {
+      height: 100%; background: #fff; border-radius: 99px;
+      width: 0%; transition: width .1s linear;
+    }
+    .prog-bar.done .prog-bar-fill { width: 100%; }
+    .prog-bar.active .prog-bar-fill { width: 0%; }
+
+    /* Header */
+    #story-header {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+      display: flex; align-items: center; gap: 10px;
+      padding: 28px 14px 0;
+      padding-top: calc(max(10px, env(safe-area-inset-top)) + 18px);
+    }
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #C94F1A; border: 2px solid #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .story-meta { flex: 1; }
+    .story-meta .name { font-size: 13px; font-weight: 600; color: #fff; line-height: 1; }
+    .story-meta .time { font-size: 11px; color: rgba(255,255,255,.65); margin-top: 2px; }
+
+    /* Imagen */
+    #story-img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%; object-fit: cover;
+      user-select: none; -webkit-user-select: none;
+      pointer-events: none;
+    }
+
+    /* Texto superpuesto */
+    #story-text {
+      position: absolute; bottom: 130px; left: 0; right: 0; z-index: 10;
+      padding: 0 20px;
+      text-align: center;
+    }
+    #story-text p {
+      display: inline-block;
+      background: rgba(0,0,0,.55);
+      color: #fff; font-size: 15px; font-weight: 500; line-height: 1.5;
+      padding: 8px 14px; border-radius: 8px;
+      backdrop-filter: blur(4px);
+    }
+
+    /* Tap zones */
+    #tap-left, #tap-right {
+      position: absolute; top: 0; bottom: 130px; z-index: 9;
+      width: 40%;
+    }
+    #tap-left  { left: 0; }
+    #tap-right { right: 0; }
+
+    /* Bottom actions */
+    #story-actions {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+      padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+      background: linear-gradient(transparent, rgba(0,0,0,.85));
+      display: flex; flex-direction: column; gap: 8px;
+    }
+
+    /* Counter */
+    #story-counter {
+      text-align: center; font-size: 12px; color: rgba(255,255,255,.5);
+      margin-bottom: 2px;
+    }
+
+    /* Approve button */
+    .btn-ok {
+      width: 100%; padding: 14px; border-radius: 12px; border: none;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: all .15s; letter-spacing: -.01em;
+    }
+    .btn-ok.pending {
+      background: rgba(255,255,255,.12); color: #fff;
+      border: 1.5px solid rgba(255,255,255,.25);
+    }
+    .btn-ok.approved {
+      background: #22c55e; color: #fff; border: none;
+    }
+
+    /* Approve all */
+    #btn-all {
+      width: 100%; padding: 12px; border-radius: 12px; border: none;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.7);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      border: 1px solid rgba(255,255,255,.12);
+    }
+
+    /* Comment modal */
+    #comment-modal {
+      position: fixed; inset: 0; z-index: 100; display: none;
+      align-items: flex-end; background: rgba(0,0,0,.6);
+    }
+    #comment-modal.open { display: flex; }
+    .modal-sheet {
+      width: 100%; background: #1a1a1a; border-radius: 20px 20px 0 0;
+      padding: 20px 20px max(24px, env(safe-area-inset-bottom));
+    }
+    .modal-sheet h3 { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 14px; }
+    textarea {
+      width: 100%; background: #252525; border: 1px solid #333; border-radius: 10px;
+      color: #fff; font-size: 14px; padding: 12px; resize: none;
+      min-height: 90px; font-family: inherit;
+    }
+    textarea:focus { outline: none; border-color: #C94F1A; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-cancel { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #333;
+                  background: transparent; color: #888; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-confirm { flex: 2; padding: 12px; border-radius: 10px; border: none;
+                   background: #22c55e; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+    /* Success screen */
+    #success-screen {
+      position: fixed; inset: 0; z-index: 200; display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      background: #000; text-align: center; padding: 40px;
+    }
+    #success-screen.show { display: flex; }
+    .success-icon { font-size: 64px; margin-bottom: 20px; }
+    #success-screen h2 { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 10px; }
+    #success-screen p { font-size: 15px; color: rgba(255,255,255,.5); line-height: 1.6; }
+    .powered { margin-top: 48px; font-size: 11px; color: rgba(255,255,255,.25); }
+  </style>
+</head>
+<body>
+
+<div id="viewer">
+  <img id="story-img" src="" alt="">
+
+  <div id="progress-bars"></div>
+
+  <div id="story-header">
+    <div class="avatar" id="avatar-initials">CA</div>
+    <div class="story-meta">
+      <div class="name" id="client-name">CUAN Arquitectura</div>
+      <div class="time">Miércoles 10 de septiembre · 09:00 hs</div>
+    </div>
+  </div>
+
+  <div id="story-text"><p id="story-caption"></p></div>
+
+  <div id="tap-left"  onclick="prevStory()"></div>
+  <div id="tap-right" onclick="nextStory()"></div>
+
+  <div id="story-actions">
+    <div id="story-counter"></div>
+    <button class="btn-ok pending" id="btn-ok" onclick="toggleApprove()"></button>
+    <button id="btn-all" onclick="approveAll()">✓ Aprobar todas y enviar</button>
+  </div>
+</div>
+
+<!-- Comment modal -->
+<div id="comment-modal">
+  <div class="modal-sheet">
+    <h3>Enviar aprobación</h3>
+    <textarea id="comment-text" placeholder="¿Algún comentario o cambio? (opcional)"></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmApproval()">Confirmar aprobación</button>
+    </div>
+  </div>
+</div>
+
+<!-- Success screen -->
+<div id="success-screen">
+  <div class="success-icon">✅</div>
+  <h2>¡Aprobado!</h2>
+  <p>Las historias fueron aprobadas.<br>Las publicaremos el día y hora programados.</p>
+  <div class="powered">Gestionado por Argo Media · powered by Sto.</div>
+</div>
+
+<script>
+const STORIES = [
+  { text: "La madera bien usada no envejece, se valoriza.",
+    img: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=1422&fit=crop" },
+  { text: "Espacios que respiran. Diseño que permanece.",
+    img: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800&h=1422&fit=crop" },
+  { text: "Cada proyecto es único. Cada detalle importa.",
+    img: "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=800&h=1422&fit=crop" },
+  { text: "Arquitectura consciente para vivir mejor.",
+    img: "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=800&h=1422&fit=crop" },
+];
+
+let current = 0;
+let approved = new Array(STORIES.length).fill(false);
+let autoTimer = null;
+
+// Build progress bars
+const pbContainer = document.getElementById('progress-bars');
+STORIES.forEach((_, i) => {
+  const bar = document.createElement('div');
+  bar.className = 'prog-bar';
+  bar.innerHTML = '<div class="prog-bar-fill"></div>';
+  bar.id = `pb-${i}`;
+  pbContainer.appendChild(bar);
+});
+
+function showStory(idx) {
+  if (idx < 0) idx = 0;
+  if (idx >= STORIES.length) { openModal(); return; }
+  current = idx;
+
+  const s = STORIES[idx];
+  document.getElementById('story-img').src = s.img;
+  document.getElementById('story-caption').textContent = s.text;
+  document.getElementById('story-counter').textContent = `${idx + 1} de ${STORIES.length}`;
+
+  const btn = document.getElementById('btn-ok');
+  if (approved[idx]) {
+    btn.textContent = '✓ Aprobada';
+    btn.className = 'btn-ok approved';
+  } else {
+    btn.textContent = 'Aprobar esta historia';
+    btn.className = 'btn-ok pending';
+  }
+
+  // Progress bars — cada una en su estado correcto
+  STORIES.forEach((_, i) => {
+    const fill = document.querySelector(`#pb-${i} .prog-bar-fill`);
+    fill.style.transition = 'none';
+    if (i < idx) {
+      fill.style.width = '100%';       // anteriores: llenas sin animación
+    } else {
+      fill.style.width = '0%';         // actuales y futuras: vacías
+    }
+  });
+
+  // Auto-advance: animar solo la barra actual de 0→100% en 5s
+  clearTimeout(autoTimer);
+  const fill = document.querySelector(`#pb-${idx} .prog-bar-fill`);
+  // Forzar reflow para que la transición arranque desde 0
+  void fill.offsetWidth;
+  fill.style.transition = 'width 5s linear';
+  fill.style.width = '100%';
+  autoTimer = setTimeout(() => nextStory(), 5000);
+}
+
+function nextStory() { showStory(current + 1); }
+function prevStory() { showStory(current - 1); }
+
+function toggleApprove() {
+  approved[current] = !approved[current];
+  showStory(current);
+  if (approved[current]) setTimeout(() => nextStory(), 400);
+}
+
+function approveAll() {
+  approved.fill(true);
+  openModal();
+}
+
+function openModal() {
+  clearTimeout(autoTimer);
+  document.getElementById('comment-modal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('comment-modal').classList.remove('open');
+  showStory(current);
+}
+
+function confirmApproval() {
+  document.getElementById('comment-modal').classList.remove('open');
+  document.getElementById('success-screen').classList.add('show');
+}
+
+// Swipe support
+let touchStartX = 0;
+document.getElementById('viewer').addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+}, { passive: true });
+document.getElementById('viewer').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(dx) > 50) {
+    clearTimeout(autoTimer);
+    dx < 0 ? nextStory() : prevStory();
+  }
+}, { passive: true });
+
+// Init
+showStory(0);
+</script>
+</body>
+</html>
