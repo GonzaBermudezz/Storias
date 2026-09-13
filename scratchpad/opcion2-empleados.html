@@ -78,8 +78,13 @@
     .pill-pending{background:rgba(245,158,11,.12);color:#F59E0B}
     .pill-sent{background:rgba(99,102,241,.1);color:#6366F1}
     .pill-approved{background:rgba(16,185,129,.1);color:#059669}
-    .stories-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
-    .story-card{border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#111;cursor:pointer;transition:transform .15s}
+    /* ── CAROUSEL ── */
+    .carousel-outer{position:relative;margin-bottom:12px}
+    .carousel{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+    .carousel::-webkit-scrollbar{height:3px}
+    .carousel::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+    .carousel::-webkit-scrollbar-track{background:transparent}
+    .story-card{flex:0 0 calc(25% - 6px);min-width:72px;scroll-snap-align:start;border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#111;cursor:pointer;transition:transform .15s}
     .story-card:hover{transform:scale(1.02)}
     .story-card img{width:100%;height:100%;object-fit:cover;display:block}
     .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;flex-direction:column;justify-content:flex-end;padding:8px}
@@ -88,7 +93,7 @@
     .story-card .edit-hover{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
     .story-card:hover .edit-hover{opacity:1}
     .btn-edit-story{background:rgba(255,255,255,.9);border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
-    .add-story-card{border:1.5px dashed var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:10px;aspect-ratio:9/16;transition:border-color .15s}
+    .add-story-card{flex:0 0 calc(25% - 6px);min-width:72px;scroll-snap-align:start;border:1.5px dashed var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:10px;aspect-ratio:9/16;transition:border-color .15s;flex-shrink:0}
     .add-story-card:hover{border-color:var(--accent)}
     .add-story-card div{text-align:center;color:var(--muted);font-size:11px;font-weight:600}
     .action-bar{display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--border);flex-wrap:wrap}
@@ -462,7 +467,7 @@ function renderGroup(c,g){
           <button class="btn-del-group" onclick="deleteGroup('${c.id}','${g.id}')">🗑</button>
         </div>
       </div>
-      <div class="stories-row">${storiesHTML}${addCard}</div>
+      <div class="carousel-outer"><div class="carousel" id="car-${g.id}">${storiesHTML}${addCard}</div></div>
       <div class="action-bar">${actionHTML}</div>
     </div>`;
 }

@@ -33,8 +33,13 @@
     .status-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 11px;border-radius:99px}
     .pill-p{background:rgba(245,158,11,.12);color:#F59E0B}
     .pill-a{background:rgba(16,185,129,.12);color:#10B981}
-    .stories-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
-    .story-card{border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#111;cursor:pointer;transition:transform .2s,outline .15s}
+    /* ── CAROUSEL ── */
+    .carousel-outer{position:relative;margin-bottom:14px}
+    .carousel{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+    .carousel::-webkit-scrollbar{height:3px}
+    .carousel::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+    .carousel::-webkit-scrollbar-track{background:transparent}
+    .story-card{flex:0 0 calc(25% - 6px);min-width:72px;scroll-snap-align:start;border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#111;cursor:pointer;transition:transform .2s,outline .15s;flex-shrink:0}
     .story-card:hover{transform:scale(1.03)}
     .story-card.approved{outline:2.5px solid #10B981}
     .story-card img{width:100%;height:100%;object-fit:cover;display:block}
@@ -221,7 +226,7 @@ function renderContent(){
           <div class="week-title">${fmtFecha(day)} · ${db.hora} hs</div>
           <span class="status-pill ${statusClass}" id="pill-${day}">${statusText}</span>
         </div>
-        <div class="stories-row">${storiesHTML}</div>
+        <div class="carousel-outer"><div class="carousel">${storiesHTML}</div></div>
         <div class="action-bar">
           ${allApproved
             ?`<span class="approved-msg">✓ Aprobadas — publicamos en la fecha programada</span>`
