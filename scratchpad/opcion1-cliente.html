@@ -47,6 +47,9 @@
     .reorder-btns{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);display:flex;gap:3px;opacity:0;transition:opacity .15s;z-index:20}
     .story-card:hover .reorder-btns{opacity:1}
     .btn-move{width:22px;height:22px;border-radius:5px;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;backdrop-filter:blur(4px)}
+    .edit-hover-o1{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;z-index:10}
+    .story-card:hover .edit-hover-o1{opacity:1}
+    .btn-edit-o1{background:rgba(255,255,255,.9);border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
     /* Story edit modal */
     .smod-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;padding:20px}
     .smod-overlay.open{display:flex}
@@ -263,16 +266,23 @@ function renderContent(){
 
   cont.innerHTML = days.map(day => {
     const db = STORIES_DB[day]; if(!db) return '';
-    const allApproved = db.stories.every(s=>approved[s.id]);
-    const someApproved = db.stories.some(s=>approved[s.id]);
+    // stories.length > 0 evita que un día vacío muestre "Aprobado" (vacuous truth de [].every)
+    const allApproved = db.stories.length > 0 && db.stories.every(s=>approved[s.id]);
+    const someApproved = !allApproved && db.stories.some(s=>approved[s.id]);
+    const approvedCount = db.stories.filter(s=>approved[s.id]).length;
     const statusClass = allApproved ? 'pill-a' : 'pill-p';
-    const statusText = allApproved ? 'Aprobado ✓' : (someApproved ? `${db.stories.filter(s=>approved[s.id]).length}/${db.stories.length} aprobadas` : 'Pendiente de aprobación');
+    const statusText = allApproved
+      ? 'Aprobado ✓'
+      : someApproved
+        ? `${approvedCount}/${db.stories.length} aprobadas`
+        : db.stories.length === 0 ? 'Sin historias' : 'Pendiente de aprobación';
 
     const storiesHTML = db.stories.map((s,i)=>`
-      <div class="story-card${approved[s.id]?' approved':''}" onclick="openSmod('${day}','${s.id}')">
+      <div class="story-card${approved[s.id]?' approved':''}" onclick="toggleStory('${s.id}','${day}')">
         <img src="${s.img}" alt="" loading="lazy">
         <div class="overlay"><div class="story-text">${s.text}</div></div>
         ${approved[s.id]?'<div class="check">✓</div>':''}
+        <div class="edit-hover-o1"><button class="btn-edit-o1" onclick="event.stopPropagation();openSmod('${day}','${s.id}')">✏️ Editar</button></div>
         <button class="btn-del-story" onclick="event.stopPropagation();removeStory('${day}','${s.id}')" title="Eliminar historia">×</button>
         <div class="reorder-btns">
           ${i>0?`<button class="btn-move" onclick="event.stopPropagation();moveStoryO1('${day}','${s.id}',-1)">←</button>`:''}
@@ -299,19 +309,26 @@ function renderContent(){
         </div>
         <div class="carousel-outer"><div class="carousel">${storiesHTML}${addCard}</div></div>
         <div class="action-bar">
-          ${allApproved
-            ?`<span class="approved-msg">✓ Aprobadas — publicamos en la fecha programada</span>`
-            :`<button class="btn-approve-all" onclick="approveAll('${day}')">✓ Aprobar todas</button>
-               <button class="btn-comment" onclick="toggleComment('${day}')">💬 Comentario</button>`}
+          ${db.stories.length === 0
+            ? `<span style="font-size:12px;color:var(--muted)">Agregá historias con el botón +</span>`
+            : allApproved
+              ? `<span class="approved-msg">✓ Aprobadas — publicamos en la fecha programada</span>`
+              : `<button class="btn-approve-all" onclick="approveAll('${day}')">✓ Aprobar todas las de este día</button>
+                 <button class="btn-comment" onclick="toggleComment('${day}')">💬 Comentario</button>`}
         </div>
         ${commentBoxHTML}
       </div>`;
   }).join('');
 }
 
-function toggleStory(id){
+function toggleStory(id, day){
   approved[id] = !approved[id];
   renderContent();
+  // si se aprobaron todas las de este día, scroll al bloque para ver el mensaje
+  const db=STORIES_DB[day];
+  if(db && db.stories.length > 0 && db.stories.every(s=>approved[s.id])){
+    setTimeout(()=>{const el=document.getElementById('grp-'+day);if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
+  }
 }
 function approveAll(day){
   STORIES_DB[day].stories.forEach(s=>{ approved[s.id]=true; });
