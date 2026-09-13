@@ -421,13 +421,11 @@ function renderResumen(){
 function renderClientMain(){
   const c=getC(currentClientId);
   const main=document.getElementById('client-main');
-  const showDay=selectedDay;
-  const grupos=showDay?c.grupos.filter(g=>g.fecha===showDay):c.grupos;
 
-  let groupsHTML=grupos.length?grupos.map(g=>renderGroup(c,g)).join(''):`
+  let groupsHTML=c.grupos.length?c.grupos.map(g=>renderGroup(c,g)).join(''):`
     <div class="empty-client">
       <div class="icon">📭</div>
-      <p>${showDay?`No hay historias para <strong>${fmtFecha(showDay)}</strong>`:`No hay publicaciones programadas para <strong>${c.name}</strong>`}</p>
+      <p>Sin publicaciones programadas para <strong>${c.name}</strong>.<br>Seleccioná un día en el calendario para agregar.</p>
       <button class="btn-accent" onclick="addPublicationForCurrent()">+ Agregar publicación</button>
     </div>`;
 
@@ -436,7 +434,6 @@ function renderClientMain(){
       <div class="ca-lg" style="background:${c.color}">${c.initials}</div>
       <div><h2>${c.name}</h2><p>${STATUS_LABEL[c.status]} · ${c.contacto||''}</p></div>
     </div>
-    ${showDay?`<div style="margin-bottom:16px;display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:700">${fmtFecha(showDay)}</span><button style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline" onclick="selectedDay=null;renderClientMain();renderCalendar()">Ver todas</button></div>`:''}
     ${groupsHTML}`;
 }
 
@@ -459,7 +456,7 @@ function renderGroup(c,g){
       <button class="btn-preview" onclick="window.open('${window.location.origin}/demo/aprobar','_blank')">👁 Ver</button>`;
 
   return `
-    <div style="margin-bottom:16px">
+    <div id="grp-${g.id}" style="margin-bottom:16px;scroll-margin-top:16px">
       <div class="week-header">
         <div><div class="week-title">${fmtFecha(g.fecha)} · ${g.hora} hs</div></div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -526,8 +523,13 @@ function savePubModal(){
   c.grupos.push({id:uid(),fecha,hora,stories:[]});
   c.grupos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
   closePubModal();
-  selectedDay=fecha;
   renderClientMain(); renderCalendar(); renderDayChips(); renderSidebar();
+  // scroll to newly added group
+  setTimeout(()=>{
+    const c=getC(currentClientId);
+    const g=c.grupos.find(x=>x.fecha===fecha);
+    if(g){const el=document.getElementById('grp-'+g.id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
+  },50);
 }
 
 // ── CLIENT MODAL ─────────────────────────────────────────────────
@@ -569,6 +571,9 @@ function saveClientModal(){
 // ── DELETE ────────────────────────────────────────────────────────
 function deleteGroup(clientId,groupId){
   const c=getC(clientId);
+  const g=c.grupos.find(x=>x.id===groupId);
+  const label=g?fmtFecha(g.fecha):'este día';
+  if(!confirm(`¿Eliminar ${label} y todas sus historias?`))return;
   c.grupos=c.grupos.filter(g=>g.id!==groupId);
   renderClientMain(); renderCalendar(); renderDayChips(); renderSidebar();
 }
@@ -611,7 +616,24 @@ function renderCalendar(){
     if(isSel)cls+=' selected';else if(isToday)cls+=' today';
     if(hasPosts)cls+=' has-post';
     cell.className=cls;cell.textContent=d;
-    cell.onclick=()=>{ selectedDay=iso; renderCalendar(); renderClientMain(); };
+    cell.onclick=()=>{
+      selectedDay=iso;
+      renderCalendar();
+      const c=getC(currentClientId);
+      const exists=c&&c.grupos.find(g=>g.fecha===iso);
+      if(exists){
+        // scroll to that group block
+        const el=document.getElementById('grp-'+exists.id);
+        if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+      } else if(c){
+        // crear el día directo, sin modal
+        const newG={id:uid(),fecha:iso,hora:'09:00',stories:[]};
+        c.grupos.push(newG);
+        c.grupos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+        renderClientMain(); renderCalendar(); renderDayChips(); renderSidebar();
+        setTimeout(()=>{const el=document.getElementById('grp-'+newG.id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},50);
+      }
+    };
     grid.appendChild(cell);
   }
   const total=first+days; const rem=total%7===0?0:7-(total%7);
@@ -624,7 +646,7 @@ function renderDayChips(){
   const chips=document.getElementById('day-chips');
   chips.innerHTML=c.grupos.length
     ?c.grupos.map(g=>`
-      <div class="cal-day-chip${selectedDay===g.fecha?' active-chip':''}" onclick="selectedDay='${g.fecha}';renderCalendar();renderClientMain();">
+      <div class="cal-day-chip${selectedDay===g.fecha?' active-chip':''}" onclick="selectedDay='${g.fecha}';renderCalendar();const el=document.getElementById('grp-${g.id}');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});">
         <span>${fmtFecha(g.fecha).split(' ').slice(0,3).join(' ')}</span>
         <button class="remove-chip" onclick="event.stopPropagation();deleteGroup('${c.id}','${g.id}')" title="Quitar">×</button>
       </div>`).join('')

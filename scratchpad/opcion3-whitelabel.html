@@ -480,7 +480,11 @@ function saveClientModal(){
 
 // ── DELETE ────────────────────────────────────────────────────────
 function deleteGroup(cid,gid){
-  const c=getC(cid);c.grupos=c.grupos.filter(g=>g.id!==gid);
+  const c=getC(cid);
+  const g=c.grupos.find(x=>x.id===gid);
+  const label=g?fmtFecha(g.fecha):'este día';
+  if(!confirm(`¿Eliminar ${label} y todas sus historias?`))return;
+  c.grupos=c.grupos.filter(g=>g.id!==gid);
   renderMain(); renderCalendar(); renderDayChips();
 }
 
@@ -522,9 +526,12 @@ function renderCalendar(){
         const el=document.getElementById('grp-'+exists.id);
         if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
       } else if(c){
-        document.getElementById('pub-fecha').value=iso;
-        document.getElementById('pub-hora').value='09:00';
-        document.getElementById('pub-modal').classList.add('open');
+        // crear el día directo, sin modal
+        const newG={id:uid(),fecha:iso,hora:'09:00',stories:[]};
+        c.grupos.push(newG);
+        c.grupos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+        renderMain(); renderCalendar(); renderDayChips();
+        setTimeout(()=>{const el=document.getElementById('grp-'+newG.id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},50);
       }
     };
     grid.appendChild(cell);
