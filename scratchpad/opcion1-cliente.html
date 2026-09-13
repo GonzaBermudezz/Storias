@@ -192,6 +192,7 @@ function fmtFecha(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new D
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function isoDay(iso){ return iso.split('-').map(Number); }
 function allDays(){ return Object.keys(STORIES_DB).sort(); }
+function uid(){ return Math.random().toString(36).slice(2,10); }
 
 // ── RENDER CONTENT ────────────────────────────────────────────────
 function renderContent(){
@@ -212,6 +213,7 @@ function renderContent(){
         <div class="overlay"><div class="story-text">${s.text}</div></div>
         ${approved[s.id]?'<div class="check">✓</div>':''}
       </div>`).join('');
+    const addCard=`<div class="story-card add-story-card" onclick="addStoryToDay('${day}')" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;border:2px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;min-width:72px;flex:0 0 calc(25% - 6px)"><div style="font-size:22px">+</div>Historia</div>`;
 
     const commentBoxHTML = commentOpen[day] ? `
       <div class="comment-box">
@@ -224,9 +226,12 @@ function renderContent(){
       <div class="week-block" id="grp-${day}" style="scroll-margin-top:16px">
         <div class="week-header">
           <div class="week-title">${fmtFecha(day)} · ${db.hora} hs</div>
-          <span class="status-pill ${statusClass}" id="pill-${day}">${statusText}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="status-pill ${statusClass}" id="pill-${day}">${statusText}</span>
+            <button onclick="deleteDay('${day}')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--muted);padding:2px 4px" title="Eliminar día">🗑</button>
+          </div>
         </div>
-        <div class="carousel-outer"><div class="carousel">${storiesHTML}</div></div>
+        <div class="carousel-outer"><div class="carousel">${storiesHTML}${addCard}</div></div>
         <div class="action-bar">
           ${allApproved
             ?`<span class="approved-msg">✓ Aprobadas — publicamos en la fecha programada</span>`
@@ -256,6 +261,22 @@ function sendComment(day){
   commentOpen[day]=false;
   renderContent();
 }
+function deleteDay(day){
+  if(!confirm(`¿Eliminar ${fmtFecha(day)} y todas sus historias?`))return;
+  delete STORIES_DB[day];
+  renderContent(); renderCalendar(); renderDayChips();
+}
+const IMGS_DEF=[
+  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=711&fit=crop',
+];
+function addStoryToDay(day){
+  const img=IMGS_DEF[Math.floor(Math.random()*IMGS_DEF.length)];
+  STORIES_DB[day].stories.push({id:uid(),text:'Nueva historia',img});
+  renderContent();
+  setTimeout(()=>{const el=document.getElementById('grp-'+day);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},50);
+}
 
 // ── CALENDAR ─────────────────────────────────────────────────────
 function calChange(d){ calM+=d; if(calM<0){calM=11;calY--;}if(calM>11){calM=0;calY++;} renderCalendar(); }
@@ -283,7 +304,14 @@ function renderCalendar(){
     cell.onclick=()=>{
       selectedDay=iso; renderCalendar(); renderDayChips();
       const el=document.getElementById('grp-'+iso);
-      if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+      if(el){
+        el.scrollIntoView({behavior:'smooth',block:'start'});
+      } else {
+        // crear el día directo, sin modal
+        STORIES_DB[iso]={hora:'09:00',stories:[]};
+        renderContent(); renderCalendar(); renderDayChips();
+        setTimeout(()=>{const e2=document.getElementById('grp-'+iso);if(e2)e2.scrollIntoView({behavior:'smooth',block:'start'});},50);
+      }
     };
     grid.appendChild(cell);
   }
