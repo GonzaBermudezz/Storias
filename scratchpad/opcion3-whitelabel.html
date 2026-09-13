@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Panel Storias — Opción 3</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap">
+  <style>
+    :root {
+      --bg:#F5F1E8; --surface:#EDE8DC; --border:#D5CCBA;
+      --fg:#1C1410; --muted:#6B5F52; --accent:#C94F1A;
+      --drawer-w:260px;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--fg);font-family:'Geist',system-ui,sans-serif;
+         min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+    /* ── NAV ── */
+    nav{display:flex;align-items:center;gap:12px;padding:0 20px;height:56px;
+        border-bottom:1px solid var(--border);background:rgba(245,241,232,.95);
+        backdrop-filter:blur(12px);position:sticky;top:0;z-index:50}
+    .hamburger{background:none;border:none;cursor:pointer;font-size:20px;
+               color:var(--fg);width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+               border-radius:8px;transition:background .15s}
+    .hamburger:hover{background:var(--surface)}
+    .logo{font-size:17px;font-weight:800;letter-spacing:-.04em}
+    .logo span{color:var(--accent)}
+    .client-pill{display:flex;align-items:center;gap:8px;margin-left:auto;
+                 background:var(--surface);border:1px solid var(--border);
+                 border-radius:99px;padding:4px 12px 4px 6px;cursor:pointer;
+                 font-size:13px;font-weight:600;transition:border-color .15s}
+    .client-pill:hover{border-color:var(--accent)}
+    .ca{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;
+        justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
+    .ca1{background:#C94F1A} .ca2{background:#6366F1} .ca3{background:#0EA5E9}
+    .ca4{background:#10B981} .ca5{background:#F59E0B}
+
+    /* ── DRAWER ── */
+    .drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:90;
+                    opacity:0;pointer-events:none;transition:opacity .25s}
+    .drawer-overlay.open{opacity:1;pointer-events:all}
+    .drawer{position:fixed;top:0;left:0;bottom:0;width:var(--drawer-w);
+            background:var(--bg);border-right:1px solid var(--border);z-index:100;
+            transform:translateX(-100%);transition:transform .25s cubic-bezier(.4,0,.2,1);
+            display:flex;flex-direction:column}
+    .drawer.open{transform:translateX(0)}
+    .drawer-head{display:flex;align-items:center;justify-content:space-between;
+                 padding:16px;border-bottom:1px solid var(--border)}
+    .drawer-head .logo{font-size:15px}
+    .close-btn{background:none;border:none;cursor:pointer;font-size:18px;
+               color:var(--muted);width:32px;height:32px;display:flex;align-items:center;
+               justify-content:center;border-radius:6px}
+    .close-btn:hover{background:var(--surface)}
+    .drawer-search{padding:10px 12px;border-bottom:1px solid var(--border)}
+    .drawer-search input{width:100%;padding:7px 10px;border:1px solid var(--border);
+                         border-radius:8px;background:var(--surface);font-size:13px;
+                         color:var(--fg);font-family:inherit}
+    .drawer-search input:focus{outline:none;border-color:var(--accent)}
+    .drawer-list{flex:1;overflow-y:auto;padding:8px 0}
+    .drawer-item{display:flex;align-items:center;gap:10px;padding:9px 14px;
+                 cursor:pointer;transition:background .1s;font-size:13px;font-weight:500}
+    .drawer-item:hover{background:var(--surface)}
+    .drawer-item.active{background:rgba(201,79,26,.08);color:var(--accent)}
+    .status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-left:auto}
+    .dot-pending{background:#F59E0B} .dot-sent{background:#6366F1} .dot-approved{background:#10B981}
+    .drawer-footer{padding:12px;border-top:1px solid var(--border)}
+    .btn-new{width:100%;padding:9px;border-radius:9px;border:1.5px dashed var(--border);
+             background:transparent;color:var(--muted);font-size:13px;font-weight:600;
+             cursor:pointer;transition:all .15s;font-family:inherit}
+    .btn-new:hover{border-color:var(--accent);color:var(--accent)}
+
+    /* ── MAIN ── */
+    main{max-width:900px;margin:0 auto;padding:32px 20px}
+    .section-title{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+                   color:var(--muted);margin-bottom:16px}
+    .client-header{display:flex;align-items:center;gap:14px;margin-bottom:28px}
+    .client-header .avatar-lg{width:48px;height:48px;border-radius:50%;font-size:16px;font-weight:800;
+                              color:#fff;display:flex;align-items:center;justify-content:center}
+    .client-header h2{font-size:22px;font-weight:800;letter-spacing:-.03em}
+    .client-header p{font-size:13px;color:var(--muted);margin-top:2px}
+
+    /* Story group */
+    .group-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+                padding:20px;margin-bottom:16px}
+    .group-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .group-date{font-size:13px;font-weight:700}
+    .group-time{font-size:12px;color:var(--muted)}
+    .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+           padding:4px 10px;border-radius:99px}
+    .badge-pending{background:rgba(245,158,11,.12);color:#B45309}
+    .badge-sent{background:rgba(99,102,241,.1);color:#6366F1}
+    .badge-approved{background:rgba(16,185,129,.1);color:#059669}
+
+    /* Story grid */
+    .stories-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+    .story-card{border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;
+                background:#1a1a1a;cursor:pointer}
+    .story-card img{width:100%;height:100%;object-fit:cover}
+    .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 50%,rgba(0,0,0,.7));
+                         display:flex;align-items:flex-end;padding:8px}
+    .story-card .story-text{font-size:9px;color:#fff;line-height:1.3;font-weight:500}
+
+    /* Actions */
+    .group-actions{display:flex;gap:8px;align-items:center}
+    .btn-wa{display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:9px;
+            border:none;background:#25D366;color:#fff;font-size:13px;font-weight:700;
+            cursor:pointer;transition:all .15s;font-family:inherit}
+    .btn-wa:hover{background:#1db954;transform:translateY(-1px)}
+    .btn-preview{padding:9px 14px;border-radius:9px;border:1px solid var(--border);
+                 background:transparent;color:var(--muted);font-size:13px;font-weight:600;
+                 cursor:pointer;font-family:inherit;transition:all .15s}
+    .btn-preview:hover{border-color:var(--fg);color:var(--fg)}
+    .sent-info{font-size:12px;color:var(--muted);margin-left:auto}
+
+    /* Config modal */
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;
+              display:none;align-items:center;justify-content:center;padding:20px}
+    .modal-bg.open{display:flex}
+    .modal{background:var(--bg);border:1px solid var(--border);border-radius:16px;
+           padding:28px;width:100%;max-width:400px}
+    .modal h3{font-size:16px;font-weight:800;margin-bottom:20px}
+    .field{margin-bottom:14px}
+    .field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;
+                 letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+    .field input,.field textarea{width:100%;padding:9px 12px;border:1px solid var(--border);
+                                  border-radius:9px;background:var(--surface);color:var(--fg);
+                                  font-size:14px;font-family:inherit}
+    .field input:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
+    .modal-actions{display:flex;gap:8px;margin-top:20px}
+    .btn-cancel{flex:1;padding:10px;border-radius:9px;border:1px solid var(--border);
+                background:transparent;color:var(--muted);font-size:13px;font-weight:600;
+                cursor:pointer;font-family:inherit}
+    .btn-save{flex:2;padding:10px;border-radius:9px;border:none;background:var(--accent);
+              color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+  </style>
+</head>
+<body>
+
+<!-- Drawer overlay -->
+<div class="drawer-overlay" id="overlay" onclick="closeDrawer()"></div>
+
+<!-- Drawer -->
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div class="logo">Sto<span>.</span></div>
+    <button class="close-btn" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-search">
+    <input type="text" placeholder="Buscar cliente…" oninput="filterClients(this.value)">
+  </div>
+  <div class="drawer-list" id="drawer-list"></div>
+  <div class="drawer-footer">
+    <button class="btn-new" onclick="openConfig('new')">+ Nuevo cliente</button>
+  </div>
+</div>
+
+<!-- Nav -->
+<nav>
+  <button class="hamburger" onclick="openDrawer()">☰</button>
+  <div class="logo">Sto<span>.</span></div>
+  <div class="client-pill" onclick="openDrawer()">
+    <div class="ca ca1" id="nav-avatar">CA</div>
+    <span id="nav-name">CUAN Arquitectura</span>
+    <span style="color:var(--muted);margin-left:2px">▾</span>
+  </div>
+</nav>
+
+<!-- Main -->
+<main id="main-content"></main>
+
+<!-- Config modal -->
+<div class="modal-bg" id="cfg-modal">
+  <div class="modal">
+    <h3 id="cfg-title">Nuevo cliente</h3>
+    <div class="field"><label>Empresa</label><input id="cfg-empresa" type="text" placeholder="CUAN Arquitectura"></div>
+    <div class="field"><label>Contacto</label><input id="cfg-contacto" type="text" placeholder="Lucía Cuan"></div>
+    <div class="field"><label>Descripción del negocio</label>
+      <textarea id="cfg-desc" rows="3" placeholder="Estudio de arquitectura en Palermo…"></textarea></div>
+    <div class="field"><label>Número WhatsApp</label><input id="cfg-phone" type="text" placeholder="+54 9 11 1234-5678"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeConfig()">Cancelar</button>
+      <button class="btn-save" onclick="saveConfig()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let CLIENTS = [
+  { id:'cuan', name:'CUAN Arquitectura', initials:'CA', caClass:'ca1',
+    phone:'+5491139531786', status:'pending',
+    grupos:[{ fecha:'Miércoles 10 de septiembre', hora:'09:00 hs',
+      stories:[
+        { text:'La madera bien usada no envejece, se valoriza.',
+          img:'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop' },
+        { text:'Espacios que respiran. Diseño que permanece.',
+          img:'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop' },
+        { text:'Cada proyecto es único. Cada detalle importa.',
+          img:'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=711&fit=crop' },
+        { text:'Arquitectura consciente para vivir mejor.',
+          img:'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=400&h=711&fit=crop' },
+      ]}]},
+  { id:'dora', name:'Panadería Dora', initials:'PD', caClass:'ca2',
+    phone:'+5491139531786', status:'sent',
+    grupos:[{ fecha:'Jueves 11 de septiembre', hora:'10:00 hs',
+      stories:[
+        { text:'El pan de masa madre que te cambia el día.',
+          img:'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&h=711&fit=crop' },
+        { text:'Horneado esta mañana. Caliente hasta el mediodía.',
+          img:'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=400&h=711&fit=crop' },
+        { text:'Ingredientes simples. Sabor que no se olvida.',
+          img:'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=400&h=711&fit=crop' },
+        { text:'De generación en generación, la receta de Dora.',
+          img:'https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=400&h=711&fit=crop' },
+      ]}]},
+  { id:'mart', name:'Dr. Martínez', initials:'DM', caClass:'ca3',
+    phone:'+5491139531786', status:'approved',
+    grupos:[{ fecha:'Viernes 12 de septiembre', hora:'09:00 hs',
+      stories:[
+        { text:'Tu salud, nuestra prioridad. Turnos disponibles.',
+          img:'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=711&fit=crop' },
+        { text:'Más de 20 años cuidando familias en Palermo.',
+          img:'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&h=711&fit=crop' },
+        { text:'Consultas presenciales y virtuales. Escribinos.',
+          img:'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=400&h=711&fit=crop' },
+        { text:'Prevenir es mejor que curar. Chequeate hoy.',
+          img:'https://images.unsplash.com/photo-1631217868264-e5b90bb7e133?w=400&h=711&fit=crop' },
+      ]}]},
+];
+
+let currentClientId = CLIENTS[0].id;
+let cfgMode = 'new';
+
+const STATUS_LABELS = { pending:'Pendiente', sent:'Link enviado', approved:'Aprobado ✓' };
+const STATUS_CLASSES = { pending:'badge-pending', sent:'badge-sent', approved:'badge-approved' };
+const DOT_CLASSES = { pending:'dot-pending', sent:'dot-sent', approved:'dot-approved' };
+
+function getClient(id){ return CLIENTS.find(c=>c.id===id); }
+
+// ── Drawer ──
+function openDrawer(){
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  renderDrawer();
+}
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+function renderDrawer(filter=''){
+  const list = document.getElementById('drawer-list');
+  list.innerHTML = '';
+  CLIENTS.filter(c=>c.name.toLowerCase().includes(filter.toLowerCase())).forEach(c=>{
+    const div = document.createElement('div');
+    div.className = 'drawer-item' + (c.id===currentClientId?' active':'');
+    div.innerHTML = `
+      <div class="ca ${c.caClass}">${c.initials}</div>
+      <span>${c.name}</span>
+      <div class="status-dot ${DOT_CLASSES[c.status]}"></div>`;
+    div.onclick = ()=>{ selectClient(c.id); closeDrawer(); };
+    list.appendChild(div);
+  });
+}
+function filterClients(v){ renderDrawer(v); }
+
+function selectClient(id){
+  currentClientId = id;
+  const c = getClient(id);
+  document.getElementById('nav-avatar').className = `ca ${c.caClass}`;
+  document.getElementById('nav-avatar').textContent = c.initials;
+  document.getElementById('nav-name').textContent = c.name;
+  renderMain();
+}
+
+// ── Main content ──
+function renderMain(){
+  const c = getClient(currentClientId);
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="client-header">
+      <div class="avatar-lg ca ${c.caClass}">${c.initials}</div>
+      <div>
+        <h2>${c.name}</h2>
+        <p style="color:var(--muted);font-size:13px">${STATUS_LABELS[c.status]}</p>
+      </div>
+      <button style="margin-left:auto;padding:8px 14px;border-radius:9px;border:1px solid var(--border);
+                     background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;
+                     font-family:inherit" onclick="openConfig('edit')">⚙ Editar cliente</button>
+    </div>
+    ${c.grupos.map((g,gi)=>renderGroup(c,g,gi)).join('')}`;
+}
+
+function renderGroup(c, g, gi){
+  const stories = g.stories.map((s,i)=>`
+    <div class="story-card">
+      <img src="${s.img}" alt="">
+      <div class="overlay"><div class="story-text">${s.text}</div></div>
+    </div>`).join('');
+
+  const actions = c.status === 'approved'
+    ? `<span style="color:#059669;font-weight:700;font-size:13px">✓ Aprobado por el cliente</span>`
+    : `<button class="btn-wa" onclick="sendWA('${c.id}')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+        </svg>
+        Enviar link por WhatsApp
+      </button>
+      <button class="btn-preview" onclick="previewMobile('${c.id}')">👁 Ver como cliente</button>
+      ${c.status==='sent'?`<span class="sent-info">Link enviado</span>`:''}`;
+
+  return `
+    <div class="group-card">
+      <div class="group-meta">
+        <div>
+          <div class="group-date">${g.fecha}</div>
+          <div class="group-time">${g.hora}</div>
+        </div>
+        <span class="badge ${STATUS_CLASSES[c.status]}">${STATUS_LABELS[c.status]}</span>
+      </div>
+      <div class="stories-grid">${stories}</div>
+      <div class="group-actions">${actions}</div>
+    </div>`;
+}
+
+function sendWA(clientId){
+  const c = getClient(clientId);
+  const token = c.id + 'x7f2';
+  const url = `${window.location.origin}/aprobar/${token}`;
+  const msg = `Hola ${c.name} 👋 Tus historias de Instagram para el ${c.grupos[0].fecha} están listas.\n\nRevisalas y aprobá en 30 segundos 👇\n${url}\n\n_Link válido por 48 hs_`;
+  window.open(`https://wa.me/${c.phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
+  c.status = 'sent';
+  renderMain();
+}
+
+function previewMobile(clientId){
+  window.open(`${window.location.origin}/demo/aprobar`,'_blank');
+}
+
+// ── Config modal ──
+function openConfig(mode){
+  cfgMode = mode;
+  const c = mode==='edit' ? getClient(currentClientId) : null;
+  document.getElementById('cfg-title').textContent = mode==='edit'?'Editar cliente':'Nuevo cliente';
+  document.getElementById('cfg-empresa').value = c?.name||'';
+  document.getElementById('cfg-contacto').value = c?.contacto||'';
+  document.getElementById('cfg-desc').value = c?.desc||'';
+  document.getElementById('cfg-phone').value = c?.phone||'';
+  document.getElementById('cfg-modal').classList.add('open');
+}
+function closeConfig(){ document.getElementById('cfg-modal').classList.remove('open'); }
+function saveConfig(){
+  const name = document.getElementById('cfg-empresa').value.trim();
+  if(!name) return;
+  if(cfgMode==='edit'){
+    const c = getClient(currentClientId);
+    c.name = name;
+    c.contacto = document.getElementById('cfg-contacto').value;
+    c.desc = document.getElementById('cfg-desc').value;
+    c.phone = document.getElementById('cfg-phone').value;
+  } else {
+    const classes = ['ca1','ca2','ca3','ca4','ca5'];
+    const words = name.trim().split(' ');
+    const initials = (words[0][0]+(words[1]?words[1][0]:'')).toUpperCase();
+    CLIENTS.push({
+      id: 'c'+Date.now(), name, initials,
+      caClass: classes[CLIENTS.length%5],
+      phone: document.getElementById('cfg-phone').value,
+      contacto: document.getElementById('cfg-contacto').value,
+      desc: document.getElementById('cfg-desc').value,
+      status:'pending', grupos:[]
+    });
+  }
+  closeConfig();
+  renderMain();
+  document.getElementById('nav-name').textContent = getClient(currentClientId).name;
+}
+
+// ESC closes
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ closeDrawer(); closeConfig(); }
+});
+
+// Init
+renderDrawer();
+renderMain();
+</script>
+</body>
+</html>
