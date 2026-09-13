@@ -141,7 +141,10 @@
     .field input:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
     .field textarea{resize:none;line-height:1.5}
     .img-row{display:flex;gap:16px;align-items:flex-start}
-    .img-prev{width:150px;aspect-ratio:9/16;border-radius:12px;object-fit:cover;background:var(--border);flex-shrink:0;display:block}
+    .img-prev-wrap{position:relative;width:190px;aspect-ratio:9/16;flex-shrink:0;border-radius:12px;overflow:hidden;background:var(--border)}
+    .img-prev{width:100%;height:100%;object-fit:cover;display:block}
+    .img-prev-overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;align-items:flex-end;padding:10px}
+    .img-prev-caption{font-size:9px;color:#fff;line-height:1.35;font-weight:500;word-break:break-word}
     .img-ctrls{flex:1;display:flex;flex-direction:column;gap:10px}
     .img-file-btn{width:100%;padding:9px;border-radius:9px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s}
     .img-file-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -226,9 +229,12 @@
     <div class="modal-head"><h3 id="smod-title">Editar historia</h3><button class="modal-close" onclick="closeStoryModal()">✕</button></div>
     <div class="modal-body">
       <div class="img-row">
-        <img class="img-prev" id="smod-prev" src="" alt="">
+        <div class="img-prev-wrap">
+          <img class="img-prev" id="smod-prev" src="" alt="">
+          <div class="img-prev-overlay"><div class="img-prev-caption" id="smod-prev-cap"></div></div>
+        </div>
         <div class="img-ctrls">
-          <div class="field"><label>Texto superpuesto</label><textarea id="smod-cap" rows="4" placeholder="Texto sobre la imagen…"></textarea></div>
+          <div class="field"><label>Texto superpuesto</label><textarea id="smod-cap" rows="4" placeholder="Texto sobre la imagen…" oninput="document.getElementById('smod-prev-cap').textContent=this.value"></textarea></div>
           <div class="field"><label>URL de imagen</label><input type="text" id="smod-img" placeholder="https://…" oninput="updPrev(this.value)"></div>
           <button class="img-file-btn" onclick="document.getElementById('smod-file').click()">📁 Seleccionar imagen del dispositivo</button>
           <button class="btn-rand" onclick="randImg()">🔀 Imagen aleatoria</button>
@@ -410,6 +416,7 @@ function openStoryModal(cid,gid,sid){
   storyCtx={cid,gid,sid,isNew:false};
   document.getElementById('smod-title').textContent='Editar historia';
   document.getElementById('smod-cap').value=s.text;
+  document.getElementById('smod-prev-cap').textContent=s.text;
   document.getElementById('smod-img').value=s.img;
   document.getElementById('smod-prev').src=s.img;
   document.getElementById('smod-time').value=g.hora;
@@ -420,6 +427,7 @@ function addNewStory(cid,gid){
   storyCtx={cid,gid,sid:null,isNew:true};
   document.getElementById('smod-title').textContent='Nueva historia';
   document.getElementById('smod-cap').value='';
+  document.getElementById('smod-prev-cap').textContent='';
   document.getElementById('smod-img').value=img;
   document.getElementById('smod-prev').src=img;
   document.getElementById('smod-time').value='09:00';
