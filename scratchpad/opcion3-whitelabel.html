@@ -72,7 +72,9 @@
     .carousel::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
     .carousel::-webkit-scrollbar-track{background:transparent}
     .story-card{flex:0 0 calc(25% - 6px);min-width:72px;scroll-snap-align:start;border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#1a1a1a;cursor:pointer;transition:transform .15s;flex-shrink:0}
-    .story-card:hover{transform:scale(1.02)}
+    .story-card:hover{box-shadow:0 0 0 2px var(--accent)}
+    .story-card.approved{outline:2.5px solid #10B981}
+    .check-badge{position:absolute;top:6px;right:6px;background:#10B981;color:#fff;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;z-index:15}
     .story-card img{width:100%;height:100%;object-fit:cover;display:block}
     .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;align-items:flex-end;padding:8px}
     .story-text{font-size:9px;color:#fff;line-height:1.3;font-weight:500}
@@ -378,11 +380,12 @@ function renderMain(){
 
 function renderGroup(c,g){
   const storiesHTML=g.stories.map((s,i)=>`
-    <div class="story-card" onclick="openStoryModal('${c.id}','${g.id}','${s.id}')">
+    <div class="story-card${s.approved?' approved':''}" onclick="toggleApproveStory('${c.id}','${g.id}','${s.id}')">
       <img src="${s.img}" alt="" loading="lazy">
       <div class="overlay"><div class="story-text">${s.text}</div></div>
       <div class="num-badge">#${i+1}</div>
-      <div class="edit-hover"><button class="btn-edit-story">✏️ Editar</button></div>
+      ${s.approved?'<div class="check-badge">✓</div>':''}
+      <div class="edit-hover"><button class="btn-edit-story" onclick="event.stopPropagation();openStoryModal('${c.id}','${g.id}','${s.id}')">✏️ Editar</button></div>
       <button class="btn-del-story" onclick="event.stopPropagation();removeStory('${c.id}','${g.id}','${s.id}')" title="Eliminar historia">×</button>
       <div class="reorder-btns">
         ${i>0?`<button class="btn-move" onclick="event.stopPropagation();moveStory('${c.id}','${g.id}','${s.id}',-1)">←</button>`:''}
@@ -498,6 +501,11 @@ function saveClientModal(){
 }
 
 // ── DELETE ────────────────────────────────────────────────────────
+function toggleApproveStory(cid,gid,sid){
+  const c=getC(cid),g=c.grupos.find(x=>x.id===gid),s=g.stories.find(x=>x.id===sid);
+  s.approved=!s.approved;
+  renderMain();
+}
 function removeStory(cid,gid,sid){
   const c=getC(cid),g=c.grupos.find(x=>x.id===gid);
   g.stories=g.stories.filter(s=>s.id!==sid);
