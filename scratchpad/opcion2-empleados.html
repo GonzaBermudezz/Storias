@@ -11,89 +11,50 @@
     body{background:var(--bg);color:var(--fg);font-family:'Geist',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;display:flex}
 
     /* ── SIDEBAR ── */
-    .sidebar{width:220px;flex-shrink:0;border-right:1px solid var(--border);min-height:100vh;display:flex;flex-direction:column;background:var(--surface)}
-    .sidebar-logo{padding:18px 16px;border-bottom:1px solid var(--border);font-size:17px;font-weight:800;letter-spacing:-.04em}
+    .sidebar{width:200px;flex-shrink:0;border-right:1px solid var(--border);min-height:100vh;display:flex;flex-direction:column;background:var(--surface)}
+    .sidebar-logo{padding:16px;border-bottom:1px solid var(--border);font-size:17px;font-weight:800;letter-spacing:-.04em}
     .sidebar-logo span{color:var(--accent)}
-    .sidebar-section{padding:10px 10px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
-    .sidebar-item{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:8px;margin:2px 6px;font-size:13px;font-weight:500;cursor:pointer;color:var(--fg);transition:background .1s;user-select:none}
+    .section-sep{padding:8px 10px 3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+    .sidebar-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;margin:2px 6px;font-size:13px;font-weight:500;cursor:pointer;color:var(--fg);transition:background .1s;user-select:none}
     .sidebar-item:hover{background:var(--border)}
     .sidebar-item.active{background:rgba(201,79,26,.1);color:var(--accent);font-weight:700}
-    .sidebar-item .icon{font-size:15px;width:20px;text-align:center}
-    .client-sidebar{margin-top:auto;padding:10px;border-top:1px solid var(--border)}
-    .ca{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0}
-    .ca1{background:#C94F1A}.ca2{background:#6366F1}.ca3{background:#0EA5E9}.ca4{background:#10B981}
-    .client-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;transition:background .1s}
-    .client-item:hover{background:var(--border)}
-    .dot{width:6px;height:6px;border-radius:50%;margin-left:auto}
-    .dot-p{background:#F59E0B}.dot-a{background:#10B981}
+    .sidebar-item .icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+    .dot{width:7px;height:7px;border-radius:50%;margin-left:auto;flex-shrink:0}
+    .dot-p{background:#F59E0B}.dot-s{background:#6366F1}.dot-a{background:#10B981}
+    .sidebar-bottom{margin-top:auto;padding:10px;border-top:1px solid var(--border)}
+    .btn-new-client{width:100%;padding:8px;border-radius:8px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+    .btn-new-client:hover{border-color:var(--accent);color:var(--accent)}
 
     /* ── MAIN ── */
-    .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-    .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid var(--border);background:rgba(245,241,232,.95);flex-shrink:0}
-    .topbar h1{font-size:16px;font-weight:800;letter-spacing:-.02em}
+    .main{flex:1;display:flex;flex-direction:column;min-width:0}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:54px;border-bottom:1px solid var(--border);background:rgba(245,241,232,.95);flex-shrink:0}
+    .topbar h1{font-size:15px;font-weight:800;letter-spacing:-.02em}
     .topbar-actions{display:flex;gap:8px}
-    .btn-primary{padding:8px 16px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
-    .btn-primary:hover{background:var(--accent2)}
-    .btn-sec{padding:8px 14px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-accent{padding:7px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
+    .btn-accent:hover{background:var(--accent2)}
+    .btn-outline{padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-outline:hover{border-color:var(--fg);color:var(--fg)}
 
-    .content{flex:1;overflow-y:auto;padding:24px;display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+    /* ── CLIENT LAYOUT: stories left + calendar right ── */
+    .client-layout{display:flex;flex:1;min-height:0;overflow:hidden}
+    .client-main{flex:1;overflow-y:auto;padding:24px;min-width:0}
+    .client-sidebar-right{width:268px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
 
-    /* ── STATS ── */
-    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;grid-column:1/-1}
+    /* ── RESUMEN layout ── */
+    .resumen-layout{flex:1;overflow-y:auto;padding:24px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
     .stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
     .stat-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
     .stat-value{font-size:22px;font-weight:800;letter-spacing:-.03em}
     .stat-sub{font-size:11px;color:var(--muted);margin-top:3px}
-
-    /* ── CALENDAR ── */
-    .calendar-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px}
-    .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-    .cal-title{font-size:14px;font-weight:800;letter-spacing:-.02em}
-    .cal-nav{display:flex;gap:4px}
-    .cal-nav button{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--fg);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;font-family:inherit}
-    .cal-nav button:hover{background:var(--border)}
-    .cal-days-header{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:6px}
-    .cal-day-name{text-align:center;font-size:10px;font-weight:700;color:var(--muted);padding:4px 0;text-transform:uppercase;letter-spacing:.05em}
-    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-    .cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;position:relative;transition:background .1s}
-    .cal-cell:hover:not(.empty){background:var(--border)}
-    .cal-cell.empty{cursor:default}
-    .cal-cell.today{background:rgba(201,79,26,.12);color:var(--accent);font-weight:800}
-    .cal-cell.selected{background:var(--accent)!important;color:#fff!important}
-    .cal-cell.has-post::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--accent)}
-    .cal-cell.selected.has-post::after{background:#fff}
-    .cal-cell.other-month{color:rgba(28,20,16,.3)}
-
-    /* ── DAY PANEL ── */
-    .day-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-    .day-panel-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-    .day-panel-title{font-size:13px;font-weight:800;letter-spacing:-.01em}
-    .day-panel-sub{font-size:11px;color:var(--muted);margin-top:2px}
-    .btn-add-story{padding:6px 12px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
-    .story-list{padding:12px}
-    .story-row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px;background:var(--bg);border:1px solid var(--border);margin-bottom:8px;transition:border-color .15s}
-    .story-row:hover{border-color:var(--accent)}
-    .story-thumb{width:36px;height:64px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#ccc}
-    .story-info{flex:1;min-width:0}
-    .story-num{font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em}
-    .story-caption{font-size:12px;font-weight:500;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .story-actions{display:flex;gap:4px;flex-shrink:0}
-    .btn-icon{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .1s}
-    .btn-icon:hover{background:var(--border)}
-    .story-row.approved .story-thumb{outline:2px solid #10B981}
-    .approved-badge{font-size:9px;font-weight:700;color:#059669;background:rgba(16,185,129,.1);padding:2px 6px;border-radius:99px;margin-top:4px;display:inline-block}
-    .empty-day{padding:32px 16px;text-align:center;color:var(--muted);font-size:13px}
-    .empty-day .icon{font-size:28px;margin-bottom:8px}
-
-    /* ── CLIENT LIST (left column) ── */
     .section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px}
-    .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-    .client-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;transition:border-color .15s,transform .15s}
+    .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+    .client-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;cursor:pointer;transition:border-color .15s,transform .15s}
     .client-card:hover{border-color:var(--accent);transform:translateY(-1px)}
     .card-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-    .ca-lg{width:36px;height:36px;border-radius:50%;font-size:13px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-    .card-name{font-size:14px;font-weight:700}
-    .card-sub{font-size:11px;color:var(--muted);margin-top:2px}
+    .ca-sm{width:32px;height:32px;border-radius:50%;font-size:11px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .card-name{font-size:13px;font-weight:700}
+    .card-sub{font-size:11px;color:var(--muted);margin-top:1px}
     .stories-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:10px}
     .mini-card{aspect-ratio:9/16;border-radius:6px;overflow:hidden;background:#ccc}
     .mini-card img{width:100%;height:100%;object-fit:cover}
@@ -103,30 +64,94 @@
     .badge-s{background:rgba(99,102,241,.1);color:#6366F1}
     .badge-a{background:rgba(16,185,129,.1);color:#059669}
 
-    /* ── EDIT MODAL ── */
-    .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:20px}
-    .modal-overlay.open{display:flex}
-    .modal{background:var(--surface);border:1px solid var(--border);border-radius:18px;width:100%;max-width:480px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.18)}
-    .modal-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-    .modal-head h3{font-size:15px;font-weight:800;letter-spacing:-.02em}
-    .modal-close{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
-    .modal-body{padding:20px;display:flex;flex-direction:column;gap:16px}
-    .field label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
-    .field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--fg);font-size:13px;font-weight:500;padding:10px 12px;resize:none;font-family:inherit;min-height:80px;line-height:1.5}
-    .field textarea:focus{outline:none;border-color:var(--accent)}
-    .img-preview-row{display:flex;gap:12px;align-items:flex-start}
-    .img-preview{width:72px;height:128px;border-radius:10px;object-fit:cover;background:var(--border);flex-shrink:0}
-    .img-controls{flex:1;display:flex;flex-direction:column;gap:8px}
-    .field input[type=text]{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--fg);font-size:12px;padding:9px 12px;font-family:inherit}
-    .field input[type=text]:focus{outline:none;border-color:var(--accent)}
-    .btn-change-img{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;text-align:center;transition:background .1s}
-    .btn-change-img:hover{background:var(--border)}
-    .modal-footer{padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:8px}
-    .btn-cancel-modal{flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-    .btn-save-modal{flex:2;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
-    .btn-save-modal:hover{background:var(--accent2)}
+    /* ── CLIENT HEADER ── */
+    .client-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+    .ca-lg{width:42px;height:42px;border-radius:50%;font-size:14px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .client-header h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+    .client-header p{font-size:12px;color:var(--muted);margin-top:2px}
+    .header-btns{margin-left:auto;display:flex;gap:6px}
 
-    /* Back button */
+    /* ── STORIES (like opcion1 but with edit) ── */
+    .week-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+    .week-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .status-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px}
+    .pill-pending{background:rgba(245,158,11,.12);color:#F59E0B}
+    .pill-sent{background:rgba(99,102,241,.1);color:#6366F1}
+    .pill-approved{background:rgba(16,185,129,.1);color:#059669}
+    .stories-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+    .story-card{border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#111;cursor:pointer;transition:transform .15s}
+    .story-card:hover{transform:scale(1.02)}
+    .story-card img{width:100%;height:100%;object-fit:cover;display:block}
+    .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;flex-direction:column;justify-content:flex-end;padding:8px}
+    .story-card .story-text{font-size:9px;color:#fff;line-height:1.3;font-weight:500}
+    .story-card .num-badge{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.5);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;backdrop-filter:blur(4px)}
+    .story-card .edit-hover{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
+    .story-card:hover .edit-hover{opacity:1}
+    .btn-edit-story{background:rgba(255,255,255,.9);border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
+    .add-story-card{border:1.5px dashed var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:10px;aspect-ratio:9/16;transition:border-color .15s}
+    .add-story-card:hover{border-color:var(--accent)}
+    .add-story-card div{text-align:center;color:var(--muted);font-size:11px;font-weight:600}
+    .action-bar{display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--border);flex-wrap:wrap}
+    .btn-wa{display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:9px;border:none;background:#25D366;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-wa:hover{background:#1db954}
+    .btn-preview{padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-del-group{margin-left:auto;padding:9px 10px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer}
+    .btn-del-group:hover{border-color:#ef4444;color:#ef4444}
+    .empty-client{padding:60px 20px;text-align:center;color:var(--muted)}
+    .empty-client .icon{font-size:36px;margin-bottom:12px}
+    .empty-client p{font-size:14px;margin-bottom:18px;line-height:1.6}
+
+    /* ── CALENDAR SIDEBAR RIGHT ── */
+    .cal-header{padding:16px 14px 10px;border-bottom:1px solid var(--border)}
+    .cal-header-title{font-size:12px;font-weight:800;letter-spacing:-.01em;margin-bottom:2px}
+    .cal-header-sub{font-size:11px;color:var(--muted)}
+    .cal-body{padding:12px 10px}
+    .cal-month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .cal-month-name{font-size:12px;font-weight:700}
+    .cal-nav-btn{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+    .cal-nav-btn:hover{background:var(--border)}
+    .cal-days-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px}
+    .cal-day-name{text-align:center;font-size:9px;font-weight:700;color:var(--muted);padding:3px 0;letter-spacing:.03em}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+    .cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;position:relative;transition:background .1s}
+    .cal-cell:hover:not(.empty){background:var(--border)}
+    .cal-cell.empty{cursor:default;color:rgba(28,20,16,.25);font-size:10px}
+    .cal-cell.today{background:rgba(201,79,26,.12);color:var(--accent);font-weight:800}
+    .cal-cell.selected{background:var(--accent)!important;color:#fff!important}
+    .cal-cell.has-post::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;background:var(--accent)}
+    .cal-cell.selected.has-post::after{background:#fff}
+    .cal-selected-days{padding:0 10px 12px}
+    .cal-sel-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
+    .cal-day-chip{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--border);margin-bottom:5px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .1s}
+    .cal-day-chip:hover{border-color:var(--accent)}
+    .cal-day-chip.active-chip{border-color:var(--accent);background:rgba(201,79,26,.06);color:var(--accent)}
+    .cal-day-chip .remove-chip{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;line-height:1}
+    .cal-day-chip .remove-chip:hover{color:#ef4444}
+    .btn-add-day{width:100%;padding:8px;border-radius:8px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;transition:all .15s}
+    .btn-add-day:hover{border-color:var(--accent);color:var(--accent)}
+
+    /* ── MODALS ── */
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+    .modal-bg.open{display:flex}
+    .modal{background:var(--bg);border:1px solid var(--border);border-radius:18px;width:100%;max-width:460px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.18)}
+    .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .modal-head h3{font-size:14px;font-weight:800}
+    .modal-close{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
+    .modal-body{padding:18px;display:flex;flex-direction:column;gap:14px;max-height:65vh;overflow-y:auto}
+    .field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+    .field input,.field textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--fg);font-size:13px;font-family:inherit}
+    .field input:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
+    .field textarea{resize:none;line-height:1.5}
+    .img-row{display:flex;gap:12px;align-items:flex-start}
+    .img-prev{width:64px;height:114px;border-radius:8px;object-fit:cover;background:var(--border);flex-shrink:0}
+    .img-ctrls{flex:1;display:flex;flex-direction:column;gap:8px}
+    .btn-rand{padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-rand:hover{background:var(--border)}
+    .modal-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px}
+    .btn-cancel-m{flex:1;padding:10px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-save-m{flex:2;padding:10px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-save-m:hover{background:var(--accent2)}
+
     .btn-back-menu{position:fixed;bottom:20px;right:20px;z-index:500;background:var(--accent);color:#fff;border:none;border-radius:99px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(201,79,26,.35)}
   </style>
 </head>
@@ -134,451 +159,485 @@
 
 <button class="btn-back-menu" onclick="history.back()">← Menú de opciones</button>
 
+<!-- Left sidebar: client list -->
 <div class="sidebar">
   <div class="sidebar-logo">Sto<span>.</span></div>
-  <div style="padding:8px 0">
-    <div class="sidebar-section">Panel</div>
-    <div class="sidebar-item active" onclick="setView('resumen')"><span class="icon">📊</span>Resumen</div>
-    <div class="sidebar-item" onclick="setView('calendario')"><span class="icon">📅</span>Calendario</div>
-    <div class="sidebar-item" onclick="setView('resumen')"><span class="icon">✅</span>Aprobaciones</div>
-    <div class="sidebar-item" onclick="setView('resumen')"><span class="icon">📤</span>Publicados</div>
-    <div class="sidebar-section" style="margin-top:8px">Clientes</div>
-    <div class="sidebar-item"><span class="icon">👥</span>Todos los clientes</div>
-    <div class="sidebar-item"><span class="icon">➕</span>Nuevo cliente</div>
+  <div style="padding:6px 0;flex:1;overflow-y:auto">
+    <div class="section-sep">Panel</div>
+    <div class="sidebar-item active" id="nav-resumen" onclick="setView('resumen')"><span class="icon">📊</span>Resumen</div>
+    <div class="section-sep" style="margin-top:6px">Clientes</div>
+    <div id="client-list"></div>
   </div>
-  <div class="client-sidebar">
-    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:0 8px;margin-bottom:6px">Recientes</div>
-    <div class="client-item"><div class="ca ca1">CA</div>CUAN Arquitectura<div class="dot dot-p"></div></div>
-    <div class="client-item"><div class="ca ca2">PD</div>Panadería Dora<div class="dot dot-a"></div></div>
-    <div class="client-item"><div class="ca ca3">DM</div>Dr. Martínez<div class="dot dot-a"></div></div>
+  <div class="sidebar-bottom">
+    <button class="btn-new-client" onclick="openClientModal('new')">+ Nuevo cliente</button>
   </div>
 </div>
 
+<!-- Main area -->
 <div class="main">
   <div class="topbar">
     <h1 id="topbar-title">Panel Argo Media</h1>
     <div class="topbar-actions">
-      <button class="btn-sec" onclick="setView('calendario')">📅 Calendario</button>
-      <button class="btn-primary">+ Generar historias</button>
+      <button class="btn-outline" id="btn-edit-client" style="display:none" onclick="openClientModal('edit')">⚙ Editar</button>
+      <button class="btn-accent" id="btn-add-pub" onclick="addPublicationForCurrent()">+ Publicación</button>
     </div>
   </div>
 
-  <!-- RESUMEN VIEW -->
-  <div class="content" id="view-resumen">
+  <!-- RESUMEN -->
+  <div id="view-resumen" class="resumen-layout">
     <div class="stats">
-      <div class="stat"><div class="stat-label">Clientes activos</div><div class="stat-value">12</div><div class="stat-sub">+2 este mes</div></div>
-      <div class="stat"><div class="stat-label">Pendientes aprobación</div><div class="stat-value" style="color:#F59E0B">3</div><div class="stat-sub">Esta semana</div></div>
-      <div class="stat"><div class="stat-label">Aprobadas</div><div class="stat-value" style="color:#10B981">8</div><div class="stat-sub">Esta semana</div></div>
-      <div class="stat"><div class="stat-label">Publicadas</div><div class="stat-value">47</div><div class="stat-sub">Este mes</div></div>
+      <div class="stat"><div class="stat-label">Clientes</div><div class="stat-value" id="stat-clientes">3</div><div class="stat-sub">activos</div></div>
+      <div class="stat"><div class="stat-label">Pendientes</div><div class="stat-value" style="color:#F59E0B" id="stat-pendientes">1</div><div class="stat-sub">esta semana</div></div>
+      <div class="stat"><div class="stat-label">Publicaciones</div><div class="stat-value" id="stat-pubs">3</div><div class="stat-sub">programadas</div></div>
+      <div class="stat"><div class="stat-label">Historias</div><div class="stat-value" id="stat-stories">10</div><div class="stat-sub">en total</div></div>
     </div>
-
-    <div style="grid-column:1/-1">
-      <div class="section-title" style="margin-bottom:12px">Clientes — esta semana</div>
-      <div class="cards-grid">
-        <div class="client-card">
-          <div class="card-header"><div class="ca-lg ca1">CA</div><div><div class="card-name">CUAN Arquitectura</div><div class="card-sub">Mié 10 sep · 09:00 hs</div></div></div>
-          <div class="stories-mini">
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=200&h=355&fit=crop" alt=""></div>
-          </div>
-          <div class="card-footer"><span class="badge badge-p">Pendiente</span><span style="font-size:11px;color:var(--muted)">4 historias</span></div>
-        </div>
-        <div class="client-card">
-          <div class="card-header"><div class="ca-lg ca2">PD</div><div><div class="card-name">Panadería Dora</div><div class="card-sub">Jue 11 sep · 10:00 hs</div></div></div>
-          <div class="stories-mini">
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1509440159596-0249088772ff?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=200&h=355&fit=crop" alt=""></div>
-          </div>
-          <div class="card-footer"><span class="badge badge-s">Link enviado</span><span style="font-size:11px;color:var(--muted)">4 historias</span></div>
-        </div>
-        <div class="client-card">
-          <div class="card-header"><div class="ca-lg ca3">DM</div><div><div class="card-name">Dr. Martínez</div><div class="card-sub">Vie 12 sep · 09:00 hs</div></div></div>
-          <div class="stories-mini">
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=200&h=355&fit=crop" alt=""></div>
-            <div class="mini-card"><img src="https://images.unsplash.com/photo-1631217868264-e5b90bb7e133?w=200&h=355&fit=crop" alt=""></div>
-          </div>
-          <div class="card-footer"><span class="badge badge-a">Aprobado ✓</span><span style="font-size:11px;color:var(--muted)">4 historias</span></div>
-        </div>
-        <div class="client-card" style="border-style:dashed;display:flex;align-items:center;justify-content:center;min-height:180px;color:var(--muted)">
-          <div style="text-align:center"><div style="font-size:28px;margin-bottom:8px">+</div><div style="font-size:13px;font-weight:600">Generar para nuevo cliente</div></div>
-        </div>
-      </div>
-    </div>
+    <div class="section-title">Clientes — click para gestionar</div>
+    <div class="cards-grid" id="resumen-cards"></div>
   </div>
 
-  <!-- CALENDARIO VIEW -->
-  <div class="content" id="view-calendario" style="display:none">
-    <!-- Left: calendar -->
-    <div>
-      <div class="section-title" style="margin-bottom:12px">Calendario de publicaciones</div>
-      <div class="calendar-card" style="margin-bottom:16px">
-        <div class="cal-head">
-          <div class="cal-title" id="cal-month-label"></div>
-          <div class="cal-nav">
-            <button onclick="changeMonth(-1)">‹</button>
-            <button onclick="changeMonth(1)">›</button>
-          </div>
+  <!-- CLIENT VIEW: stories left + calendar right -->
+  <div id="view-client" class="client-layout" style="display:none">
+    <div class="client-main" id="client-main"></div>
+    <div class="client-sidebar-right">
+      <div class="cal-header">
+        <div class="cal-header-title">📅 Calendario</div>
+        <div class="cal-header-sub">Seleccioná días para publicar</div>
+      </div>
+      <div class="cal-body">
+        <div class="cal-month-nav">
+          <button class="cal-nav-btn" onclick="calChange(-1)">‹</button>
+          <div class="cal-month-name" id="cal-month-lbl"></div>
+          <button class="cal-nav-btn" onclick="calChange(1)">›</button>
         </div>
-        <div class="cal-days-header">
+        <div class="cal-days-row">
           <div class="cal-day-name">Do</div><div class="cal-day-name">Lu</div><div class="cal-day-name">Ma</div>
-          <div class="cal-day-name">Mi</div><div class="cal-day-name">Ju</div><div class="cal-day-name">Vi</div>
-          <div class="cal-day-name">Sá</div>
+          <div class="cal-day-name">Mi</div><div class="cal-day-name">Ju</div><div class="cal-day-name">Vi</div><div class="cal-day-name">Sá</div>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
       </div>
-
-      <!-- Client filter -->
-      <div class="section-title" style="margin-bottom:8px">Filtrar por cliente</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px">
-        <button class="badge badge-a" style="cursor:pointer;border:none;font-family:inherit" onclick="filterClient(null)" id="filter-all">Todos</button>
-        <button class="badge badge-p" style="cursor:pointer;border:none;font-family:inherit" onclick="filterClient('CA')">CUAN Arquitectura</button>
-        <button class="badge" style="cursor:pointer;border:none;font-family:inherit;background:rgba(99,102,241,.1);color:#6366F1" onclick="filterClient('PD')">Panadería Dora</button>
-        <button class="badge" style="cursor:pointer;border:none;font-family:inherit;background:rgba(14,165,233,.1);color:#0EA5E9" onclick="filterClient('DM')">Dr. Martínez</button>
-      </div>
-    </div>
-
-    <!-- Right: day panel -->
-    <div>
-      <div class="day-panel">
-        <div class="day-panel-head">
-          <div>
-            <div class="day-panel-title" id="day-panel-title">Seleccioná un día</div>
-            <div class="day-panel-sub" id="day-panel-sub">Hacé click en cualquier día del calendario</div>
-          </div>
-          <button class="btn-add-story" id="btn-add-story" style="display:none" onclick="addStory()">+ Historia</button>
-        </div>
-        <div id="day-story-list">
-          <div class="empty-day"><div class="icon">📅</div><div>Seleccioná un día para ver o editar las publicaciones</div></div>
-        </div>
+      <div class="cal-selected-days">
+        <div class="cal-sel-title">Días programados</div>
+        <div id="day-chips"></div>
+        <button class="btn-add-day" onclick="addPublicationForCurrent()">+ Agregar día</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Edit Modal -->
-<div class="modal-overlay" id="edit-modal">
+<!-- Story edit modal -->
+<div class="modal-bg" id="story-modal">
   <div class="modal">
     <div class="modal-head">
-      <h3 id="modal-title">Editar historia</h3>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+      <h3 id="smod-title">Editar historia</h3>
+      <button class="modal-close" onclick="closeStoryModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div class="field">
-        <label>Texto de la historia</label>
-        <textarea id="edit-caption" rows="3" placeholder="Escribí el texto que va superpuesto en la imagen…"></textarea>
-      </div>
+      <div class="field"><label>Texto superpuesto</label><textarea id="smod-cap" rows="3" placeholder="Texto que aparece sobre la imagen…"></textarea></div>
       <div class="field">
         <label>Imagen</label>
-        <div class="img-preview-row">
-          <img class="img-preview" id="edit-img-preview" src="" alt="">
-          <div class="img-controls">
-            <div>
-              <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;display:block">URL de imagen</label>
-              <input type="text" id="edit-img-url" placeholder="https://…" oninput="previewImg(this.value)">
-            </div>
-            <button class="btn-change-img" onclick="pickUnsplash()">🔀 Imagen aleatoria (Unsplash)</button>
-            <div style="font-size:10px;color:var(--muted)">O pegá la URL de cualquier imagen 9:16</div>
+        <div class="img-row">
+          <img class="img-prev" id="smod-prev" src="" alt="">
+          <div class="img-ctrls">
+            <div><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:block">URL</label>
+              <input type="text" id="smod-img" placeholder="https://…" oninput="updStoryPrev(this.value)"></div>
+            <button class="btn-rand" onclick="randStoryImg()">🔀 Imagen aleatoria</button>
+            <div style="font-size:10px;color:var(--muted)">Proporción ideal 9:16</div>
           </div>
         </div>
       </div>
-      <div class="field">
-        <label>Hora de publicación</label>
-        <input type="text" id="edit-time" placeholder="09:00">
-      </div>
+      <div class="field"><label>Hora de publicación</label><input type="text" id="smod-time" placeholder="09:00"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-cancel-modal" onclick="closeModal()">Cancelar</button>
-      <button class="btn-save-modal" onclick="saveStory()">Guardar cambios</button>
+      <button class="btn-cancel-m" onclick="closeStoryModal()">Cancelar</button>
+      <button class="btn-save-m" onclick="saveStoryModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Client modal -->
+<div class="modal-bg" id="client-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="cmod-title">Nuevo cliente</h3>
+      <button class="modal-close" onclick="closeClientModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Empresa</label><input id="cmod-empresa" type="text" placeholder="CUAN Arquitectura"></div>
+      <div class="field"><label>Contacto</label><input id="cmod-contacto" type="text" placeholder="Lucía Cuan"></div>
+      <div class="field"><label>Descripción</label><textarea id="cmod-desc" rows="2" placeholder="Estudio de arquitectura en Palermo…"></textarea></div>
+      <div class="field"><label>WhatsApp</label><input id="cmod-phone" type="text" placeholder="+54 9 11 1234-5678"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeClientModal()">Cancelar</button>
+      <button class="btn-save-m" onclick="saveClientModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add publication modal (date picker) -->
+<div class="modal-bg" id="pub-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Nueva publicación</h3>
+      <button class="modal-close" onclick="closePubModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Fecha</label><input id="pub-fecha" type="date"></div>
+      <div class="field"><label>Hora</label><input id="pub-hora" type="time" value="09:00"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closePubModal()">Cancelar</button>
+      <button class="btn-save-m" onclick="savePubModal()">Agregar</button>
     </div>
   </div>
 </div>
 
 <script>
 // ── DATA ──────────────────────────────────────────────────────────
-const UNSPLASH_POOLS = {
-  CA: [
-    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=1422&fit=crop',
-  ],
-  PD: [
-    'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=800&h=1422&fit=crop',
-  ],
-  DM: [
-    'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&h=1422&fit=crop',
-    'https://images.unsplash.com/photo-1631217868264-e5b90bb7e133?w=800&h=1422&fit=crop',
-  ],
-};
+const IMGS = [
+  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=711&fit=crop',
+];
 
-const CLIENT_NAMES = { CA:'CUAN Arquitectura', PD:'Panadería Dora', DM:'Dr. Martínez' };
-const CLIENT_COLORS = { CA:'#C94F1A', PD:'#6366F1', DM:'#0EA5E9' };
-
-// Publications data keyed by "YYYY-M-D"
-const PUBLICATIONS = {
-  '2026-9-10': [
-    { id:1, client:'CA', caption:'La madera bien usada no envejece, se valoriza.', img:UNSPLASH_POOLS.CA[0], time:'09:00', approved:false },
-    { id:2, client:'CA', caption:'Espacios que respiran. Diseño que permanece.', img:UNSPLASH_POOLS.CA[1], time:'09:00', approved:false },
-    { id:3, client:'CA', caption:'Cada proyecto es único. Cada detalle importa.', img:UNSPLASH_POOLS.CA[2], time:'09:00', approved:false },
-    { id:4, client:'CA', caption:'Arquitectura consciente para vivir mejor.', img:UNSPLASH_POOLS.CA[3], time:'09:00', approved:false },
-  ],
-  '2026-9-11': [
-    { id:5, client:'PD', caption:'Pan recién horneado, de 7 a 13 hs.', img:UNSPLASH_POOLS.PD[0], time:'10:00', approved:true },
-    { id:6, client:'PD', caption:'Facturas, medialunas y café. Todos los días.', img:UNSPLASH_POOLS.PD[1], time:'10:00', approved:true },
-    { id:7, client:'PD', caption:'Hecho en casa, con amor y harina 000.', img:UNSPLASH_POOLS.PD[2], time:'10:00', approved:true },
-  ],
-  '2026-9-12': [
-    { id:8, client:'DM', caption:'Tu salud, nuestra prioridad.', img:UNSPLASH_POOLS.DM[0], time:'09:00', approved:true },
-    { id:9, client:'DM', caption:'Turnos online disponibles. Reservá ya.', img:UNSPLASH_POOLS.DM[1], time:'09:00', approved:true },
-    { id:10, client:'DM', caption:'Clínica general y pediatría. Zona norte.', img:UNSPLASH_POOLS.DM[2], time:'09:00', approved:true },
-  ],
-  '2026-9-17': [
-    { id:11, client:'CA', caption:'Nueva obra en Palermo: loft industrial chic.', img:UNSPLASH_POOLS.CA[4], time:'09:00', approved:false },
-  ],
-  '2026-9-18': [
-    { id:12, client:'PD', caption:'Miércoles de especialidades: pan de campo.', img:UNSPLASH_POOLS.PD[3], time:'10:00', approved:false },
-  ],
-  '2026-9-24': [
-    { id:13, client:'DM', caption:'Resultados de laboratorio en 24 hs.', img:UNSPLASH_POOLS.DM[3], time:'09:00', approved:false },
-    { id:14, client:'CA', caption:'Materiales nobles, acabados perfectos.', img:UNSPLASH_POOLS.CA[0], time:'11:00', approved:false },
-  ],
-};
+let CLIENTS = [
+  { id:'cuan', name:'CUAN Arquitectura', initials:'CA', color:'#C94F1A', phone:'+5491139531786', contacto:'Lucía Cuan', desc:'Estudio de arquitectura en Palermo', status:'pending',
+    grupos:[{ id:'g1', fecha:'2026-09-10', hora:'09:00', stories:[
+      { id:'s1', text:'La madera bien usada no envejece, se valoriza.', img:IMGS[0] },
+      { id:'s2', text:'Espacios que respiran. Diseño que permanece.', img:IMGS[1] },
+      { id:'s3', text:'Cada proyecto es único. Cada detalle importa.', img:IMGS[2] },
+      { id:'s4', text:'Arquitectura consciente para vivir mejor.', img:IMGS[3] },
+    ]}]},
+  { id:'dora', name:'Panadería Dora', initials:'PD', color:'#6366F1', phone:'+5491139531786', contacto:'Dora González', desc:'Panadería artesanal en San Telmo', status:'sent',
+    grupos:[{ id:'g2', fecha:'2026-09-11', hora:'10:00', stories:[
+      { id:'s5', text:'Pan recién horneado, de 7 a 13 hs.', img:IMGS[4] },
+      { id:'s6', text:'Horneado esta mañana. Caliente hasta el mediodía.', img:IMGS[5] },
+      { id:'s7', text:'Ingredientes simples. Sabor que no se olvida.', img:IMGS[6] },
+    ]}]},
+  { id:'mart', name:'Dr. Martínez', initials:'DM', color:'#0EA5E9', phone:'+5491139531786', contacto:'Dr. Carlos Martínez', desc:'Médico clínico, zona Palermo', status:'approved',
+    grupos:[{ id:'g3', fecha:'2026-09-12', hora:'09:00', stories:[
+      { id:'s8', text:'Tu salud, nuestra prioridad.', img:IMGS[7] },
+      { id:'s9', text:'Más de 20 años cuidando familias en Palermo.', img:IMGS[8] },
+      { id:'s10', text:'Consultas presenciales y virtuales.', img:IMGS[9] },
+    ]}]},
+];
 
 // ── STATE ──────────────────────────────────────────────────────────
 let currentView = 'resumen';
-let calYear, calMonth, selectedDay = null, clientFilter = null;
-let editingKey = null, editingIdx = null, isNewStory = false;
-let nextId = 100;
+let currentClientId = null;
+let calY, calM, selectedDay = null;
+let storyCtx = null;
+let _id = 300;
+function uid(){ return 'x'+ ++_id; }
 
-const now = new Date();
-calYear = now.getFullYear();
-calMonth = now.getMonth(); // 0-based
+const now = new Date(); calY=now.getFullYear(); calM=now.getMonth();
+const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MONTHS_L=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const DAYS_L=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const STATUS_LABEL={pending:'Pendiente',sent:'Link enviado',approved:'Aprobado ✓'};
+const STATUS_CLASS={pending:'badge-p',sent:'badge-s',approved:'badge-a'};
+const PILL_CLASS={pending:'pill-pending',sent:'pill-sent',approved:'pill-approved'};
 
-// ── VIEW SWITCHING ─────────────────────────────────────────────────
-function setView(v) {
-  document.getElementById('view-resumen').style.display = v === 'resumen' ? 'grid' : 'none';
-  document.getElementById('view-calendario').style.display = v === 'calendario' ? 'grid' : 'none';
-  document.getElementById('topbar-title').textContent = v === 'calendario' ? 'Calendario de publicaciones' : 'Panel Argo Media';
-  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.sidebar-item')[v === 'calendario' ? 1 : 0].classList.add('active');
-  currentView = v;
-  if (v === 'calendario') renderCalendar();
+function getC(id){ return CLIENTS.find(c=>c.id===id); }
+function fmtFecha(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); return `${cap(DAYS_L[dt.getDay()])} ${d} de ${MONTHS_L[m-1]}`; }
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+function isoToday(){ const t=new Date(); return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`; }
+function pad(n){ return String(n).padStart(2,'0'); }
+
+// ── SIDEBAR ──────────────────────────────────────────────────────
+function renderSidebar(){
+  const list=document.getElementById('client-list');
+  list.innerHTML=CLIENTS.map(c=>`
+    <div class="sidebar-item${currentClientId===c.id&&currentView==='client'?' active':''}" onclick="openClient('${c.id}')">
+      <span style="width:18px;height:18px;border-radius:50%;background:${c.color};display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff;flex-shrink:0">${c.initials}</span>
+      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</span>
+      <div class="dot ${c.status==='pending'?'dot-p':c.status==='sent'?'dot-s':'dot-a'}"></div>
+    </div>`).join('');
+  updateStats();
 }
 
-// ── CALENDAR ───────────────────────────────────────────────────────
-const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function updateStats(){
+  document.getElementById('stat-clientes').textContent=CLIENTS.length;
+  document.getElementById('stat-pendientes').textContent=CLIENTS.filter(c=>c.status==='pending').length;
+  const pubs=CLIENTS.reduce((a,c)=>a+c.grupos.length,0);
+  const stories=CLIENTS.reduce((a,c)=>a+c.grupos.reduce((b,g)=>b+g.stories.length,0),0);
+  document.getElementById('stat-pubs').textContent=pubs;
+  document.getElementById('stat-stories').textContent=stories;
+}
 
-function changeMonth(delta) {
-  calMonth += delta;
-  if (calMonth < 0) { calMonth = 11; calYear--; }
-  if (calMonth > 11) { calMonth = 0; calYear++; }
+// ── VIEW SWITCHING ────────────────────────────────────────────────
+function setView(v, clientId=null){
+  currentView=v;
+  currentClientId=clientId||currentClientId;
+  document.getElementById('view-resumen').style.display=v==='resumen'?'block':'none';
+  document.getElementById('view-client').style.display=v==='client'?'flex':'none';
+  document.getElementById('nav-resumen').classList.toggle('active', v==='resumen');
+  document.getElementById('btn-edit-client').style.display=v==='client'?'inline-block':'none';
+  document.getElementById('topbar-title').textContent=v==='resumen'?'Panel Argo Media':(getC(currentClientId)?.name||'');
+  renderSidebar();
+}
+
+function openClient(id){
+  selectedDay=null;
+  currentClientId=id;
+  setView('client', id);
+  renderClientMain();
   renderCalendar();
+  renderDayChips();
 }
 
-function filterClient(code) {
-  clientFilter = code;
-  renderCalendar();
-  if (selectedDay) selectDay(calYear, calMonth + 1, selectedDay);
-}
-
-function dateKey(y, m, d) { return `${y}-${m}-${d}`; }
-
-function hasPosts(y, m, d) {
-  const key = dateKey(y, m, d);
-  const posts = PUBLICATIONS[key] || [];
-  if (!clientFilter) return posts.length > 0;
-  return posts.some(p => p.client === clientFilter);
-}
-
-function renderCalendar() {
-  const label = document.getElementById('cal-month-label');
-  label.textContent = `${MONTHS_ES[calMonth]} ${calYear}`;
-
-  const grid = document.getElementById('cal-grid');
-  grid.innerHTML = '';
-
-  const firstDay = new Date(calYear, calMonth, 1).getDay();
-  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-  const daysInPrev = new Date(calYear, calMonth, 0).getDate();
-  const todayDate = new Date();
-
-  // Prev month padding
-  for (let i = 0; i < firstDay; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'cal-cell empty other-month';
-    cell.textContent = daysInPrev - firstDay + 1 + i;
-    grid.appendChild(cell);
-  }
-
-  // Current month
-  for (let d = 1; d <= daysInMonth; d++) {
-    const cell = document.createElement('div');
-    let cls = 'cal-cell';
-    const isToday = d === todayDate.getDate() && calMonth === todayDate.getMonth() && calYear === todayDate.getFullYear();
-    if (isToday) cls += ' today';
-    if (selectedDay === d && !isToday) cls += ' selected';
-    else if (selectedDay === d && isToday) cls += ' selected'; // selected overrides today
-    if (hasPosts(calYear, calMonth + 1, d)) cls += ' has-post';
-    cell.className = cls;
-    cell.textContent = d;
-    const _d = d;
-    cell.onclick = () => selectDay(calYear, calMonth + 1, _d);
-    grid.appendChild(cell);
-  }
-
-  // Next month padding (fill to complete last row)
-  const total = firstDay + daysInMonth;
-  const remaining = total % 7 === 0 ? 0 : 7 - (total % 7);
-  for (let i = 1; i <= remaining; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'cal-cell empty other-month';
-    cell.textContent = i;
-    grid.appendChild(cell);
-  }
-}
-
-function selectDay(y, m, d) {
-  selectedDay = d;
-  calYear = y;
-  calMonth = m - 1;
-  renderCalendar();
-
-  const DAYS_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-  const date = new Date(y, m - 1, d);
-  const dayName = DAYS_ES[date.getDay()];
-  const monthName = MONTHS_ES[m - 1].toLowerCase();
-
-  document.getElementById('day-panel-title').textContent =
-    `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} ${d} de ${monthName}`;
-
-  const key = dateKey(y, m, d);
-  const posts = (PUBLICATIONS[key] || []).filter(p => !clientFilter || p.client === clientFilter);
-  document.getElementById('day-panel-sub').textContent =
-    posts.length ? `${posts.length} historia${posts.length > 1 ? 's' : ''} programada${posts.length > 1 ? 's' : ''}` : 'Sin publicaciones';
-  document.getElementById('btn-add-story').style.display = 'inline-block';
-
-  renderDayStories(key, posts);
-}
-
-function renderDayStories(key, posts) {
-  const list = document.getElementById('day-story-list');
-  if (!posts.length) {
-    list.innerHTML = '<div class="empty-day"><div class="icon">✏️</div><div>No hay historias para este día.<br>Hacé click en "+ Historia" para agregar una.</div></div>';
-    return;
-  }
-  list.innerHTML = posts.map((p, i) => `
-    <div class="story-row${p.approved ? ' approved' : ''}" id="srow-${p.id}">
-      <img class="story-thumb" src="${p.img}" alt="">
-      <div class="story-info">
-        <div class="story-num">${CLIENT_NAMES[p.client]} · #${i + 1} · ${p.time}hs</div>
-        <div class="story-caption">${p.caption}</div>
-        ${p.approved ? '<span class="approved-badge">✓ Aprobada</span>' : ''}
+// ── RESUMEN ──────────────────────────────────────────────────────
+function renderResumen(){
+  const cards=document.getElementById('resumen-cards');
+  cards.innerHTML=CLIENTS.map(c=>`
+    <div class="client-card" onclick="openClient('${c.id}')">
+      <div class="card-header">
+        <div class="ca-sm" style="background:${c.color}">${c.initials}</div>
+        <div><div class="card-name">${c.name}</div><div class="card-sub">${c.grupos.length} publicación${c.grupos.length!==1?'es':''}</div></div>
       </div>
-      <div class="story-actions">
-        <button class="btn-icon" title="Editar" onclick="openEdit('${key}',${p.id})">✏️</button>
-        <button class="btn-icon" title="Eliminar" onclick="deleteStory('${key}',${p.id})">🗑</button>
-      </div>
+      <div class="stories-mini">${(c.grupos[0]?.stories||[]).slice(0,4).map(s=>`<div class="mini-card"><img src="${s.img}" alt="" loading="lazy"></div>`).join('')}</div>
+      <div class="card-footer"><span class="badge ${STATUS_CLASS[c.status]}">${STATUS_LABEL[c.status]}</span><span style="font-size:11px;color:var(--muted)">${c.grupos.reduce((a,g)=>a+g.stories.length,0)} historias</span></div>
+    </div>`).join(`
+    <div class="client-card" style="border-style:dashed;display:flex;align-items:center;justify-content:center;min-height:160px;cursor:pointer;color:var(--muted)" onclick="openClientModal('new')">
+      <div style="text-align:center"><div style="font-size:24px;margin-bottom:6px">+</div><div style="font-size:12px;font-weight:600">Nuevo cliente</div></div>
+    </div>`);
+}
+
+// ── CLIENT MAIN ──────────────────────────────────────────────────
+function renderClientMain(){
+  const c=getC(currentClientId);
+  const main=document.getElementById('client-main');
+  const showDay=selectedDay;
+  const grupos=showDay?c.grupos.filter(g=>g.fecha===showDay):c.grupos;
+
+  let groupsHTML=grupos.length?grupos.map(g=>renderGroup(c,g)).join(''):`
+    <div class="empty-client">
+      <div class="icon">📭</div>
+      <p>${showDay?`No hay historias para <strong>${fmtFecha(showDay)}</strong>`:`No hay publicaciones programadas para <strong>${c.name}</strong>`}</p>
+      <button class="btn-accent" onclick="addPublicationForCurrent()">+ Agregar publicación</button>
+    </div>`;
+
+  main.innerHTML=`
+    <div class="client-header">
+      <div class="ca-lg" style="background:${c.color}">${c.initials}</div>
+      <div><h2>${c.name}</h2><p>${STATUS_LABEL[c.status]} · ${c.contacto||''}</p></div>
     </div>
-  `).join('');
+    ${showDay?`<div style="margin-bottom:16px;display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:700">${fmtFecha(showDay)}</span><button style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline" onclick="selectedDay=null;renderClientMain();renderCalendar()">Ver todas</button></div>`:''}
+    ${groupsHTML}`;
 }
 
-function addStory() {
-  if (!selectedDay) return;
-  isNewStory = true;
-  editingKey = dateKey(calYear, calMonth + 1, selectedDay);
-  editingIdx = null;
-  document.getElementById('modal-title').textContent = 'Nueva historia';
-  document.getElementById('edit-caption').value = '';
-  const defaultImg = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=1422&fit=crop';
-  document.getElementById('edit-img-url').value = defaultImg;
-  document.getElementById('edit-img-preview').src = defaultImg;
-  document.getElementById('edit-time').value = '09:00';
-  document.getElementById('edit-modal').classList.add('open');
+function renderGroup(c,g){
+  const storiesHTML=g.stories.map((s,i)=>`
+    <div class="story-card" onclick="openStoryModal('${c.id}','${g.id}','${s.id}')">
+      <img src="${s.img}" alt="" loading="lazy">
+      <div class="overlay"><div class="story-text">${s.text}</div></div>
+      <div class="num-badge">#${i+1}</div>
+      <div class="edit-hover"><button class="btn-edit-story">✏️ Editar</button></div>
+    </div>`).join('');
+  const addCard=`<div class="add-story-card" onclick="addNewStory('${c.id}','${g.id}')"><div><div style="font-size:22px;margin-bottom:4px">+</div>Historia</div></div>`;
+  const pills={pending:'pill-pending',sent:'pill-sent',approved:'pill-approved'};
+  const statusLabel={pending:'Pendiente',sent:'Link enviado',approved:'Aprobado ✓'};
+  const actionHTML=c.status==='approved'
+    ?`<span style="color:#059669;font-weight:700;font-size:12px">✓ Aprobado por el cliente</span>`
+    :`<button class="btn-wa" onclick="sendWA('${c.id}')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Enviar link</button>
+      <button class="btn-preview" onclick="window.open('${window.location.origin}/demo/aprobar','_blank')">👁 Ver</button>`;
+
+  return `
+    <div style="margin-bottom:16px">
+      <div class="week-header">
+        <div><div class="week-title">${fmtFecha(g.fecha)} · ${g.hora} hs</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="status-pill ${pills[c.status]}">${statusLabel[c.status]}</span>
+          <button class="btn-del-group" onclick="deleteGroup('${c.id}','${g.id}')">🗑</button>
+        </div>
+      </div>
+      <div class="stories-row">${storiesHTML}${addCard}</div>
+      <div class="action-bar">${actionHTML}</div>
+    </div>`;
 }
 
-function openEdit(key, id) {
-  const posts = PUBLICATIONS[key] || [];
-  const post = posts.find(p => p.id === id);
-  if (!post) return;
-  isNewStory = false;
-  editingKey = key;
-  editingIdx = id;
-  document.getElementById('modal-title').textContent = `Editar historia — ${CLIENT_NAMES[post.client]}`;
-  document.getElementById('edit-caption').value = post.caption;
-  document.getElementById('edit-img-url').value = post.img;
-  document.getElementById('edit-img-preview').src = post.img;
-  document.getElementById('edit-time').value = post.time;
-  document.getElementById('edit-modal').classList.add('open');
+// ── STORY MODAL ──────────────────────────────────────────────────
+function openStoryModal(clientId,groupId,storyId){
+  const c=getC(clientId),g=c.grupos.find(x=>x.id===groupId),s=g.stories.find(x=>x.id===storyId);
+  storyCtx={clientId,groupId,storyId,isNew:false};
+  document.getElementById('smod-title').textContent=`Editar historia`;
+  document.getElementById('smod-cap').value=s.text;
+  document.getElementById('smod-img').value=s.img;
+  document.getElementById('smod-prev').src=s.img;
+  document.getElementById('smod-time').value=g.hora;
+  document.getElementById('story-modal').classList.add('open');
+}
+function addNewStory(clientId,groupId){
+  const img=IMGS[Math.floor(Math.random()*IMGS.length)];
+  storyCtx={clientId,groupId,storyId:null,isNew:true};
+  document.getElementById('smod-title').textContent='Nueva historia';
+  document.getElementById('smod-cap').value='';
+  document.getElementById('smod-img').value=img;
+  document.getElementById('smod-prev').src=img;
+  document.getElementById('smod-time').value='09:00';
+  document.getElementById('story-modal').classList.add('open');
+}
+function closeStoryModal(){ document.getElementById('story-modal').classList.remove('open'); }
+function updStoryPrev(url){ if(url.startsWith('http')) document.getElementById('smod-prev').src=url; }
+function randStoryImg(){ const u=IMGS[Math.floor(Math.random()*IMGS.length)]; document.getElementById('smod-img').value=u; document.getElementById('smod-prev').src=u; }
+function saveStoryModal(){
+  const cap=document.getElementById('smod-cap').value.trim();
+  const img=document.getElementById('smod-img').value.trim()||IMGS[0];
+  const time=document.getElementById('smod-time').value||'09:00';
+  if(!cap){document.getElementById('smod-cap').focus();return;}
+  const{clientId,groupId,storyId,isNew}=storyCtx;
+  const c=getC(clientId),g=c.grupos.find(x=>x.id===groupId);
+  g.hora=time;
+  if(isNew) g.stories.push({id:uid(),text:cap,img});
+  else{const s=g.stories.find(x=>x.id===storyId);s.text=cap;s.img=img;}
+  closeStoryModal();
+  renderClientMain(); renderCalendar(); renderDayChips(); renderSidebar();
 }
 
-function closeModal() {
-  document.getElementById('edit-modal').classList.remove('open');
+// ── PUBLICATION MODAL (date picker) ─────────────────────────────
+function addPublicationForCurrent(){
+  const t=new Date();
+  document.getElementById('pub-fecha').value=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+  document.getElementById('pub-hora').value='09:00';
+  document.getElementById('pub-modal').classList.add('open');
+}
+function closePubModal(){ document.getElementById('pub-modal').classList.remove('open'); }
+function savePubModal(){
+  const fecha=document.getElementById('pub-fecha').value;
+  const hora=document.getElementById('pub-hora').value||'09:00';
+  if(!fecha||!currentClientId)return;
+  const c=getC(currentClientId);
+  c.grupos.push({id:uid(),fecha,hora,stories:[]});
+  c.grupos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  closePubModal();
+  selectedDay=fecha;
+  renderClientMain(); renderCalendar(); renderDayChips(); renderSidebar();
 }
 
-function previewImg(url) {
-  if (url.startsWith('http')) document.getElementById('edit-img-preview').src = url;
+// ── CLIENT MODAL ─────────────────────────────────────────────────
+function openClientModal(mode){
+  const c=mode==='edit'?getC(currentClientId):null;
+  document.getElementById('cmod-title').textContent=mode==='edit'?'Editar cliente':'Nuevo cliente';
+  document.getElementById('cmod-empresa').value=c?.name||'';
+  document.getElementById('cmod-contacto').value=c?.contacto||'';
+  document.getElementById('cmod-desc').value=c?.desc||'';
+  document.getElementById('cmod-phone').value=c?.phone||'';
+  document.getElementById('client-modal').dataset.mode=mode;
+  document.getElementById('client-modal').classList.add('open');
 }
-
-function pickUnsplash() {
-  // Pick random from all pools
-  const all = Object.values(UNSPLASH_POOLS).flat();
-  const url = all[Math.floor(Math.random() * all.length)];
-  document.getElementById('edit-img-url').value = url;
-  document.getElementById('edit-img-preview').src = url;
-}
-
-function saveStory() {
-  const caption = document.getElementById('edit-caption').value.trim();
-  const img = document.getElementById('edit-img-url').value.trim();
-  const time = document.getElementById('edit-time').value.trim() || '09:00';
-  if (!caption) { document.getElementById('edit-caption').focus(); return; }
-
-  if (isNewStory) {
-    if (!PUBLICATIONS[editingKey]) PUBLICATIONS[editingKey] = [];
-    PUBLICATIONS[editingKey].push({ id: nextId++, client: clientFilter || 'CA', caption, img, time, approved: false });
+function closeClientModal(){ document.getElementById('client-modal').classList.remove('open'); }
+function saveClientModal(){
+  const name=document.getElementById('cmod-empresa').value.trim();
+  if(!name)return;
+  const mode=document.getElementById('client-modal').dataset.mode;
+  const COLORS=['#C94F1A','#6366F1','#0EA5E9','#10B981','#F59E0B'];
+  if(mode==='edit'){
+    const c=getC(currentClientId);
+    c.name=name;c.contacto=document.getElementById('cmod-contacto').value;
+    c.desc=document.getElementById('cmod-desc').value;c.phone=document.getElementById('cmod-phone').value;
   } else {
-    const posts = PUBLICATIONS[editingKey] || [];
-    const post = posts.find(p => p.id === editingIdx);
-    if (post) { post.caption = caption; post.img = img; post.time = time; }
+    const words=name.trim().split(' ');
+    const initials=(words[0][0]+(words[1]?words[1][0]:'')).toUpperCase();
+    const nc={id:uid(),name,initials,color:COLORS[CLIENTS.length%COLORS.length],
+      phone:document.getElementById('cmod-phone').value,contacto:document.getElementById('cmod-contacto').value,
+      desc:document.getElementById('cmod-desc').value,status:'pending',grupos:[]};
+    CLIENTS.push(nc);
+    currentClientId=nc.id;
   }
-  closeModal();
-  // Re-render day
-  const posts = (PUBLICATIONS[editingKey] || []).filter(p => !clientFilter || p.client === clientFilter);
-  document.getElementById('day-panel-sub').textContent =
-    `${posts.length} historia${posts.length > 1 ? 's' : ''} programada${posts.length > 1 ? 's' : ''}`;
-  renderDayStories(editingKey, posts);
-  renderCalendar();
+  closeClientModal();
+  renderResumen(); renderSidebar();
+  if(mode==='new') openClient(currentClientId);
+  else{renderClientMain(); renderSidebar();}
 }
 
-function deleteStory(key, id) {
-  if (!PUBLICATIONS[key]) return;
-  PUBLICATIONS[key] = PUBLICATIONS[key].filter(p => p.id !== id);
-  const posts = (PUBLICATIONS[key] || []).filter(p => !clientFilter || p.client === clientFilter);
-  document.getElementById('day-panel-sub').textContent =
-    posts.length ? `${posts.length} historia${posts.length > 1 ? 's' : ''} programada${posts.length > 1 ? 's' : ''}` : 'Sin publicaciones';
-  renderDayStories(key, posts);
-  renderCalendar();
+// ── DELETE ────────────────────────────────────────────────────────
+function deleteGroup(clientId,groupId){
+  const c=getC(clientId);
+  c.grupos=c.grupos.filter(g=>g.id!==groupId);
+  renderClientMain(); renderCalendar(); renderDayChips(); renderSidebar();
 }
 
-// Close modal on overlay click
-document.getElementById('edit-modal').addEventListener('click', function(e) {
-  if (e.target === this) closeModal();
+// ── WA ────────────────────────────────────────────────────────────
+function sendWA(clientId){
+  const c=getC(clientId),g=c.grupos[0];
+  const token=c.id+'x7f2';
+  const url=`${window.location.origin}/aprobar/${token}`;
+  const msg=`Hola ${c.name} 👋 Tus historias de Instagram para el ${g?fmtFecha(g.fecha):'esta semana'} están listas.\n\nRevisalas y aprobá en 30 segundos 👇\n${url}\n\n_Link válido por 48 hs_`;
+  window.open(`https://wa.me/${c.phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
+  c.status='sent'; renderClientMain(); renderSidebar();
+}
+
+// ── CALENDAR ─────────────────────────────────────────────────────
+function calChange(d){ calM+=d; if(calM<0){calM=11;calY--;}if(calM>11){calM=0;calY++;} renderCalendar(); }
+
+function clientDays(){
+  if(!currentClientId)return new Set();
+  return new Set(getC(currentClientId).grupos.map(g=>g.fecha));
+}
+
+function renderCalendar(){
+  document.getElementById('cal-month-lbl').textContent=`${MONTHS[calM]} ${calY}`;
+  const grid=document.getElementById('cal-grid'); grid.innerHTML='';
+  const first=new Date(calY,calM,1).getDay();
+  const days=new Date(calY,calM+1,0).getDate();
+  const prev=new Date(calY,calM,0).getDate();
+  const td=new Date();
+  const clientDaySet=clientDays();
+
+  for(let i=0;i<first;i++){const c=document.createElement('div');c.className='cal-cell empty';c.textContent=prev-first+1+i;grid.appendChild(c);}
+  for(let d=1;d<=days;d++){
+    const iso=`${calY}-${pad(calM+1)}-${pad(d)}`;
+    const cell=document.createElement('div');
+    const isToday=d===td.getDate()&&calM===td.getMonth()&&calY===td.getFullYear();
+    const isSel=selectedDay===iso;
+    const hasPosts=clientDaySet.has(iso);
+    let cls='cal-cell';
+    if(isSel)cls+=' selected';else if(isToday)cls+=' today';
+    if(hasPosts)cls+=' has-post';
+    cell.className=cls;cell.textContent=d;
+    cell.onclick=()=>{ selectedDay=iso; renderCalendar(); renderClientMain(); };
+    grid.appendChild(cell);
+  }
+  const total=first+days; const rem=total%7===0?0:7-(total%7);
+  for(let i=1;i<=rem;i++){const c=document.createElement('div');c.className='cal-cell empty';c.textContent=i;grid.appendChild(c);}
+}
+
+function renderDayChips(){
+  if(!currentClientId){document.getElementById('day-chips').innerHTML='';return;}
+  const c=getC(currentClientId);
+  const chips=document.getElementById('day-chips');
+  chips.innerHTML=c.grupos.length
+    ?c.grupos.map(g=>`
+      <div class="cal-day-chip${selectedDay===g.fecha?' active-chip':''}" onclick="selectedDay='${g.fecha}';renderCalendar();renderClientMain();">
+        <span>${fmtFecha(g.fecha).split(' ').slice(0,3).join(' ')}</span>
+        <button class="remove-chip" onclick="event.stopPropagation();deleteGroup('${c.id}','${g.id}')" title="Quitar">×</button>
+      </div>`).join('')
+    :'<div style="font-size:11px;color:var(--muted);padding:4px 0">Sin días programados</div>';
+}
+
+// ── ESC + overlay close ────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){closeStoryModal();closeClientModal();closePubModal();}
+});
+['story-modal','client-modal','pub-modal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 
-// Init
-renderCalendar();
+// ── INIT ─────────────────────────────────────────────────────────
+renderResumen();
+renderSidebar();
+setView('resumen');
 </script>
 </body>
 </html>

@@ -8,134 +8,301 @@
   <style>
     :root{--bg:#0F0F0F;--surface:#1A1A1A;--border:#2A2A2A;--fg:#F5F5F5;--muted:#888;--accent:#C94F1A}
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body{background:var(--bg);color:var(--fg);font-family:'Geist',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
+    body{background:var(--bg);color:var(--fg);font-family:'Geist',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
 
-    nav{display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:58px;
-        border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(15,15,15,.95);backdrop-filter:blur(12px);z-index:50}
+    nav{display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:56px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(15,15,15,.95);backdrop-filter:blur(12px);z-index:50;flex-shrink:0}
     .logo{font-size:17px;font-weight:800;letter-spacing:-.04em}
     .logo span{color:var(--accent)}
     .user-chip{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted)}
     .avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}
 
-    main{max-width:860px;margin:0 auto;padding:48px 24px}
-    .greeting{margin-bottom:40px}
-    .greeting h1{font-size:clamp(22px,4vw,32px);font-weight:800;letter-spacing:-.03em;margin-bottom:6px}
-    .greeting p{font-size:14px;color:var(--muted)}
+    /* Main layout: content + calendar sidebar */
+    .layout{display:flex;flex:1;overflow:hidden}
+    .content{flex:1;overflow-y:auto;padding:36px 28px}
+    .cal-sidebar{width:256px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
 
-    .week-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-    .week-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-    .status-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
-                 padding:5px 12px;border-radius:99px}
-    .pill-pending{background:rgba(245,158,11,.12);color:#F59E0B}
-    .pill-approved{background:rgba(16,185,129,.12);color:#10B981}
+    /* Greeting */
+    .greeting{margin-bottom:28px}
+    .greeting h1{font-size:clamp(20px,3.5vw,28px);font-weight:800;letter-spacing:-.03em;margin-bottom:5px}
+    .greeting p{font-size:13px;color:var(--muted);line-height:1.6}
 
-    .stories-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
-    .story-card{border-radius:12px;overflow:hidden;aspect-ratio:9/16;position:relative;
-                background:#111;cursor:pointer;transition:transform .2s}
+    /* Week block */
+    .week-block{margin-bottom:32px}
+    .week-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px;flex-wrap:wrap}
+    .week-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    .status-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 11px;border-radius:99px}
+    .pill-p{background:rgba(245,158,11,.12);color:#F59E0B}
+    .pill-a{background:rgba(16,185,129,.12);color:#10B981}
+    .stories-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+    .story-card{border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#111;cursor:pointer;transition:transform .2s,outline .15s}
     .story-card:hover{transform:scale(1.03)}
-    .story-card img{width:100%;height:100%;object-fit:cover}
-    .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));
-                         display:flex;align-items:flex-end;padding:10px}
-    .story-text{font-size:9px;color:#fff;line-height:1.4;font-weight:500}
-    .story-card.approved::after{content:'✓';position:absolute;top:8px;right:8px;
-                                background:#10B981;color:#fff;width:20px;height:20px;border-radius:50%;
-                                font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+    .story-card.approved{outline:2.5px solid #10B981}
+    .story-card img{width:100%;height:100%;object-fit:cover;display:block}
+    .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;align-items:flex-end;padding:8px}
+    .story-text{font-size:9px;color:#fff;line-height:1.3;font-weight:500}
+    .story-card .check{position:absolute;top:6px;right:6px;background:#10B981;color:#fff;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
 
-    .action-bar{display:flex;align-items:center;gap:10px;padding:16px 0;border-top:1px solid var(--border)}
-    .btn-approve-all{padding:10px 20px;border-radius:10px;border:none;background:var(--accent);
-                     color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+    /* Action bar */
+    .action-bar{display:flex;align-items:center;gap:8px;padding:14px 0;border-top:1px solid var(--border);flex-wrap:wrap}
+    .btn-approve-all{padding:10px 18px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
     .btn-approve-all:hover{background:#b34416}
-    .btn-comment{padding:10px 16px;border-radius:10px;border:1px solid var(--border);
-                 background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-comment{padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
     .approved-msg{font-size:13px;color:#10B981;font-weight:600;margin-left:auto}
-
-    .comment-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px}
-    .comment-box h4{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em}
-    .comment-box textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
-                          color:var(--fg);font-size:13px;padding:10px;resize:none;font-family:inherit;min-height:70px}
+    .comment-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:10px}
+    .comment-box h4{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em}
+    .comment-box textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;padding:9px;resize:none;font-family:inherit;min-height:65px}
     .comment-box textarea:focus{outline:none;border-color:var(--accent)}
-    .btn-send{margin-top:8px;padding:8px 16px;border-radius:8px;border:none;background:var(--accent);
-              color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-send{margin-top:8px;padding:7px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 
-    .btn-back-menu{position:fixed;bottom:max(20px,env(safe-area-inset-bottom));right:20px;z-index:100;
-                   background:var(--accent);color:#fff;border:none;border-radius:99px;
-                   padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;
-                   font-family:inherit;box-shadow:0 4px 16px rgba(201,79,26,.35)}
-    .history-item{display:flex;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--border)}
+    /* Empty state */
+    .empty-week{padding:48px 20px;text-align:center;color:var(--muted)}
+    .empty-week .icon{font-size:36px;margin-bottom:12px}
+    .empty-week p{font-size:13px;line-height:1.6}
+
+    /* ── CALENDAR SIDEBAR ── */
+    .cal-header{padding:16px 14px 10px;border-bottom:1px solid var(--border)}
+    .cal-header-title{font-size:12px;font-weight:800;letter-spacing:-.01em;color:var(--fg);margin-bottom:2px}
+    .cal-header-sub{font-size:11px;color:var(--muted)}
+    .cal-body{padding:12px 10px}
+    .cal-month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .cal-month-name{font-size:12px;font-weight:700;color:var(--fg)}
+    .cal-nav-btn{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:13px;color:var(--fg);display:flex;align-items:center;justify-content:center}
+    .cal-nav-btn:hover{background:var(--surface)}
+    .cal-days-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px}
+    .cal-day-name{text-align:center;font-size:9px;font-weight:700;color:var(--muted);padding:3px 0;letter-spacing:.03em}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+    .cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;position:relative;transition:background .1s;color:var(--fg)}
+    .cal-cell:hover:not(.empty){background:var(--surface)}
+    .cal-cell.empty{cursor:default;color:rgba(255,255,255,.2);font-size:10px}
+    .cal-cell.today{background:rgba(201,79,26,.15);color:var(--accent);font-weight:800}
+    .cal-cell.selected{background:var(--accent)!important;color:#fff!important}
+    .cal-cell.has-post::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;background:var(--accent)}
+    .cal-cell.selected.has-post::after{background:#fff}
+    .cal-days-list{padding:0 10px 14px}
+    .cal-sel-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
+    .cal-day-chip{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);margin-bottom:5px;cursor:pointer;font-size:12px;font-weight:600;transition:border-color .1s;color:var(--fg)}
+    .cal-day-chip:hover{border-color:var(--accent)}
+    .cal-day-chip.active-chip{border-color:var(--accent);background:rgba(201,79,26,.08);color:var(--accent)}
+    .chip-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
+    .chip-dot.approved{background:#10B981}
+
+    /* History */
+    .history-section{margin-top:36px}
+    .history-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}
+    .history-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border)}
     .hist-date{font-size:13px;font-weight:600;flex:1}
     .hist-count{font-size:12px;color:var(--muted)}
+
+    .btn-back-menu{position:fixed;bottom:20px;right:20px;z-index:500;background:var(--accent);color:#fff;border:none;border-radius:99px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(201,79,26,.35)}
   </style>
 </head>
 <body>
+
 <button class="btn-back-menu" onclick="history.back()">← Menú de opciones</button>
+
 <nav>
   <div class="logo">Sto<span>.</span></div>
-  <div class="user-chip">
-    <div class="avatar">CA</div>
-    <span>CUAN Arquitectura</span>
-  </div>
+  <div class="user-chip"><div class="avatar">CA</div><span>CUAN Arquitectura</span></div>
 </nav>
-<main>
-  <div class="greeting">
-    <h1>Hola, Lucía 👋</h1>
-    <p>Estas son tus historias de Instagram para esta semana. Revisalas y aprobá antes del miércoles.</p>
+
+<div class="layout">
+  <!-- Main content -->
+  <div class="content">
+    <div class="greeting">
+      <h1>Hola, Lucía 👋</h1>
+      <p>Revisá tus historias de Instagram y aprobá antes de la fecha programada.</p>
+    </div>
+
+    <div id="week-content"></div>
+
+    <div class="history-section">
+      <div class="history-title">Historial</div>
+      <div class="history-item"><div class="hist-date">Miércoles 3 de septiembre</div><div class="hist-count">4 historias</div><span class="status-pill pill-a" style="font-size:11px;padding:3px 9px">Publicado</span></div>
+      <div class="history-item"><div class="hist-date">Miércoles 27 de agosto</div><div class="hist-count">4 historias</div><span class="status-pill pill-a" style="font-size:11px;padding:3px 9px">Publicado</span></div>
+      <div class="history-item"><div class="hist-date">Miércoles 20 de agosto</div><div class="hist-count">3 historias</div><span class="status-pill pill-a" style="font-size:11px;padding:3px 9px">Publicado</span></div>
+    </div>
   </div>
 
-  <div class="week-header">
-    <div class="week-title">Miércoles 10 de septiembre · 09:00 hs</div>
-    <span class="status-pill pill-pending" id="status-pill">Pendiente de aprobación</span>
+  <!-- Calendar sidebar -->
+  <div class="cal-sidebar">
+    <div class="cal-header">
+      <div class="cal-header-title">📅 Publicaciones</div>
+      <div class="cal-header-sub">Seleccioná un día para verlo</div>
+    </div>
+    <div class="cal-body">
+      <div class="cal-month-nav">
+        <button class="cal-nav-btn" onclick="calChange(-1)">‹</button>
+        <div class="cal-month-name" id="cal-month-lbl"></div>
+        <button class="cal-nav-btn" onclick="calChange(1)">›</button>
+      </div>
+      <div class="cal-days-row">
+        <div class="cal-day-name">Do</div><div class="cal-day-name">Lu</div><div class="cal-day-name">Ma</div>
+        <div class="cal-day-name">Mi</div><div class="cal-day-name">Ju</div><div class="cal-day-name">Vi</div><div class="cal-day-name">Sá</div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+    <div class="cal-days-list">
+      <div class="cal-sel-title">Días programados</div>
+      <div id="day-chips"></div>
+    </div>
   </div>
+</div>
 
-  <div class="stories-row" id="stories-row"></div>
-
-  <div class="action-bar">
-    <button class="btn-approve-all" onclick="approveAll()" id="btn-approve">✓ Aprobar todas</button>
-    <button class="btn-comment" onclick="toggleComment()">💬 Dejar comentario</button>
-    <span class="approved-msg" id="approved-msg" style="display:none">✓ Aprobadas — publicamos el miércoles</span>
-  </div>
-
-  <div class="comment-box" id="comment-box" style="display:none">
-    <h4>Comentario para la agencia</h4>
-    <textarea placeholder="Ej: Cambiar el texto de la tercera historia por…"></textarea>
-    <button class="btn-send">Enviar comentario</button>
-  </div>
-
-  <div style="margin-top:40px">
-    <div class="week-title" style="margin-bottom:16px">Historial</div>
-    <div class="history-item"><div class="hist-date">Miércoles 3 de septiembre</div><div class="hist-count">4 historias</div><span class="status-pill pill-approved">Publicado</span></div>
-    <div class="history-item"><div class="hist-date">Miércoles 27 de agosto</div><div class="hist-count">4 historias</div><span class="status-pill pill-approved">Publicado</span></div>
-    <div class="history-item"><div class="hist-date">Miércoles 20 de agosto</div><div class="hist-count">3 historias</div><span class="status-pill pill-approved">Publicado</span></div>
-  </div>
-</main>
 <script>
-const STORIES = [
-  { text:'La madera bien usada no envejece, se valoriza.', img:'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop' },
-  { text:'Espacios que respiran. Diseño que permanece.', img:'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop' },
-  { text:'Cada proyecto es único. Cada detalle importa.', img:'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=711&fit=crop' },
-  { text:'Arquitectura consciente para vivir mejor.', img:'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=400&h=711&fit=crop' },
-];
-let approved = new Array(STORIES.length).fill(false);
+// ── DATA ──────────────────────────────────────────────────────────
+const STORIES_DB = {
+  '2026-09-10': {
+    hora: '09:00',
+    stories: [
+      { id:'s1', text:'La madera bien usada no envejece, se valoriza.', img:'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop' },
+      { id:'s2', text:'Espacios que respiran. Diseño que permanece.', img:'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop' },
+      { id:'s3', text:'Cada proyecto es único. Cada detalle importa.', img:'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=711&fit=crop' },
+      { id:'s4', text:'Arquitectura consciente para vivir mejor.', img:'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=400&h=711&fit=crop' },
+    ]
+  },
+  '2026-09-17': {
+    hora: '09:00',
+    stories: [
+      { id:'s5', text:'Nueva obra en Palermo: loft industrial chic.', img:'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=711&fit=crop' },
+      { id:'s6', text:'Materiales nobles, acabados perfectos.', img:'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop' },
+      { id:'s7', text:'El detalle marca la diferencia.', img:'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop' },
+    ]
+  }
+};
 
-function render(){
-  document.getElementById('stories-row').innerHTML = STORIES.map((s,i)=>`
-    <div class="story-card${approved[i]?' approved':''}" onclick="toggleStory(${i})">
-      <img src="${s.img}" alt="">
-      <div class="overlay"><div class="story-text">${s.text}</div></div>
-    </div>`).join('');
+// approved state per story
+const approved = {};
+
+// ── STATE ──────────────────────────────────────────────────────────
+let calY, calM, selectedDay = null;
+let commentOpen = {};
+
+const now = new Date(); calY = now.getFullYear(); calM = now.getMonth();
+const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MONTHS_L = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const DAYS_L = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtFecha(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); return `${cap(DAYS_L[dt.getDay()])} ${d} de ${MONTHS_L[m-1]}`; }
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+function isoDay(iso){ return iso.split('-').map(Number); }
+function allDays(){ return Object.keys(STORIES_DB).sort(); }
+
+// ── RENDER CONTENT ────────────────────────────────────────────────
+function renderContent(){
+  const cont = document.getElementById('week-content');
+  const days = selectedDay ? [selectedDay] : allDays();
+  if(!days.length){ cont.innerHTML='<div class="empty-week"><div class="icon">📭</div><p>No hay publicaciones programadas.</p></div>'; return; }
+
+  cont.innerHTML = days.map(day => {
+    const db = STORIES_DB[day]; if(!db) return '';
+    const allApproved = db.stories.every(s=>approved[s.id]);
+    const someApproved = db.stories.some(s=>approved[s.id]);
+    const statusClass = allApproved ? 'pill-a' : 'pill-p';
+    const statusText = allApproved ? 'Aprobado ✓' : (someApproved ? `${db.stories.filter(s=>approved[s.id]).length}/${db.stories.length} aprobadas` : 'Pendiente de aprobación');
+
+    const storiesHTML = db.stories.map(s=>`
+      <div class="story-card${approved[s.id]?' approved':''}" onclick="toggleStory('${s.id}')">
+        <img src="${s.img}" alt="" loading="lazy">
+        <div class="overlay"><div class="story-text">${s.text}</div></div>
+        ${approved[s.id]?'<div class="check">✓</div>':''}
+      </div>`).join('');
+
+    const commentBoxHTML = commentOpen[day] ? `
+      <div class="comment-box">
+        <h4>Comentario para la agencia</h4>
+        <textarea id="txt-${day}" placeholder="Ej: Cambiar el texto de la tercera historia por…"></textarea>
+        <button class="btn-send" onclick="sendComment('${day}')">Enviar comentario</button>
+      </div>` : '';
+
+    return `
+      <div class="week-block">
+        <div class="week-header">
+          <div class="week-title">${fmtFecha(day)} · ${db.hora} hs</div>
+          <span class="status-pill ${statusClass}" id="pill-${day}">${statusText}</span>
+        </div>
+        <div class="stories-row">${storiesHTML}</div>
+        <div class="action-bar">
+          ${allApproved
+            ?`<span class="approved-msg">✓ Aprobadas — publicamos en la fecha programada</span>`
+            :`<button class="btn-approve-all" onclick="approveAll('${day}')">✓ Aprobar todas</button>
+               <button class="btn-comment" onclick="toggleComment('${day}')">💬 Comentario</button>`}
+        </div>
+        ${commentBoxHTML}
+      </div>`;
+  }).join('');
 }
-function toggleStory(i){ approved[i]=!approved[i]; render(); }
-function approveAll(){
-  approved.fill(true); render();
-  document.getElementById('btn-approve').style.display='none';
-  document.getElementById('approved-msg').style.display='block';
-  document.getElementById('status-pill').textContent='Aprobado ✓';
-  document.getElementById('status-pill').className='status-pill pill-approved';
+
+function toggleStory(id){
+  approved[id] = !approved[id];
+  renderContent();
 }
-function toggleComment(){
-  const b=document.getElementById('comment-box');
-  b.style.display=b.style.display==='none'?'block':'none';
+function approveAll(day){
+  STORIES_DB[day].stories.forEach(s=>{ approved[s.id]=true; });
+  renderContent(); renderDayChips();
 }
-render();
+function toggleComment(day){
+  commentOpen[day] = !commentOpen[day];
+  renderContent();
+}
+function sendComment(day){
+  const txt = document.getElementById('txt-'+day).value.trim();
+  if(!txt) return;
+  commentOpen[day]=false;
+  renderContent();
+}
+
+// ── CALENDAR ─────────────────────────────────────────────────────
+function calChange(d){ calM+=d; if(calM<0){calM=11;calY--;}if(calM>11){calM=0;calY++;} renderCalendar(); }
+
+function renderCalendar(){
+  document.getElementById('cal-month-lbl').textContent=`${MONTHS[calM]} ${calY}`;
+  const grid=document.getElementById('cal-grid'); grid.innerHTML='';
+  const first=new Date(calY,calM,1).getDay();
+  const days=new Date(calY,calM+1,0).getDate();
+  const prev=new Date(calY,calM,0).getDate();
+  const td=new Date();
+  const postDays=new Set(Object.keys(STORIES_DB));
+
+  for(let i=0;i<first;i++){const c=document.createElement('div');c.className='cal-cell empty';c.textContent=prev-first+1+i;grid.appendChild(c);}
+  for(let d=1;d<=days;d++){
+    const iso=`${calY}-${pad(calM+1)}-${pad(d)}`;
+    const cell=document.createElement('div');
+    const isToday=d===td.getDate()&&calM===td.getMonth()&&calY===td.getFullYear();
+    const isSel=selectedDay===iso;
+    const hasPosts=postDays.has(iso);
+    let cls='cal-cell';
+    if(isSel)cls+=' selected';else if(isToday)cls+=' today';
+    if(hasPosts)cls+=' has-post';
+    cell.className=cls; cell.textContent=d;
+    cell.onclick=()=>{
+      selectedDay=selectedDay===iso?null:iso;
+      renderCalendar(); renderContent(); renderDayChips();
+    };
+    grid.appendChild(cell);
+  }
+  const total=first+days; const rem=total%7===0?0:7-(total%7);
+  for(let i=1;i<=rem;i++){const c=document.createElement('div');c.className='cal-cell empty';c.textContent=i;grid.appendChild(c);}
+}
+
+function renderDayChips(){
+  const chips=document.getElementById('day-chips');
+  const days=allDays();
+  if(!days.length){chips.innerHTML='<div style="font-size:11px;color:var(--muted);padding:4px 0">Sin publicaciones programadas</div>';return;}
+  chips.innerHTML=days.map(day=>{
+    const db=STORIES_DB[day];
+    const allAppr=db.stories.every(s=>approved[s.id]);
+    return `<div class="cal-day-chip${selectedDay===day?' active-chip':''}" onclick="selectedDay=selectedDay==='${day}'?null:'${day}';renderCalendar();renderContent();renderDayChips()">
+      <div class="chip-dot${allAppr?' approved':''}"></div>
+      <span>${fmtFecha(day).split(' ').slice(0,3).join(' ')}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+renderContent();
+renderCalendar();
+renderDayChips();
 </script>
 </body>
 </html>

@@ -6,164 +6,147 @@
   <title>Panel Storias — Opción 3</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap">
   <style>
-    :root{--bg:#F5F1E8;--surface:#EDE8DC;--border:#D5CCBA;--fg:#1C1410;--muted:#6B5F52;--accent:#C94F1A;--accent2:#A83D12;--drawer-w:260px}
+    :root{--bg:#F5F1E8;--surface:#EDE8DC;--border:#D5CCBA;--fg:#1C1410;--muted:#6B5F52;--accent:#C94F1A;--accent2:#A83D12;--drawer-w:256px}
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body{background:var(--bg);color:var(--fg);font-family:'Geist',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+    body{background:var(--bg);color:var(--fg);font-family:'Geist',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden;display:flex;flex-direction:column}
 
     /* ── NAV ── */
-    nav{display:flex;align-items:center;gap:12px;padding:0 20px;height:56px;border-bottom:1px solid var(--border);background:rgba(245,241,232,.95);backdrop-filter:blur(12px);position:sticky;top:0;z-index:50}
-    .hamburger{background:none;border:none;cursor:pointer;font-size:20px;color:var(--fg);width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:8px;transition:background .15s}
+    nav{display:flex;align-items:center;gap:10px;padding:0 20px;height:54px;border-bottom:1px solid var(--border);background:rgba(245,241,232,.95);backdrop-filter:blur(12px);position:sticky;top:0;z-index:50;flex-shrink:0}
+    .hamburger{background:none;border:none;cursor:pointer;font-size:20px;color:var(--fg);width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:8px;transition:background .15s}
     .hamburger:hover{background:var(--surface)}
-    .logo{font-size:17px;font-weight:800;letter-spacing:-.04em}
+    .logo{font-size:16px;font-weight:800;letter-spacing:-.04em}
     .logo span{color:var(--accent)}
-    .nav-right{display:flex;align-items:center;gap:8px;margin-left:auto}
-    .client-pill{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:4px 12px 4px 6px;cursor:pointer;font-size:13px;font-weight:600;transition:border-color .15s}
+    .client-pill{display:flex;align-items:center;gap:7px;margin-left:auto;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:4px 12px 4px 6px;cursor:pointer;font-size:12px;font-weight:600;transition:border-color .15s}
     .client-pill:hover{border-color:var(--accent)}
-    .ca{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
-    .ca1{background:#C94F1A}.ca2{background:#6366F1}.ca3{background:#0EA5E9}.ca4{background:#10B981}.ca5{background:#F59E0B}
-    .nav-tab{padding:6px 12px;border-radius:8px;border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .1s}
-    .nav-tab:hover{background:var(--surface);color:var(--fg)}
-    .nav-tab.active{background:rgba(201,79,26,.1);color:var(--accent)}
 
     /* ── DRAWER ── */
     .drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:90;opacity:0;pointer-events:none;transition:opacity .25s}
     .drawer-overlay.open{opacity:1;pointer-events:all}
     .drawer{position:fixed;top:0;left:0;bottom:0;width:var(--drawer-w);background:var(--bg);border-right:1px solid var(--border);z-index:100;transform:translateX(-100%);transition:transform .25s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
     .drawer.open{transform:translateX(0)}
-    .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border)}
+    .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
     .drawer-head .logo{font-size:15px}
-    .close-btn{background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px}
+    .close-btn{background:none;border:none;cursor:pointer;font-size:17px;color:var(--muted);width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px}
     .close-btn:hover{background:var(--surface)}
-    .drawer-search{padding:10px 12px;border-bottom:1px solid var(--border)}
-    .drawer-search input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:13px;color:var(--fg);font-family:inherit}
+    .drawer-search{padding:8px 12px;border-bottom:1px solid var(--border)}
+    .drawer-search input{width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:13px;color:var(--fg);font-family:inherit}
     .drawer-search input:focus{outline:none;border-color:var(--accent)}
-    .drawer-list{flex:1;overflow-y:auto;padding:8px 0}
+    .drawer-list{flex:1;overflow-y:auto;padding:6px 0}
     .drawer-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;transition:background .1s;font-size:13px;font-weight:500}
     .drawer-item:hover{background:var(--surface)}
     .drawer-item.active{background:rgba(201,79,26,.08);color:var(--accent)}
-    .status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-left:auto}
-    .dot-pending{background:#F59E0B}.dot-sent{background:#6366F1}.dot-approved{background:#10B981}
-    .drawer-footer{padding:12px;border-top:1px solid var(--border)}
-    .btn-new{width:100%;padding:9px;border-radius:9px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+    .status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-left:auto}
+    .dot-p{background:#F59E0B}.dot-s{background:#6366F1}.dot-a{background:#10B981}
+    .drawer-footer{padding:10px;border-top:1px solid var(--border)}
+    .btn-new{width:100%;padding:8px;border-radius:8px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
     .btn-new:hover{border-color:var(--accent);color:var(--accent)}
 
-    /* ── MAIN ── */
-    main{max-width:900px;margin:0 auto;padding:32px 20px}
-    .section-title{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}
-    .client-header{display:flex;align-items:center;gap:14px;margin-bottom:24px}
-    .client-header .avatar-lg{width:48px;height:48px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-    .client-header h2{font-size:22px;font-weight:800;letter-spacing:-.03em}
-    .client-header p{font-size:13px;color:var(--muted);margin-top:2px}
-    .header-actions{margin-left:auto;display:flex;gap:8px}
-    .btn-outline{padding:8px 14px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
-    .btn-outline:hover{border-color:var(--fg);color:var(--fg)}
-    .btn-accent{padding:8px 14px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
+    /* ── LAYOUT: stories left + calendar right ── */
+    .layout{display:flex;flex:1;overflow:hidden}
+    .content{flex:1;overflow-y:auto;padding:28px 24px;min-width:0}
+    .cal-sidebar{width:256px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+
+    /* ── CLIENT HEADER ── */
+    .client-header{display:flex;align-items:center;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+    .ca-lg{width:42px;height:42px;border-radius:50%;font-size:14px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .client-header h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+    .client-header p{font-size:12px;color:var(--muted);margin-top:2px}
+    .header-btns{margin-left:auto;display:flex;gap:6px}
+    .btn-accent{padding:7px 13px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
     .btn-accent:hover{background:var(--accent2)}
+    .btn-outline{padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-outline:hover{border-color:var(--fg);color:var(--fg)}
 
-    /* Story group */
-    .group-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
-    .group-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
-    .group-date{font-size:13px;font-weight:700}
-    .group-time{font-size:12px;color:var(--muted)}
-    .group-meta-right{display:flex;align-items:center;gap:8px}
-    .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px}
-    .badge-pending{background:rgba(245,158,11,.12);color:#B45309}
-    .badge-sent{background:rgba(99,102,241,.1);color:#6366F1}
-    .badge-approved{background:rgba(16,185,129,.1);color:#059669}
-
-    /* Story grid */
-    .stories-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
-    .story-card{border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#1a1a1a;cursor:pointer}
+    /* ── WEEK BLOCKS ── */
+    .week-block{margin-bottom:24px}
+    .week-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap}
+    .week-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px}
+    .badge-p{background:rgba(245,158,11,.12);color:#B45309}
+    .badge-s{background:rgba(99,102,241,.1);color:#6366F1}
+    .badge-a{background:rgba(16,185,129,.1);color:#059669}
+    .stories-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+    .story-card{border-radius:10px;overflow:hidden;aspect-ratio:9/16;position:relative;background:#1a1a1a;cursor:pointer;transition:transform .15s}
+    .story-card:hover{transform:scale(1.02)}
     .story-card img{width:100%;height:100%;object-fit:cover;display:block}
-    .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;flex-direction:column;justify-content:flex-end;padding:8px}
-    .story-card .story-text{font-size:9px;color:#fff;line-height:1.3;font-weight:500}
-    /* Edit overlay on hover */
-    .story-card .edit-overlay{position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
-    .story-card:hover .edit-overlay{opacity:1}
-    .btn-edit-story{background:rgba(255,255,255,.9);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;color:#1C1410;font-family:inherit}
-    .story-num-badge{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.5);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;backdrop-filter:blur(4px)}
-
-    /* Actions */
-    .group-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .btn-wa{display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:9px;border:none;background:#25D366;color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit}
+    .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;align-items:flex-end;padding:8px}
+    .story-text{font-size:9px;color:#fff;line-height:1.3;font-weight:500}
+    .num-badge{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.5);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;backdrop-filter:blur(4px)}
+    .edit-hover{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
+    .story-card:hover .edit-hover{opacity:1}
+    .btn-edit-story{background:rgba(255,255,255,.9);border:none;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
+    .add-story-card{border:1.5px dashed var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:10px;aspect-ratio:9/16;transition:border-color .15s}
+    .add-story-card:hover{border-color:var(--accent)}
+    .add-story-card div{text-align:center;color:var(--muted);font-size:11px;font-weight:600}
+    .action-bar{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap}
+    .btn-wa{display:flex;align-items:center;gap:6px;padding:8px 13px;border-radius:8px;border:none;background:#25D366;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
     .btn-wa:hover{background:#1db954}
-    .btn-preview{padding:9px 14px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
-    .btn-preview:hover{border-color:var(--fg);color:var(--fg)}
-    .btn-add-story-row{padding:9px 14px;border-radius:9px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
-    .btn-add-story-row:hover{border-color:var(--accent);color:var(--accent)}
-    .btn-del-group{padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;margin-left:auto}
+    .btn-prev{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-del-group{padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;margin-left:auto}
     .btn-del-group:hover{border-color:#ef4444;color:#ef4444}
+    .empty-client{padding:52px 20px;text-align:center;color:var(--muted)}
+    .empty-client .icon{font-size:36px;margin-bottom:12px}
+    .empty-client p{font-size:13px;line-height:1.6;margin-bottom:16px}
 
-    /* Empty state */
-    .empty-client{text-align:center;padding:60px 20px;color:var(--muted)}
-    .empty-client .icon{font-size:40px;margin-bottom:14px}
-    .empty-client p{font-size:14px;margin-bottom:20px;line-height:1.6}
-
-    /* ── CALENDARIO VIEW ── */
-    #cal-view{display:none;max-width:900px;margin:0 auto;padding:32px 20px}
-    .cal-layout{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
-    .calendar-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px}
-    .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-    .cal-title{font-size:14px;font-weight:800;letter-spacing:-.02em}
-    .cal-nav{display:flex;gap:4px}
-    .cal-nav button{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--fg);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;font-family:inherit}
-    .cal-nav button:hover{background:var(--border)}
-    .cal-days-header{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:6px}
-    .cal-day-name{text-align:center;font-size:10px;font-weight:700;color:var(--muted);padding:4px 0;text-transform:uppercase;letter-spacing:.05em}
-    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-    .cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;position:relative;transition:background .1s;user-select:none}
+    /* ── CAL SIDEBAR ── */
+    .cal-header{padding:14px 14px 10px;border-bottom:1px solid var(--border)}
+    .cal-header-title{font-size:12px;font-weight:800;letter-spacing:-.01em;margin-bottom:2px}
+    .cal-header-sub{font-size:11px;color:var(--muted)}
+    .cal-body{padding:12px 10px}
+    .cal-month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .cal-month-name{font-size:12px;font-weight:700}
+    .cal-nav-btn{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+    .cal-nav-btn:hover{background:var(--border)}
+    .cal-days-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px}
+    .cal-day-name{text-align:center;font-size:9px;font-weight:700;color:var(--muted);padding:3px 0}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+    .cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;position:relative;transition:background .1s}
     .cal-cell:hover:not(.empty){background:var(--border)}
-    .cal-cell.empty{cursor:default;color:rgba(28,20,16,.25)}
+    .cal-cell.empty{cursor:default;color:rgba(28,20,16,.25);font-size:10px}
     .cal-cell.today{background:rgba(201,79,26,.12);color:var(--accent);font-weight:800}
     .cal-cell.selected{background:var(--accent)!important;color:#fff!important}
-    .cal-cell.has-post::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--accent)}
+    .cal-cell.has-post::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;background:var(--accent)}
     .cal-cell.selected.has-post::after{background:#fff}
-    .day-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-    .day-panel-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-    .day-panel-title{font-size:13px;font-weight:800}
-    .day-panel-sub{font-size:11px;color:var(--muted);margin-top:2px}
-    .day-story-list{padding:12px}
-    .day-story-row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px;background:var(--bg);border:1px solid var(--border);margin-bottom:8px;transition:border-color .15s}
-    .day-story-row:hover{border-color:var(--accent)}
-    .day-thumb{width:36px;height:64px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#ccc}
-    .day-story-info{flex:1;min-width:0}
-    .day-story-num{font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px}
-    .day-story-cap{font-size:12px;font-weight:500;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .day-story-actions{display:flex;gap:4px;flex-shrink:0}
-    .btn-icon{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .1s}
-    .btn-icon:hover{background:var(--border)}
-    .empty-day{padding:28px 16px;text-align:center;color:var(--muted);font-size:13px}
+    .cal-days-list{padding:0 10px 14px}
+    .cal-sel-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
+    .cal-day-chip{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);margin-bottom:5px;cursor:pointer;font-size:12px;font-weight:600;transition:border-color .1s}
+    .cal-day-chip:hover{border-color:var(--accent)}
+    .cal-day-chip.active-chip{border-color:var(--accent);background:rgba(201,79,26,.06);color:var(--accent)}
+    .chip-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-left:auto;padding:0;line-height:1}
+    .chip-remove:hover{color:#ef4444}
+    .btn-add-day{width:100%;padding:8px;border-radius:8px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;transition:all .15s}
+    .btn-add-day:hover{border-color:var(--accent);color:var(--accent)}
 
     /* ── MODALS ── */
     .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
     .modal-bg.open{display:flex}
-    .modal{background:var(--bg);border:1px solid var(--border);border-radius:18px;width:100%;max-width:480px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.18)}
-    .modal-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-    .modal-head h3{font-size:15px;font-weight:800}
-    .modal-close{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
-    .modal-body{padding:20px;display:flex;flex-direction:column;gap:14px;max-height:70vh;overflow-y:auto}
-    .field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
-    .field input,.field textarea,.field select{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--fg);font-size:13px;font-family:inherit}
-    .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent)}
+    .modal{background:var(--bg);border:1px solid var(--border);border-radius:18px;width:100%;max-width:460px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.18)}
+    .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .modal-head h3{font-size:14px;font-weight:800}
+    .modal-close{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
+    .modal-body{padding:18px;display:flex;flex-direction:column;gap:14px;max-height:65vh;overflow-y:auto}
+    .field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+    .field input,.field textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--fg);font-size:13px;font-family:inherit}
+    .field input:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
     .field textarea{resize:none;line-height:1.5}
-    .img-preview-row{display:flex;gap:12px;align-items:flex-start}
-    .img-preview{width:72px;height:128px;border-radius:10px;object-fit:cover;background:var(--border);flex-shrink:0}
-    .img-controls{flex:1;display:flex;flex-direction:column;gap:8px}
-    .btn-rand-img{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .1s;text-align:center}
-    .btn-rand-img:hover{background:var(--border)}
-    .modal-footer{padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:8px}
-    .btn-cancel-m{flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-    .btn-save-m{flex:2;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
+    .img-row{display:flex;gap:12px;align-items:flex-start}
+    .img-prev{width:64px;height:114px;border-radius:8px;object-fit:cover;background:var(--border);flex-shrink:0}
+    .img-ctrls{flex:1;display:flex;flex-direction:column;gap:8px}
+    .btn-rand{padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-rand:hover{background:var(--border)}
+    .modal-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px}
+    .btn-cancel-m{flex:1;padding:10px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-save-m{flex:2;padding:10px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
     .btn-save-m:hover{background:var(--accent2)}
 
     .btn-back-menu{position:fixed;bottom:20px;right:20px;z-index:500;background:var(--accent);color:#fff;border:none;border-radius:99px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(201,79,26,.35)}
+
+    .ca{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
   </style>
 </head>
 <body>
 
 <button class="btn-back-menu" onclick="history.back()">← Menú de opciones</button>
-
-<!-- Drawer overlay -->
 <div class="drawer-overlay" id="overlay" onclick="closeDrawer()"></div>
 
 <!-- Drawer -->
@@ -185,92 +168,40 @@
 <nav>
   <button class="hamburger" onclick="openDrawer()">☰</button>
   <div class="logo">Sto<span>.</span></div>
-  <div class="nav-right">
-    <button class="nav-tab active" id="tab-clientes" onclick="switchTab('clientes')">Clientes</button>
-    <button class="nav-tab" id="tab-calendario" onclick="switchTab('calendario')">📅 Calendario</button>
-    <div class="client-pill" onclick="openDrawer()">
-      <div class="ca ca1" id="nav-avatar">CA</div>
-      <span id="nav-name">CUAN Arquitectura</span>
-      <span style="color:var(--muted);margin-left:2px">▾</span>
-    </div>
+  <div class="client-pill" onclick="openDrawer()">
+    <div class="ca" id="nav-avatar" style="background:#C94F1A">CA</div>
+    <span id="nav-name">CUAN Arquitectura</span>
+    <span style="color:var(--muted);margin-left:2px">▾</span>
   </div>
 </nav>
 
-<!-- Clientes view -->
-<main id="main-content"></main>
+<!-- Layout -->
+<div class="layout">
+  <!-- Left: stories content -->
+  <div class="content" id="main-content"></div>
 
-<!-- Calendario view -->
-<div id="cal-view">
-  <div class="section-title" style="margin-bottom:16px">Calendario de publicaciones</div>
-  <div class="cal-layout">
-    <div>
-      <div class="calendar-card">
-        <div class="cal-head">
-          <div class="cal-title" id="cal-month-label"></div>
-          <div class="cal-nav">
-            <button onclick="changeMonth(-1)">‹</button>
-            <button onclick="changeMonth(1)">›</button>
-          </div>
-        </div>
-        <div class="cal-days-header">
-          <div class="cal-day-name">Do</div><div class="cal-day-name">Lu</div><div class="cal-day-name">Ma</div>
-          <div class="cal-day-name">Mi</div><div class="cal-day-name">Ju</div><div class="cal-day-name">Vi</div><div class="cal-day-name">Sá</div>
-        </div>
-        <div class="cal-grid" id="cal-grid"></div>
+  <!-- Right: calendar -->
+  <div class="cal-sidebar">
+    <div class="cal-header">
+      <div class="cal-header-title">📅 Calendario</div>
+      <div class="cal-header-sub">Días de publicación</div>
+    </div>
+    <div class="cal-body">
+      <div class="cal-month-nav">
+        <button class="cal-nav-btn" onclick="calChange(-1)">‹</button>
+        <div class="cal-month-name" id="cal-month-lbl"></div>
+        <button class="cal-nav-btn" onclick="calChange(1)">›</button>
       </div>
-    </div>
-    <div>
-      <div class="day-panel">
-        <div class="day-panel-head">
-          <div>
-            <div class="day-panel-title" id="cal-day-title">Seleccioná un día</div>
-            <div class="day-panel-sub" id="cal-day-sub">Hacé click en cualquier día</div>
-          </div>
-          <button class="btn-accent" id="btn-add-cal" style="display:none;font-size:11px;padding:6px 12px" onclick="addStoryFromCal()">+ Historia</button>
-        </div>
-        <div id="cal-day-stories"><div class="empty-day">Seleccioná un día para ver las publicaciones programadas</div></div>
+      <div class="cal-days-row">
+        <div class="cal-day-name">Do</div><div class="cal-day-name">Lu</div><div class="cal-day-name">Ma</div>
+        <div class="cal-day-name">Mi</div><div class="cal-day-name">Ju</div><div class="cal-day-name">Vi</div><div class="cal-day-name">Sá</div>
       </div>
+      <div class="cal-grid" id="cal-grid"></div>
     </div>
-  </div>
-</div>
-
-<!-- Client modal -->
-<div class="modal-bg" id="client-modal">
-  <div class="modal">
-    <div class="modal-head">
-      <h3 id="client-modal-title">Nuevo cliente</h3>
-      <button class="modal-close" onclick="closeClientModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="field"><label>Empresa</label><input id="cfg-empresa" type="text" placeholder="CUAN Arquitectura"></div>
-      <div class="field"><label>Contacto</label><input id="cfg-contacto" type="text" placeholder="Lucía Cuan"></div>
-      <div class="field"><label>Descripción del negocio</label><textarea id="cfg-desc" rows="2" placeholder="Estudio de arquitectura…"></textarea></div>
-      <div class="field"><label>WhatsApp</label><input id="cfg-phone" type="text" placeholder="+54 9 11 1234-5678"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn-cancel-m" onclick="closeClientModal()">Cancelar</button>
-      <button class="btn-save-m" onclick="saveClientModal()">Guardar cliente</button>
-    </div>
-  </div>
-</div>
-
-<!-- Add group modal -->
-<div class="modal-bg" id="group-modal">
-  <div class="modal">
-    <div class="modal-head">
-      <h3>Nueva publicación</h3>
-      <button class="modal-close" onclick="closeGroupModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="field"><label>Fecha</label><input id="grp-fecha" type="date"></div>
-      <div class="field"><label>Hora de publicación</label><input id="grp-hora" type="time" value="09:00"></div>
-      <div class="field"><label>Cliente</label>
-        <select id="grp-client"></select>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn-cancel-m" onclick="closeGroupModal()">Cancelar</button>
-      <button class="btn-save-m" onclick="saveGroupModal()">Crear grupo</button>
+    <div class="cal-days-list">
+      <div class="cal-sel-title">Días programados</div>
+      <div id="day-chips"></div>
+      <button class="btn-add-day" onclick="openPubModal()">+ Agregar día</button>
     </div>
   </div>
 </div>
@@ -278,440 +209,336 @@
 <!-- Story edit modal -->
 <div class="modal-bg" id="story-modal">
   <div class="modal">
-    <div class="modal-head">
-      <h3 id="story-modal-title">Editar historia</h3>
-      <button class="modal-close" onclick="closeStoryModal()">✕</button>
-    </div>
+    <div class="modal-head"><h3 id="smod-title">Editar historia</h3><button class="modal-close" onclick="closeStoryModal()">✕</button></div>
     <div class="modal-body">
-      <div class="field">
-        <label>Texto superpuesto</label>
-        <textarea id="smod-caption" rows="3" placeholder="Texto que aparece sobre la imagen…"></textarea>
-      </div>
+      <div class="field"><label>Texto superpuesto</label><textarea id="smod-cap" rows="3" placeholder="Texto sobre la imagen…"></textarea></div>
       <div class="field">
         <label>Imagen</label>
-        <div class="img-preview-row">
-          <img class="img-preview" id="smod-preview" src="" alt="">
-          <div class="img-controls">
-            <div><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:block">URL de imagen</label>
-              <input type="text" id="smod-img" placeholder="https://…" oninput="updateStoryPreview(this.value)">
-            </div>
-            <button class="btn-rand-img" onclick="randomStoryImg()">🔀 Imagen aleatoria</button>
-            <div style="font-size:10px;color:var(--muted)">Proporción ideal: 9:16 (vertical)</div>
+        <div class="img-row">
+          <img class="img-prev" id="smod-prev" src="" alt="">
+          <div class="img-ctrls">
+            <div><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:block">URL</label>
+              <input type="text" id="smod-img" placeholder="https://…" oninput="updPrev(this.value)"></div>
+            <button class="btn-rand" onclick="randImg()">🔀 Imagen aleatoria</button>
+            <div style="font-size:10px;color:var(--muted)">Proporción ideal 9:16</div>
           </div>
         </div>
       </div>
       <div class="field"><label>Hora</label><input type="text" id="smod-time" placeholder="09:00"></div>
     </div>
-    <div class="modal-footer">
-      <button class="btn-cancel-m" onclick="closeStoryModal()">Cancelar</button>
-      <button class="btn-save-m" onclick="saveStoryModal()">Guardar</button>
+    <div class="modal-footer"><button class="btn-cancel-m" onclick="closeStoryModal()">Cancelar</button><button class="btn-save-m" onclick="saveStoryModal()">Guardar</button></div>
+  </div>
+</div>
+
+<!-- Client modal -->
+<div class="modal-bg" id="client-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="cmod-title">Nuevo cliente</h3><button class="modal-close" onclick="closeClientModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Empresa</label><input id="cmod-empresa" type="text" placeholder="CUAN Arquitectura"></div>
+      <div class="field"><label>Contacto</label><input id="cmod-contacto" type="text" placeholder="Lucía Cuan"></div>
+      <div class="field"><label>Descripción</label><textarea id="cmod-desc" rows="2" placeholder="Estudio de arquitectura…"></textarea></div>
+      <div class="field"><label>WhatsApp</label><input id="cmod-phone" type="text" placeholder="+54 9 11 1234-5678"></div>
     </div>
+    <div class="modal-footer"><button class="btn-cancel-m" onclick="closeClientModal()">Cancelar</button><button class="btn-save-m" onclick="saveClientModal()">Guardar</button></div>
+  </div>
+</div>
+
+<!-- Add publication modal -->
+<div class="modal-bg" id="pub-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Nueva publicación</h3><button class="modal-close" onclick="closePubModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Fecha</label><input id="pub-fecha" type="date"></div>
+      <div class="field"><label>Hora</label><input id="pub-hora" type="time" value="09:00"></div>
+    </div>
+    <div class="modal-footer"><button class="btn-cancel-m" onclick="closePubModal()">Cancelar</button><button class="btn-save-m" onclick="savePubModal()">Agregar</button></div>
   </div>
 </div>
 
 <script>
 // ── DATA ──────────────────────────────────────────────────────────
-const UNSPLASH_ALL = [
-  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=1422&fit=crop',
-  'https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=800&h=1422&fit=crop',
+const IMGS=[
+  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=400&h=711&fit=crop',
 ];
 
-let CLIENTS = [
-  { id:'cuan', name:'CUAN Arquitectura', initials:'CA', caClass:'ca1', phone:'+5491139531786', contacto:'Lucía Cuan', desc:'Estudio de arquitectura en Palermo', status:'pending',
-    grupos:[{ id:'g1', fecha:'2026-09-10', hora:'09:00', stories:[
-      { id:'s1', text:'La madera bien usada no envejece, se valoriza.', img:'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop' },
-      { id:'s2', text:'Espacios que respiran. Diseño que permanece.', img:'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop' },
-      { id:'s3', text:'Cada proyecto es único. Cada detalle importa.', img:'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=711&fit=crop' },
-      { id:'s4', text:'Arquitectura consciente para vivir mejor.', img:'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=400&h=711&fit=crop' },
+let CLIENTS=[
+  {id:'cuan',name:'CUAN Arquitectura',initials:'CA',color:'#C94F1A',phone:'+5491139531786',contacto:'Lucía Cuan',status:'pending',
+    grupos:[{id:'g1',fecha:'2026-09-10',hora:'09:00',stories:[
+      {id:'s1',text:'La madera bien usada no envejece, se valoriza.',img:IMGS[0]},
+      {id:'s2',text:'Espacios que respiran. Diseño que permanece.',img:IMGS[1]},
+      {id:'s3',text:'Cada proyecto es único. Cada detalle importa.',img:IMGS[2]},
+      {id:'s4',text:'Arquitectura consciente para vivir mejor.',img:IMGS[3]},
     ]}]},
-  { id:'dora', name:'Panadería Dora', initials:'PD', caClass:'ca2', phone:'+5491139531786', contacto:'Dora González', desc:'Panadería artesanal en San Telmo', status:'sent',
-    grupos:[{ id:'g2', fecha:'2026-09-11', hora:'10:00', stories:[
-      { id:'s5', text:'Pan recién horneado, de 7 a 13 hs.', img:'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&h=711&fit=crop' },
-      { id:'s6', text:'Horneado esta mañana. Caliente hasta el mediodía.', img:'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=400&h=711&fit=crop' },
-      { id:'s7', text:'Ingredientes simples. Sabor que no se olvida.', img:'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=400&h=711&fit=crop' },
+  {id:'dora',name:'Panadería Dora',initials:'PD',color:'#6366F1',phone:'+5491139531786',contacto:'Dora González',status:'sent',
+    grupos:[{id:'g2',fecha:'2026-09-11',hora:'10:00',stories:[
+      {id:'s5',text:'Pan recién horneado, de 7 a 13 hs.',img:IMGS[4]},
+      {id:'s6',text:'Horneado esta mañana. Caliente hasta el mediodía.',img:IMGS[5]},
+      {id:'s7',text:'Ingredientes simples. Sabor que no se olvida.',img:IMGS[6]},
     ]}]},
-  { id:'mart', name:'Dr. Martínez', initials:'DM', caClass:'ca3', phone:'+5491139531786', contacto:'Dr. Carlos Martínez', desc:'Médico clínico, zona Palermo', status:'approved',
-    grupos:[{ id:'g3', fecha:'2026-09-12', hora:'09:00', stories:[
-      { id:'s8', text:'Tu salud, nuestra prioridad. Turnos disponibles.', img:'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=711&fit=crop' },
-      { id:'s9', text:'Más de 20 años cuidando familias en Palermo.', img:'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&h=711&fit=crop' },
-      { id:'s10', text:'Consultas presenciales y virtuales. Escribinos.', img:'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=400&h=711&fit=crop' },
+  {id:'mart',name:'Dr. Martínez',initials:'DM',color:'#0EA5E9',phone:'+5491139531786',contacto:'Dr. Carlos Martínez',status:'approved',
+    grupos:[{id:'g3',fecha:'2026-09-12',hora:'09:00',stories:[
+      {id:'s8',text:'Tu salud, nuestra prioridad.',img:IMGS[7]},
+      {id:'s9',text:'Más de 20 años cuidando familias.',img:IMGS[8]},
+      {id:'s10',text:'Consultas presenciales y virtuales.',img:IMGS[9]},
     ]}]},
 ];
 
-// ── STATE ──────────────────────────────────────────────────────────
-let currentClientId = CLIENTS[0].id;
-let currentTab = 'clientes';
-let calYear, calMonth, selectedCalDay = null;
-let storyEditCtx = null; // { clientId, groupId, storyId } or null for new
-let nextId = 200;
+let currentClientId=CLIENTS[0].id;
+let calY,calM,selectedDay=null;
+let storyCtx=null;
+let _id=400;
+function uid(){return 'x'+ ++_id;}
 
-const now = new Date();
-calYear = now.getFullYear(); calMonth = now.getMonth();
+const now2=new Date(); calY=now2.getFullYear(); calM=now2.getMonth();
+const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MONTHS_L=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const DAYS_L=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const STATUS_LABEL={pending:'Pendiente',sent:'Link enviado',approved:'Aprobado ✓'};
+const STATUS_CLASS={pending:'badge-p',sent:'badge-s',approved:'badge-a'};
+const DOT={pending:'dot-p',sent:'dot-s',approved:'dot-a'};
 
-const STATUS_LABELS = { pending:'Pendiente', sent:'Link enviado', approved:'Aprobado ✓' };
-const STATUS_CLASSES = { pending:'badge-pending', sent:'badge-sent', approved:'badge-approved' };
-const DOT_CLASSES = { pending:'dot-pending', sent:'dot-sent', approved:'dot-approved' };
-const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const DAYS_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-const MONTHS_ES_LONG = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function getC(id){return CLIENTS.find(c=>c.id===id);}
+function fmtFecha(iso){const[y,m,d]=iso.split('-').map(Number);const dt=new Date(y,m-1,d);return `${cap(DAYS_L[dt.getDay()])} ${d} de ${MONTHS_L[m-1]}`;}
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+function pad(n){return String(n).padStart(2,'0');}
 
-function getClient(id){ return CLIENTS.find(c=>c.id===id); }
-function uid(){ return 'x'+Date.now()+Math.random().toString(36).slice(2,6); }
-
-// ── TABS ──────────────────────────────────────────────────────────
-function switchTab(tab){
-  currentTab = tab;
-  document.getElementById('main-content').style.display = tab==='clientes'?'block':'none';
-  document.getElementById('cal-view').style.display = tab==='calendario'?'block':'none';
-  document.getElementById('tab-clientes').classList.toggle('active', tab==='clientes');
-  document.getElementById('tab-calendario').classList.toggle('active', tab==='calendario');
-  if(tab==='calendario') renderCalendar();
-}
-
-// ── DRAWER ──────────────────────────────────────────────────────────
-function openDrawer(){ document.getElementById('drawer').classList.add('open'); document.getElementById('overlay').classList.add('open'); renderDrawer(); }
-function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('overlay').classList.remove('open'); }
+// ── DRAWER ──────────────────────────────────────────────────────
+function openDrawer(){document.getElementById('drawer').classList.add('open');document.getElementById('overlay').classList.add('open');renderDrawer();}
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('overlay').classList.remove('open');}
 function renderDrawer(filter=''){
-  const list = document.getElementById('drawer-list');
-  list.innerHTML = '';
+  const list=document.getElementById('drawer-list'); list.innerHTML='';
   CLIENTS.filter(c=>c.name.toLowerCase().includes(filter.toLowerCase())).forEach(c=>{
-    const div = document.createElement('div');
-    div.className = 'drawer-item'+(c.id===currentClientId?' active':'');
-    div.innerHTML = `<div class="ca ${c.caClass}">${c.initials}</div><span>${c.name}</span><div class="status-dot ${DOT_CLASSES[c.status]}"></div>`;
-    div.onclick = ()=>{ selectClient(c.id); closeDrawer(); };
+    const div=document.createElement('div');
+    div.className='drawer-item'+(c.id===currentClientId?' active':'');
+    div.innerHTML=`<div class="ca" style="background:${c.color}">${c.initials}</div><span>${c.name}</span><div class="status-dot ${DOT[c.status]}"></div>`;
+    div.onclick=()=>{selectClient(c.id);closeDrawer();};
     list.appendChild(div);
   });
 }
-function filterClients(v){ renderDrawer(v); }
+function filterClients(v){renderDrawer(v);}
 function selectClient(id){
-  currentClientId = id;
-  const c = getClient(id);
-  document.getElementById('nav-avatar').className = `ca ${c.caClass}`;
-  document.getElementById('nav-avatar').textContent = c.initials;
-  document.getElementById('nav-name').textContent = c.name;
-  renderMain();
-  if(currentTab!=='clientes') switchTab('clientes');
+  currentClientId=id;selectedDay=null;
+  const c=getC(id);
+  document.getElementById('nav-avatar').style.background=c.color;
+  document.getElementById('nav-avatar').textContent=c.initials;
+  document.getElementById('nav-name').textContent=c.name;
+  renderMain(); renderCalendar(); renderDayChips();
 }
 
-// ── MAIN RENDER ──────────────────────────────────────────────────────
+// ── MAIN RENDER ──────────────────────────────────────────────────
 function renderMain(){
-  const c = getClient(currentClientId);
-  const main = document.getElementById('main-content');
-  let groupsHTML = c.grupos.length
-    ? c.grupos.map((g,gi)=>renderGroup(c,g,gi)).join('')
-    : `<div class="empty-client">
-        <div class="icon">📭</div>
-        <p>No hay historias programadas para<br><strong>${c.name}</strong></p>
-        <button class="btn-accent" onclick="openGroupModal('${c.id}')">+ Crear primera publicación</button>
-      </div>`;
-  main.innerHTML = `
+  const c=getC(currentClientId);
+  const grupos=selectedDay?c.grupos.filter(g=>g.fecha===selectedDay):c.grupos;
+  const mc=document.getElementById('main-content');
+
+  let groupsHTML=grupos.length?grupos.map(g=>renderGroup(c,g)).join(''):`
+    <div class="empty-client">
+      <div class="icon">📭</div>
+      <p>${selectedDay?`No hay historias para <strong>${fmtFecha(selectedDay)}</strong>`:`Sin publicaciones programadas para <strong>${c.name}</strong>`}</p>
+      <button class="btn-accent" onclick="openPubModal()">+ Agregar publicación</button>
+    </div>`;
+
+  mc.innerHTML=`
     <div class="client-header">
-      <div class="avatar-lg ca ${c.caClass}">${c.initials}</div>
-      <div>
-        <h2>${c.name}</h2>
-        <p>${STATUS_LABELS[c.status]} · ${c.contacto||''}</p>
-      </div>
-      <div class="header-actions">
+      <div class="ca-lg" style="background:${c.color}">${c.initials}</div>
+      <div><h2>${c.name}</h2><p>${STATUS_LABEL[c.status]} · ${c.contacto}</p></div>
+      <div class="header-btns">
         <button class="btn-outline" onclick="openClientModal('edit')">⚙ Editar</button>
-        <button class="btn-accent" onclick="openGroupModal('${c.id}')">+ Publicación</button>
+        <button class="btn-accent" onclick="openPubModal()">+ Publicación</button>
       </div>
     </div>
+    ${selectedDay?`<div style="margin-bottom:16px;display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:700">${fmtFecha(selectedDay)}</span><button style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline" onclick="selectedDay=null;renderMain();renderCalendar();renderDayChips()">Ver todas</button></div>`:''}
     ${groupsHTML}`;
 }
 
-function fmtFecha(iso){
-  // iso = "2026-09-10" → "Miércoles 10 de septiembre"
-  const [y,m,d] = iso.split('-').map(Number);
-  const date = new Date(y,m-1,d);
-  const day = DAYS_ES[date.getDay()];
-  return `${day.charAt(0).toUpperCase()+day.slice(1)} ${d} de ${MONTHS_ES_LONG[m-1]}`;
-}
-
-function renderGroup(c, g, gi){
-  const stories = g.stories.map((s,si)=>`
+function renderGroup(c,g){
+  const storiesHTML=g.stories.map((s,i)=>`
     <div class="story-card" onclick="openStoryModal('${c.id}','${g.id}','${s.id}')">
       <img src="${s.img}" alt="" loading="lazy">
       <div class="overlay"><div class="story-text">${s.text}</div></div>
-      <div class="story-num-badge">#${si+1}</div>
-      <div class="edit-overlay"><button class="btn-edit-story">✏️ Editar</button></div>
+      <div class="num-badge">#${i+1}</div>
+      <div class="edit-hover"><button class="btn-edit-story">✏️ Editar</button></div>
     </div>`).join('');
-
-  const addCard = `
-    <div class="story-card" style="border:1.5px dashed var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="addNewStory('${c.id}','${g.id}')">
-      <div style="text-align:center;color:var(--muted)"><div style="font-size:24px;margin-bottom:4px">+</div><div style="font-size:10px;font-weight:600">Historia</div></div>
-    </div>`;
-
-  const actionsBtns = c.status==='approved'
-    ? `<span style="color:#059669;font-weight:700;font-size:13px">✓ Aprobado por el cliente</span>`
-    : `<button class="btn-wa" onclick="sendWA('${c.id}')">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-        Enviar link
-      </button>
-      <button class="btn-preview" onclick="previewMobile()">👁 Ver como cliente</button>
-      ${c.status==='sent'?'<span style="font-size:12px;color:var(--muted)">Link enviado</span>':''}`;
-
+  const addCard=`<div class="add-story-card" onclick="addNewStory('${c.id}','${g.id}')"><div><div style="font-size:22px;margin-bottom:4px">+</div>Historia</div></div>`;
+  const actionHTML=c.status==='approved'
+    ?`<span style="color:#059669;font-weight:700;font-size:12px">✓ Aprobado por el cliente</span>`
+    :`<button class="btn-wa" onclick="sendWA('${c.id}')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Enviar link</button>
+      <button class="btn-prev" onclick="window.open('${window.location.origin}/demo/aprobar','_blank')">👁 Ver</button>`;
   return `
-    <div class="group-card">
-      <div class="group-meta">
-        <div><div class="group-date">${fmtFecha(g.fecha)}</div><div class="group-time">${g.hora} hs</div></div>
-        <div class="group-meta-right">
-          <span class="badge ${STATUS_CLASSES[c.status]}">${STATUS_LABELS[c.status]}</span>
-          <button class="btn-del-group" title="Eliminar grupo" onclick="deleteGroup('${c.id}','${g.id}')">🗑</button>
+    <div class="week-block">
+      <div class="week-header">
+        <div class="week-title">${fmtFecha(g.fecha)} · ${g.hora} hs</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${STATUS_CLASS[c.status]}">${STATUS_LABEL[c.status]}</span>
+          <button class="btn-del-group" onclick="deleteGroup('${c.id}','${g.id}')">🗑</button>
         </div>
       </div>
-      <div class="stories-grid">${stories}${addCard}</div>
-      <div class="group-actions">${actionsBtns}</div>
+      <div class="stories-row">${storiesHTML}${addCard}</div>
+      <div class="action-bar">${actionHTML}</div>
     </div>`;
 }
 
-// ── STORY MODAL ─────────────────────────────────────────────────────
-function openStoryModal(clientId, groupId, storyId){
-  const c = getClient(clientId);
-  const g = c.grupos.find(x=>x.id===groupId);
-  const s = g.stories.find(x=>x.id===storyId);
-  storyEditCtx = { clientId, groupId, storyId, isNew:false };
-  document.getElementById('story-modal-title').textContent = `Editar historia — ${c.name}`;
-  document.getElementById('smod-caption').value = s.text;
-  document.getElementById('smod-img').value = s.img;
-  document.getElementById('smod-preview').src = s.img;
-  document.getElementById('smod-time').value = g.hora;
+// ── STORY MODAL ──────────────────────────────────────────────────
+function openStoryModal(cid,gid,sid){
+  const c=getC(cid),g=c.grupos.find(x=>x.id===gid),s=g.stories.find(x=>x.id===sid);
+  storyCtx={cid,gid,sid,isNew:false};
+  document.getElementById('smod-title').textContent='Editar historia';
+  document.getElementById('smod-cap').value=s.text;
+  document.getElementById('smod-img').value=s.img;
+  document.getElementById('smod-prev').src=s.img;
+  document.getElementById('smod-time').value=g.hora;
   document.getElementById('story-modal').classList.add('open');
 }
-
-function addNewStory(clientId, groupId){
-  storyEditCtx = { clientId, groupId, storyId:null, isNew:true };
-  const defImg = UNSPLASH_ALL[Math.floor(Math.random()*UNSPLASH_ALL.length)];
-  document.getElementById('story-modal-title').textContent = 'Nueva historia';
-  document.getElementById('smod-caption').value = '';
-  document.getElementById('smod-img').value = defImg;
-  document.getElementById('smod-preview').src = defImg;
-  document.getElementById('smod-time').value = '09:00';
+function addNewStory(cid,gid){
+  const img=IMGS[Math.floor(Math.random()*IMGS.length)];
+  storyCtx={cid,gid,sid:null,isNew:true};
+  document.getElementById('smod-title').textContent='Nueva historia';
+  document.getElementById('smod-cap').value='';
+  document.getElementById('smod-img').value=img;
+  document.getElementById('smod-prev').src=img;
+  document.getElementById('smod-time').value='09:00';
   document.getElementById('story-modal').classList.add('open');
 }
-
-function closeStoryModal(){ document.getElementById('story-modal').classList.remove('open'); }
-
-function updateStoryPreview(url){ if(url.startsWith('http')) document.getElementById('smod-preview').src = url; }
-function randomStoryImg(){
-  const url = UNSPLASH_ALL[Math.floor(Math.random()*UNSPLASH_ALL.length)];
-  document.getElementById('smod-img').value = url;
-  document.getElementById('smod-preview').src = url;
-}
-
+function closeStoryModal(){document.getElementById('story-modal').classList.remove('open');}
+function updPrev(url){if(url.startsWith('http'))document.getElementById('smod-prev').src=url;}
+function randImg(){const u=IMGS[Math.floor(Math.random()*IMGS.length)];document.getElementById('smod-img').value=u;document.getElementById('smod-prev').src=u;}
 function saveStoryModal(){
-  const caption = document.getElementById('smod-caption').value.trim();
-  const img = document.getElementById('smod-img').value.trim() || UNSPLASH_ALL[0];
-  const time = document.getElementById('smod-time').value.trim() || '09:00';
-  if(!caption){ document.getElementById('smod-caption').focus(); return; }
-  const { clientId, groupId, storyId, isNew } = storyEditCtx;
-  const c = getClient(clientId);
-  const g = c.grupos.find(x=>x.id===groupId);
-  g.hora = time;
-  if(isNew){
-    g.stories.push({ id:uid(), text:caption, img });
-  } else {
-    const s = g.stories.find(x=>x.id===storyId);
-    s.text = caption; s.img = img;
-  }
-  closeStoryModal();
-  renderMain();
-  if(currentTab==='calendario') renderCalDayStories();
+  const cap=document.getElementById('smod-cap').value.trim();
+  const img=document.getElementById('smod-img').value.trim()||IMGS[0];
+  const time=document.getElementById('smod-time').value||'09:00';
+  if(!cap){document.getElementById('smod-cap').focus();return;}
+  const{cid,gid,sid,isNew}=storyCtx;
+  const c=getC(cid),g=c.grupos.find(x=>x.id===gid);
+  g.hora=time;
+  if(isNew)g.stories.push({id:uid(),text:cap,img});
+  else{const s=g.stories.find(x=>x.id===sid);s.text=cap;s.img=img;}
+  closeStoryModal(); renderMain(); renderCalendar(); renderDayChips();
 }
 
-// ── GROUP MODAL ─────────────────────────────────────────────────────
-function openGroupModal(clientId){
-  // populate client select
-  const sel = document.getElementById('grp-client');
-  sel.innerHTML = CLIENTS.map(c=>`<option value="${c.id}"${c.id===clientId?' selected':''}>${c.name}</option>`).join('');
-  // default date = today
-  const t = new Date(); const pad = n=>String(n).padStart(2,'0');
-  document.getElementById('grp-fecha').value = `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
-  document.getElementById('grp-hora').value = '09:00';
-  document.getElementById('group-modal').classList.add('open');
+// ── PUB MODAL ────────────────────────────────────────────────────
+function openPubModal(){
+  const t=new Date();
+  document.getElementById('pub-fecha').value=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+  document.getElementById('pub-hora').value='09:00';
+  document.getElementById('pub-modal').classList.add('open');
 }
-function closeGroupModal(){ document.getElementById('group-modal').classList.remove('open'); }
-function saveGroupModal(){
-  const fecha = document.getElementById('grp-fecha').value;
-  const hora = document.getElementById('grp-hora').value || '09:00';
-  const clientId = document.getElementById('grp-client').value;
-  if(!fecha) return;
-  const c = getClient(clientId);
-  c.grupos.push({ id:uid(), fecha, hora, stories:[] });
+function closePubModal(){document.getElementById('pub-modal').classList.remove('open');}
+function savePubModal(){
+  const fecha=document.getElementById('pub-fecha').value;
+  const hora=document.getElementById('pub-hora').value||'09:00';
+  if(!fecha)return;
+  const c=getC(currentClientId);
+  c.grupos.push({id:uid(),fecha,hora,stories:[]});
   c.grupos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
-  closeGroupModal();
-  currentClientId = clientId;
-  const cv = getClient(clientId);
-  document.getElementById('nav-avatar').className = `ca ${cv.caClass}`;
-  document.getElementById('nav-avatar').textContent = cv.initials;
-  document.getElementById('nav-name').textContent = cv.name;
-  renderMain();
-  if(currentTab==='calendario') renderCalendar();
+  closePubModal(); selectedDay=fecha;
+  renderMain(); renderCalendar(); renderDayChips();
 }
 
-// ── CLIENT MODAL ────────────────────────────────────────────────────
+// ── CLIENT MODAL ─────────────────────────────────────────────────
 function openClientModal(mode){
-  const c = mode==='edit' ? getClient(currentClientId) : null;
-  document.getElementById('client-modal-title').textContent = mode==='edit'?'Editar cliente':'Nuevo cliente';
-  document.getElementById('cfg-empresa').value = c?.name||'';
-  document.getElementById('cfg-contacto').value = c?.contacto||'';
-  document.getElementById('cfg-desc').value = c?.desc||'';
-  document.getElementById('cfg-phone').value = c?.phone||'';
-  document.getElementById('client-modal').dataset.mode = mode;
+  const c=mode==='edit'?getC(currentClientId):null;
+  document.getElementById('cmod-title').textContent=mode==='edit'?'Editar cliente':'Nuevo cliente';
+  document.getElementById('cmod-empresa').value=c?.name||'';
+  document.getElementById('cmod-contacto').value=c?.contacto||'';
+  document.getElementById('cmod-desc').value='';
+  document.getElementById('cmod-phone').value=c?.phone||'';
+  document.getElementById('client-modal').dataset.mode=mode;
   document.getElementById('client-modal').classList.add('open');
 }
-function closeClientModal(){ document.getElementById('client-modal').classList.remove('open'); }
+function closeClientModal(){document.getElementById('client-modal').classList.remove('open');}
 function saveClientModal(){
-  const name = document.getElementById('cfg-empresa').value.trim();
-  if(!name) return;
-  const mode = document.getElementById('client-modal').dataset.mode;
+  const name=document.getElementById('cmod-empresa').value.trim();if(!name)return;
+  const mode=document.getElementById('client-modal').dataset.mode;
+  const COLORS=['#C94F1A','#6366F1','#0EA5E9','#10B981','#F59E0B'];
   if(mode==='edit'){
-    const c = getClient(currentClientId);
-    c.name = name; c.contacto = document.getElementById('cfg-contacto').value;
-    c.desc = document.getElementById('cfg-desc').value; c.phone = document.getElementById('cfg-phone').value;
-  } else {
-    const classes = ['ca1','ca2','ca3','ca4','ca5'];
-    const words = name.trim().split(' ');
-    const initials = (words[0][0]+(words[1]?words[1][0]:'')).toUpperCase();
-    const newC = { id:uid(), name, initials, caClass:classes[CLIENTS.length%5],
-      phone:document.getElementById('cfg-phone').value, contacto:document.getElementById('cfg-contacto').value,
-      desc:document.getElementById('cfg-desc').value, status:'pending', grupos:[] };
-    CLIENTS.push(newC);
-    currentClientId = newC.id;
+    const c=getC(currentClientId);c.name=name;c.contacto=document.getElementById('cmod-contacto').value;c.phone=document.getElementById('cmod-phone').value;
+  }else{
+    const words=name.trim().split(' ');const initials=(words[0][0]+(words[1]?words[1][0]:'')).toUpperCase();
+    const nc={id:uid(),name,initials,color:COLORS[CLIENTS.length%COLORS.length],
+      phone:document.getElementById('cmod-phone').value,contacto:document.getElementById('cmod-contacto').value,status:'pending',grupos:[]};
+    CLIENTS.push(nc);currentClientId=nc.id;
   }
-  closeClientModal();
-  const c = getClient(currentClientId);
-  document.getElementById('nav-avatar').className = `ca ${c.caClass}`;
-  document.getElementById('nav-avatar').textContent = c.initials;
-  document.getElementById('nav-name').textContent = c.name;
-  renderMain();
-  renderDrawer();
+  closeClientModal();selectClient(currentClientId);
 }
 
-// ── DELETE ───────────────────────────────────────────────────────────
-function deleteGroup(clientId, groupId){
-  const c = getClient(clientId);
-  c.grupos = c.grupos.filter(g=>g.id!==groupId);
-  renderMain();
-  renderCalendar();
+// ── DELETE ────────────────────────────────────────────────────────
+function deleteGroup(cid,gid){
+  const c=getC(cid);c.grupos=c.grupos.filter(g=>g.id!==gid);
+  renderMain(); renderCalendar(); renderDayChips();
 }
 
-// ── WA / PREVIEW ────────────────────────────────────────────────────
-function sendWA(clientId){
-  const c = getClient(clientId);
-  const token = c.id+'x7f2';
-  const url = `${window.location.origin}/aprobar/${token}`;
-  const g = c.grupos[0];
-  const msg = `Hola ${c.name} 👋 Tus historias de Instagram para el ${g?fmtFecha(g.fecha):'esta semana'} están listas.\n\nRevisalas y aprobá en 30 segundos 👇\n${url}\n\n_Link válido por 48 hs_`;
+// ── WA ────────────────────────────────────────────────────────────
+function sendWA(cid){
+  const c=getC(cid),g=c.grupos[0];
+  const url=`${window.location.origin}/aprobar/${c.id}x7f2`;
+  const msg=`Hola ${c.name} 👋 Tus historias de Instagram para el ${g?fmtFecha(g.fecha):'esta semana'} están listas.\n\nRevisalas y aprobá en 30 segundos 👇\n${url}\n\n_Link válido por 48 hs_`;
   window.open(`https://wa.me/${c.phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
-  c.status = 'sent'; renderMain();
+  c.status='sent';renderMain();renderDrawer();
 }
-function previewMobile(){ window.open(`${window.location.origin}/demo/aprobar`,'_blank'); }
 
-// ── CALENDAR ─────────────────────────────────────────────────────────
-function changeMonth(d){ calMonth+=d; if(calMonth<0){calMonth=11;calYear--;}if(calMonth>11){calMonth=0;calYear++;} renderCalendar(); }
-
-function allPostsOnDay(y,m,d){
-  const iso = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-  const results = [];
-  CLIENTS.forEach(c=>c.grupos.filter(g=>g.fecha===iso).forEach(g=>results.push({c,g})));
-  return results;
-}
+// ── CALENDAR ─────────────────────────────────────────────────────
+function calChange(d){calM+=d;if(calM<0){calM=11;calY--;}if(calM>11){calM=0;calY++;}renderCalendar();}
+function clientDaySet(){return new Set(getC(currentClientId).grupos.map(g=>g.fecha));}
 
 function renderCalendar(){
-  document.getElementById('cal-month-label').textContent = `${MONTHS_ES[calMonth]} ${calYear}`;
-  const grid = document.getElementById('cal-grid'); grid.innerHTML='';
-  const firstDay = new Date(calYear,calMonth,1).getDay();
-  const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
-  const daysInPrev = new Date(calYear,calMonth,0).getDate();
-  const td = new Date();
-  for(let i=0;i<firstDay;i++){const cell=document.createElement('div');cell.className='cal-cell empty';cell.textContent=daysInPrev-firstDay+1+i;grid.appendChild(cell);}
-  for(let d=1;d<=daysInMonth;d++){
+  document.getElementById('cal-month-lbl').textContent=`${MONTHS[calM]} ${calY}`;
+  const grid=document.getElementById('cal-grid');grid.innerHTML='';
+  const first=new Date(calY,calM,1).getDay();
+  const daysN=new Date(calY,calM+1,0).getDate();
+  const prevN=new Date(calY,calM,0).getDate();
+  const td=new Date();
+  const days=clientDaySet();
+  for(let i=0;i<first;i++){const c=document.createElement('div');c.className='cal-cell empty';c.textContent=prevN-first+1+i;grid.appendChild(c);}
+  for(let d=1;d<=daysN;d++){
+    const iso=`${calY}-${pad(calM+1)}-${pad(d)}`;
     const cell=document.createElement('div');
-    const isToday=d===td.getDate()&&calMonth===td.getMonth()&&calYear===td.getFullYear();
-    const isSel=selectedCalDay===d;
-    const hasPosts=allPostsOnDay(calYear,calMonth+1,d).length>0;
-    let cls='cal-cell';
-    if(isSel)cls+=' selected'; else if(isToday)cls+=' today';
-    if(hasPosts)cls+=' has-post';
-    cell.className=cls; cell.textContent=d;
-    const _d=d; cell.onclick=()=>selectCalDay(_d);
+    const isT=d===td.getDate()&&calM===td.getMonth()&&calY===td.getFullYear();
+    const isS=selectedDay===iso;
+    const hasP=days.has(iso);
+    let cls='cal-cell';if(isS)cls+=' selected';else if(isT)cls+=' today';if(hasP)cls+=' has-post';
+    cell.className=cls;cell.textContent=d;
+    cell.onclick=()=>{selectedDay=selectedDay===iso?null:iso;renderCalendar();renderMain();renderDayChips();};
     grid.appendChild(cell);
   }
-  const total=firstDay+daysInMonth; const rem=total%7===0?0:7-(total%7);
-  for(let i=1;i<=rem;i++){const cell=document.createElement('div');cell.className='cal-cell empty';cell.textContent=i;grid.appendChild(cell);}
+  const total=first+daysN;const rem=total%7===0?0:7-(total%7);
+  for(let i=1;i<=rem;i++){const c=document.createElement('div');c.className='cal-cell empty';c.textContent=i;grid.appendChild(c);}
 }
 
-function selectCalDay(d){
-  selectedCalDay=d;
-  renderCalendar();
-  const [y,m]=[calYear,calMonth+1];
-  const date=new Date(y,m-1,d);
-  document.getElementById('cal-day-title').textContent=`${DAYS_ES[date.getDay()].charAt(0).toUpperCase()+DAYS_ES[date.getDay()].slice(1)} ${d} de ${MONTHS_ES_LONG[m-1]}`;
-  const posts=allPostsOnDay(y,m,d);
-  document.getElementById('cal-day-sub').textContent=posts.length?`${posts.reduce((acc,{g})=>acc+g.stories.length,0)} historia(s) en ${posts.length} grupo(s)`:'Sin publicaciones';
-  document.getElementById('btn-add-cal').style.display='inline-block';
-  renderCalDayStories();
+function renderDayChips(){
+  const c=getC(currentClientId);
+  const chips=document.getElementById('day-chips');
+  chips.innerHTML=c.grupos.length
+    ?c.grupos.map(g=>`
+      <div class="cal-day-chip${selectedDay===g.fecha?' active-chip':''}" onclick="selectedDay=selectedDay==='${g.fecha}'?null:'${g.fecha}';renderCalendar();renderMain();renderDayChips()">
+        <span style="flex:1">${fmtFecha(g.fecha).split(' ').slice(0,3).join(' ')}</span>
+        <button class="chip-remove" onclick="event.stopPropagation();deleteGroup('${c.id}','${g.id}')">×</button>
+      </div>`).join('')
+    :'<div style="font-size:11px;color:var(--muted);padding:4px 0">Sin días programados</div>';
 }
 
-function renderCalDayStories(){
-  if(!selectedCalDay){return;}
-  const posts=allPostsOnDay(calYear,calMonth+1,selectedCalDay);
-  const cont=document.getElementById('cal-day-stories');
-  if(!posts.length){cont.innerHTML='<div class="empty-day">✏️ No hay historias este día.<br>Hacé click en "+ Historia" para agregar.</div>';return;}
-  cont.innerHTML=posts.map(({c,g})=>g.stories.map((s,si)=>`
-    <div class="day-story-row">
-      <img class="day-thumb" src="${s.img}" alt="">
-      <div class="day-story-info">
-        <div class="day-story-num">${c.name} · #${si+1} · ${g.hora}hs</div>
-        <div class="day-story-cap">${s.text}</div>
-      </div>
-      <div class="day-story-actions">
-        <button class="btn-icon" onclick="openStoryModal('${c.id}','${g.id}','${s.id}')">✏️</button>
-        <button class="btn-icon" onclick="deleteCalStory('${c.id}','${g.id}','${s.id}')">🗑</button>
-      </div>
-    </div>`).join('')).join('');
-}
-
-function addStoryFromCal(){
-  // Pick first client with a group on this day, or first client
-  const posts=allPostsOnDay(calYear,calMonth+1,selectedCalDay);
-  if(posts.length){
-    const {c,g}=posts[0];
-    addNewStory(c.id,g.id);
-  } else {
-    openGroupModal(currentClientId);
-  }
-}
-
-function deleteCalStory(clientId,groupId,storyId){
-  const c=getClient(clientId); const g=c.grupos.find(x=>x.id===groupId);
-  g.stories=g.stories.filter(s=>s.id!==storyId);
-  renderCalDayStories(); renderCalendar(); renderMain();
-}
-
-// ── ESC ──────────────────────────────────────────────────────────────
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){ closeDrawer();closeStoryModal();closeClientModal();closeGroupModal(); }
-});
-// Close modals on overlay click
-['story-modal','client-modal','group-modal'].forEach(id=>{
+// ── ESC + overlay close ──────────────────────────────────────────
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeStoryModal();closeClientModal();closePubModal();}});
+['story-modal','client-modal','pub-modal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 
-// ── INIT ─────────────────────────────────────────────────────────────
+// ── INIT ─────────────────────────────────────────────────────────
 renderDrawer();
 renderMain();
 renderCalendar();
+renderDayChips();
 </script>
 </body>
 </html>
