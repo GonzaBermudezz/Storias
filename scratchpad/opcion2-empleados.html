@@ -65,12 +65,19 @@
     .badge-a{background:rgba(16,185,129,.1);color:#059669}
     .card-date{font-size:11px;color:var(--muted)}
 
+    /* Back button */
+    .btn-back-menu{position:fixed;bottom:20px;right:20px;z-index:100;
+                   background:var(--accent);color:#fff;border:none;border-radius:99px;
+                   padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;
+                   font-family:inherit;box-shadow:0 4px 16px rgba(201,79,26,.35)}
+
     /* Section title */
     .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px}
   </style>
 </head>
 <body>
 
+<button class="btn-back-menu" onclick="history.back()">← Menú de opciones</button>
 <div class="sidebar">
   <div class="sidebar-logo">Sto<span>.</span></div>
   <div style="padding:8px 0">

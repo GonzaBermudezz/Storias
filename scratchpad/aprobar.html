@@ -49,13 +49,16 @@
     .story-meta .name { font-size: 13px; font-weight: 600; color: #fff; line-height: 1; }
     .story-meta .time { font-size: 11px; color: rgba(255,255,255,.65); margin-top: 2px; }
 
-    /* Imagen */
-    #story-img {
+    /* Imagen — stack de slides, sin loading entre historias */
+    .story-slide {
       position: absolute; inset: 0;
       width: 100%; height: 100%; object-fit: cover;
       user-select: none; -webkit-user-select: none;
       pointer-events: none;
+      opacity: 0;
+      transition: opacity .15s ease;
     }
+    .story-slide.visible { opacity: 1; }
 
     /* Texto superpuesto */
     #story-text {
@@ -138,6 +141,15 @@
     .btn-confirm { flex: 2; padding: 12px; border-radius: 10px; border: none;
                    background: #22c55e; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
 
+    /* Back button */
+    #btn-back {
+      position: fixed; top: max(14px, env(safe-area-inset-top)); right: 14px; z-index: 50;
+      background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3);
+      color: #fff; font-size: 12px; font-weight: 700; padding: 7px 14px;
+      border-radius: 99px; cursor: pointer; backdrop-filter: blur(8px);
+      font-family: inherit; letter-spacing: -.01em;
+    }
+
     /* Success screen */
     #success-screen {
       position: fixed; inset: 0; z-index: 200; display: none;
@@ -153,8 +165,10 @@
 </head>
 <body>
 
+<button id="btn-back" onclick="history.back()">← Menú</button>
+
 <div id="viewer">
-  <img id="story-img" src="" alt="">
+  <div id="slides"></div>
 
   <div id="progress-bars"></div>
 
@@ -214,6 +228,17 @@ let current = 0;
 let approved = new Array(STORIES.length).fill(false);
 let autoTimer = null;
 
+// Preload — crear todos los slides en el DOM de una, ocultos
+const slidesContainer = document.getElementById('slides');
+STORIES.forEach((s, i) => {
+  const img = document.createElement('img');
+  img.className = 'story-slide';
+  img.src = s.img;
+  img.id = `slide-${i}`;
+  img.alt = '';
+  slidesContainer.appendChild(img);
+});
+
 // Build progress bars
 const pbContainer = document.getElementById('progress-bars');
 STORIES.forEach((_, i) => {
@@ -229,8 +254,12 @@ function showStory(idx) {
   if (idx >= STORIES.length) { openModal(); return; }
   current = idx;
 
+  // Cambiar slide visible instantáneamente (ya están precargados)
+  document.querySelectorAll('.story-slide').forEach((el, i) => {
+    el.classList.toggle('visible', i === idx);
+  });
+
   const s = STORIES[idx];
-  document.getElementById('story-img').src = s.img;
   document.getElementById('story-caption').textContent = s.text;
   document.getElementById('story-counter').textContent = `${idx + 1} de ${STORIES.length}`;
 

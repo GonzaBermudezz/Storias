@@ -132,9 +132,15 @@
                 cursor:pointer;font-family:inherit}
     .btn-save{flex:2;padding:10px;border-radius:9px;border:none;background:var(--accent);
               color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-back-menu{position:fixed;bottom:20px;right:20px;z-index:200;
+                   background:var(--accent);color:#fff;border:none;border-radius:99px;
+                   padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;
+                   font-family:inherit;box-shadow:0 4px 16px rgba(201,79,26,.35)}
   </style>
 </head>
 <body>
+
+<button class="btn-back-menu" onclick="history.back()">← Menú de opciones</button>
 
 <!-- Drawer overlay -->
 <div class="drawer-overlay" id="overlay" onclick="closeDrawer()"></div>
