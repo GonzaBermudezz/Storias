@@ -144,6 +144,7 @@
     .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
     .modal-bg.open{display:flex}
     .modal{background:var(--bg);border:1px solid var(--border);border-radius:18px;width:100%;max-width:460px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.18)}
+    .modal.story-modal-wide{max-width:600px}
     .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
     .modal-head h3{font-size:14px;font-weight:800}
     .modal-close{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
@@ -152,9 +153,11 @@
     .field input,.field textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--fg);font-size:13px;font-family:inherit}
     .field input:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
     .field textarea{resize:none;line-height:1.5}
-    .img-row{display:flex;gap:12px;align-items:flex-start}
-    .img-prev{width:64px;height:114px;border-radius:8px;object-fit:cover;background:var(--border);flex-shrink:0}
-    .img-ctrls{flex:1;display:flex;flex-direction:column;gap:8px}
+    .img-row{display:flex;gap:16px;align-items:flex-start}
+    .img-prev{width:150px;aspect-ratio:9/16;border-radius:12px;object-fit:cover;background:var(--border);flex-shrink:0;display:block}
+    .img-ctrls{flex:1;display:flex;flex-direction:column;gap:10px}
+    .img-file-btn{width:100%;padding:9px;border-radius:9px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s}
+    .img-file-btn:hover{border-color:var(--accent);color:var(--accent)}
     .btn-rand{padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
     .btn-rand:hover{background:var(--border)}
     .modal-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px}
@@ -235,27 +238,32 @@
 </div>
 
 <!-- Story edit modal -->
+<input type="file" id="smod-file" accept="image/*" style="display:none" onchange="loadImgFile2(this)">
 <div class="modal-bg" id="story-modal">
-  <div class="modal">
+  <div class="modal story-modal-wide">
     <div class="modal-head">
       <h3 id="smod-title">Editar historia</h3>
       <button class="modal-close" onclick="closeStoryModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div class="field"><label>Texto superpuesto</label><textarea id="smod-cap" rows="3" placeholder="Texto que aparece sobre la imagen…"></textarea></div>
-      <div class="field">
-        <label>Imagen</label>
-        <div class="img-row">
-          <img class="img-prev" id="smod-prev" src="" alt="">
-          <div class="img-ctrls">
-            <div><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:block">URL</label>
-              <input type="text" id="smod-img" placeholder="https://…" oninput="updStoryPrev(this.value)"></div>
-            <button class="btn-rand" onclick="randStoryImg()">🔀 Imagen aleatoria</button>
-            <div style="font-size:10px;color:var(--muted)">Proporción ideal 9:16</div>
+      <div class="img-row">
+        <!-- Preview 9:16 -->
+        <img class="img-prev" id="smod-prev" src="" alt="">
+        <!-- Controls -->
+        <div class="img-ctrls">
+          <div class="field">
+            <label>Texto superpuesto</label>
+            <textarea id="smod-cap" rows="4" placeholder="Texto que aparece sobre la imagen…"></textarea>
           </div>
+          <div class="field">
+            <label>Imagen</label>
+            <input type="text" id="smod-img" placeholder="https://…" oninput="updStoryPrev(this.value)">
+          </div>
+          <button class="img-file-btn" onclick="document.getElementById('smod-file').click()">📁 Seleccionar imagen del dispositivo</button>
+          <button class="btn-rand" onclick="randStoryImg()">🔀 Imagen aleatoria</button>
+          <div class="field"><label>Hora de publicación</label><input type="text" id="smod-time" placeholder="09:00"></div>
         </div>
       </div>
-      <div class="field"><label>Hora de publicación</label><input type="text" id="smod-time" placeholder="09:00"></div>
     </div>
     <div class="modal-footer">
       <button class="btn-cancel-m" onclick="closeStoryModal()">Cancelar</button>
@@ -501,8 +509,9 @@ function addNewStory(clientId,groupId){
   document.getElementById('story-modal').classList.add('open');
 }
 function closeStoryModal(){ document.getElementById('story-modal').classList.remove('open'); }
-function updStoryPrev(url){ if(url.startsWith('http')) document.getElementById('smod-prev').src=url; }
+function updStoryPrev(url){ document.getElementById('smod-prev').src=url; }
 function randStoryImg(){ const u=IMGS[Math.floor(Math.random()*IMGS.length)]; document.getElementById('smod-img').value=u; document.getElementById('smod-prev').src=u; }
+function loadImgFile2(input){ const f=input.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{ document.getElementById('smod-prev').src=e.target.result; document.getElementById('smod-img').value=e.target.result; }; r.readAsDataURL(f); input.value=''; }
 function saveStoryModal(){
   const cap=document.getElementById('smod-cap').value.trim();
   const img=document.getElementById('smod-img').value.trim()||IMGS[0];

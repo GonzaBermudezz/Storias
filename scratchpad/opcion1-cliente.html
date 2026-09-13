@@ -48,20 +48,25 @@
     .story-card:hover .reorder-btns{opacity:1}
     .btn-move{width:22px;height:22px;border-radius:5px;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;backdrop-filter:blur(4px)}
     /* Story edit modal */
-    .smod-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);display:none;align-items:flex-end}
+    .smod-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;padding:20px}
     .smod-overlay.open{display:flex}
-    .smod-sheet{width:100%;max-width:480px;margin:0 auto;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px 32px;display:flex;flex-direction:column;gap:14px}
-    .smod-title{font-size:15px;font-weight:700}
-    .smod-field label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+    .smod-sheet{width:100%;max-width:600px;background:var(--surface);border-radius:18px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+    .smod-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .smod-title{font-size:14px;font-weight:800}
+    .smod-close{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;color:var(--fg)}
+    .smod-body{padding:18px;display:flex;gap:16px;align-items:flex-start;max-height:70vh;overflow-y:auto}
+    .smod-prev{width:150px;aspect-ratio:9/16;border-radius:12px;object-fit:cover;background:#111;flex-shrink:0;display:block}
+    .smod-ctrls{flex:1;display:flex;flex-direction:column;gap:10px}
+    .smod-field label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
     .smod-field input,.smod-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;padding:9px 11px;font-family:inherit}
-    .smod-field textarea{resize:none;min-height:65px}
+    .smod-field textarea{resize:none;min-height:80px}
     .smod-field input:focus,.smod-field textarea:focus{outline:none;border-color:var(--accent)}
-    .smod-prev{width:100%;aspect-ratio:9/16;max-height:180px;object-fit:cover;border-radius:10px;background:#111}
-    .smod-row{display:flex;gap:8px}
-    .smod-row .smod-field{flex:1}
-    .smod-actions{display:flex;gap:8px;margin-top:4px}
-    .btn-smod-cancel{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
-    .btn-smod-save{flex:2;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+    .smod-file-btn{width:100%;padding:9px;border-radius:9px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s}
+    .smod-file-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .smod-rand-btn{width:100%;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .smod-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px}
+    .btn-smod-cancel{flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-smod-save{flex:2;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
     .story-card img{width:100%;height:100%;object-fit:cover;display:block}
     .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;align-items:flex-end;padding:8px}
     .story-text{font-size:9px;color:#fff;line-height:1.3;font-weight:500}
@@ -174,20 +179,29 @@
 </div>
 
 <!-- Story edit modal -->
+<input type="file" id="smod-file" accept="image/*" style="display:none" onchange="loadImgFile1(this)">
 <div class="smod-overlay" id="smod-overlay">
   <div class="smod-sheet">
-    <div class="smod-title" id="smod-title">Editar historia</div>
-    <div class="smod-field">
-      <label>Texto</label>
-      <textarea id="smod-cap" rows="3" placeholder="Texto de la historia…"></textarea>
+    <div class="smod-head">
+      <div class="smod-title" id="smod-title">Editar historia</div>
+      <button class="smod-close" onclick="closeSmod()">✕</button>
     </div>
-    <div class="smod-field">
-      <label>URL de imagen</label>
-      <input id="smod-img" type="url" placeholder="https://…" oninput="document.getElementById('smod-prev').src=this.value">
+    <div class="smod-body">
+      <img class="smod-prev" id="smod-prev" src="" alt="">
+      <div class="smod-ctrls">
+        <div class="smod-field">
+          <label>Texto</label>
+          <textarea id="smod-cap" rows="4" placeholder="Texto de la historia…"></textarea>
+        </div>
+        <div class="smod-field">
+          <label>URL de imagen</label>
+          <input id="smod-img" type="url" placeholder="https://…" oninput="document.getElementById('smod-prev').src=this.value">
+        </div>
+        <button class="smod-file-btn" onclick="document.getElementById('smod-file').click()">📁 Seleccionar imagen del dispositivo</button>
+        <button class="smod-rand-btn" onclick="randomImgO1()">🔀 Imagen aleatoria</button>
+      </div>
     </div>
-    <img class="smod-prev" id="smod-prev" src="" alt="">
-    <button style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;font-family:inherit;width:100%" onclick="randomImgO1()">🎲 Imagen aleatoria</button>
-    <div class="smod-actions">
+    <div class="smod-footer">
       <button class="btn-smod-cancel" onclick="closeSmod()">Cancelar</button>
       <button class="btn-smod-save" onclick="saveSmod()">Guardar</button>
     </div>
@@ -368,6 +382,15 @@ function randomImgO1(){
   const img=IMGS_DEF[Math.floor(Math.random()*IMGS_DEF.length)];
   document.getElementById('smod-img').value=img;
   document.getElementById('smod-prev').src=img;
+}
+function loadImgFile1(input){
+  const f=input.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    document.getElementById('smod-prev').src=e.target.result;
+    document.getElementById('smod-img').value=e.target.result;
+  };
+  r.readAsDataURL(f); input.value='';
 }
 document.getElementById('smod-overlay').addEventListener('click',function(e){if(e.target===this)closeSmod();});
 
