@@ -44,6 +44,24 @@
     .story-card.approved{outline:2.5px solid #10B981}
     .btn-del-story{position:absolute;top:5px;right:5px;z-index:20;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:13px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;padding:0}
     .story-card:hover .btn-del-story{opacity:1}
+    .reorder-btns{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);display:flex;gap:3px;opacity:0;transition:opacity .15s;z-index:20}
+    .story-card:hover .reorder-btns{opacity:1}
+    .btn-move{width:22px;height:22px;border-radius:5px;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;backdrop-filter:blur(4px)}
+    /* Story edit modal */
+    .smod-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);display:none;align-items:flex-end}
+    .smod-overlay.open{display:flex}
+    .smod-sheet{width:100%;max-width:480px;margin:0 auto;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px 32px;display:flex;flex-direction:column;gap:14px}
+    .smod-title{font-size:15px;font-weight:700}
+    .smod-field label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+    .smod-field input,.smod-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;padding:9px 11px;font-family:inherit}
+    .smod-field textarea{resize:none;min-height:65px}
+    .smod-field input:focus,.smod-field textarea:focus{outline:none;border-color:var(--accent)}
+    .smod-prev{width:100%;aspect-ratio:9/16;max-height:180px;object-fit:cover;border-radius:10px;background:#111}
+    .smod-row{display:flex;gap:8px}
+    .smod-row .smod-field{flex:1}
+    .smod-actions{display:flex;gap:8px;margin-top:4px}
+    .btn-smod-cancel{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-smod-save{flex:2;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
     .story-card img{width:100%;height:100%;object-fit:cover;display:block}
     .story-card .overlay{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.75));display:flex;align-items:flex-end;padding:8px}
     .story-text{font-size:9px;color:#fff;line-height:1.3;font-weight:500}
@@ -155,6 +173,27 @@
   </div>
 </div>
 
+<!-- Story edit modal -->
+<div class="smod-overlay" id="smod-overlay">
+  <div class="smod-sheet">
+    <div class="smod-title" id="smod-title">Editar historia</div>
+    <div class="smod-field">
+      <label>Texto</label>
+      <textarea id="smod-cap" rows="3" placeholder="Texto de la historia…"></textarea>
+    </div>
+    <div class="smod-field">
+      <label>URL de imagen</label>
+      <input id="smod-img" type="url" placeholder="https://…" oninput="document.getElementById('smod-prev').src=this.value">
+    </div>
+    <img class="smod-prev" id="smod-prev" src="" alt="">
+    <button style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;font-family:inherit;width:100%" onclick="randomImgO1()">🎲 Imagen aleatoria</button>
+    <div class="smod-actions">
+      <button class="btn-smod-cancel" onclick="closeSmod()">Cancelar</button>
+      <button class="btn-smod-save" onclick="saveSmod()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── DATA ──────────────────────────────────────────────────────────
 const STORIES_DB = {
@@ -209,12 +248,16 @@ function renderContent(){
     const statusClass = allApproved ? 'pill-a' : 'pill-p';
     const statusText = allApproved ? 'Aprobado ✓' : (someApproved ? `${db.stories.filter(s=>approved[s.id]).length}/${db.stories.length} aprobadas` : 'Pendiente de aprobación');
 
-    const storiesHTML = db.stories.map(s=>`
-      <div class="story-card${approved[s.id]?' approved':''}" onclick="toggleStory('${s.id}')">
+    const storiesHTML = db.stories.map((s,i)=>`
+      <div class="story-card${approved[s.id]?' approved':''}" onclick="openSmod('${day}','${s.id}')">
         <img src="${s.img}" alt="" loading="lazy">
         <div class="overlay"><div class="story-text">${s.text}</div></div>
         ${approved[s.id]?'<div class="check">✓</div>':''}
         <button class="btn-del-story" onclick="event.stopPropagation();removeStory('${day}','${s.id}')" title="Eliminar historia">×</button>
+        <div class="reorder-btns">
+          ${i>0?`<button class="btn-move" onclick="event.stopPropagation();moveStoryO1('${day}','${s.id}',-1)">←</button>`:''}
+          ${i<db.stories.length-1?`<button class="btn-move" onclick="event.stopPropagation();moveStoryO1('${day}','${s.id}',1)">→</button>`:''}
+        </div>
       </div>`).join('');
     const addCard=`<div class="story-card add-story-card" onclick="addStoryToDay('${day}')" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;border:2px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;min-width:72px;flex:0 0 calc(25% - 6px)"><div style="font-size:22px">+</div>Historia</div>`;
 
@@ -273,17 +316,60 @@ function removeStory(day, sid){
   STORIES_DB[day].stories = STORIES_DB[day].stories.filter(s=>s.id!==sid);
   renderContent();
 }
+function moveStoryO1(day, sid, dir){
+  const arr=STORIES_DB[day].stories;
+  const idx=arr.findIndex(s=>s.id===sid);
+  const ni=idx+dir;
+  if(ni<0||ni>=arr.length)return;
+  [arr[idx],arr[ni]]=[arr[ni],arr[idx]];
+  renderContent();
+}
+
+// ── STORY MODAL ───────────────────────────────────────────────────
 const IMGS_DEF=[
   'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=711&fit=crop',
   'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=711&fit=crop',
   'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=711&fit=crop',
+  'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=400&h=711&fit=crop',
 ];
+let smodCtx={day:null,sid:null,isNew:false};
+
+function openSmod(day, sid){
+  const s=STORIES_DB[day].stories.find(x=>x.id===sid);
+  smodCtx={day,sid,isNew:false};
+  document.getElementById('smod-title').textContent='Editar historia';
+  document.getElementById('smod-cap').value=s.text;
+  document.getElementById('smod-img').value=s.img;
+  document.getElementById('smod-prev').src=s.img;
+  document.getElementById('smod-overlay').classList.add('open');
+}
 function addStoryToDay(day){
   const img=IMGS_DEF[Math.floor(Math.random()*IMGS_DEF.length)];
-  STORIES_DB[day].stories.push({id:uid(),text:'Nueva historia',img});
-  renderContent();
-  setTimeout(()=>{const el=document.getElementById('grp-'+day);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},50);
+  smodCtx={day,sid:uid(),isNew:true};
+  document.getElementById('smod-title').textContent='Nueva historia';
+  document.getElementById('smod-cap').value='';
+  document.getElementById('smod-img').value=img;
+  document.getElementById('smod-prev').src=img;
+  document.getElementById('smod-overlay').classList.add('open');
 }
+function closeSmod(){ document.getElementById('smod-overlay').classList.remove('open'); }
+function saveSmod(){
+  const text=document.getElementById('smod-cap').value.trim()||'Sin texto';
+  const img=document.getElementById('smod-img').value.trim()||IMGS_DEF[0];
+  if(smodCtx.isNew){
+    STORIES_DB[smodCtx.day].stories.push({id:smodCtx.sid,text,img});
+  } else {
+    const s=STORIES_DB[smodCtx.day].stories.find(x=>x.id===smodCtx.sid);
+    if(s){s.text=text;s.img=img;}
+  }
+  closeSmod(); renderContent();
+}
+function randomImgO1(){
+  const img=IMGS_DEF[Math.floor(Math.random()*IMGS_DEF.length)];
+  document.getElementById('smod-img').value=img;
+  document.getElementById('smod-prev').src=img;
+}
+document.getElementById('smod-overlay').addEventListener('click',function(e){if(e.target===this)closeSmod();});
 
 // ── CALENDAR ─────────────────────────────────────────────────────
 function calChange(d){ calM+=d; if(calM<0){calM=11;calY--;}if(calM>11){calM=0;calY++;} renderCalendar(); }

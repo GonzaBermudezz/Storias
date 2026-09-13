@@ -104,6 +104,9 @@
     .btn-del-group:hover{border-color:#ef4444;color:#ef4444}
     .btn-del-story{position:absolute;top:5px;right:5px;z-index:20;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:13px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;padding:0}
     .story-card:hover .btn-del-story{opacity:1}
+    .reorder-btns{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);display:flex;gap:3px;opacity:0;transition:opacity .15s;z-index:20}
+    .story-card:hover .reorder-btns{opacity:1}
+    .btn-move{width:22px;height:22px;border-radius:5px;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;backdrop-filter:blur(4px)}
     .empty-client{padding:60px 20px;text-align:center;color:var(--muted)}
     .empty-client .icon{font-size:36px;margin-bottom:12px}
     .empty-client p{font-size:14px;margin-bottom:18px;line-height:1.6}
@@ -447,6 +450,10 @@ function renderGroup(c,g){
       <div class="num-badge">#${i+1}</div>
       <div class="edit-hover"><button class="btn-edit-story">✏️ Editar</button></div>
       <button class="btn-del-story" onclick="event.stopPropagation();removeStory('${c.id}','${g.id}','${s.id}')" title="Eliminar historia">×</button>
+      <div class="reorder-btns">
+        ${i>0?`<button class="btn-move" onclick="event.stopPropagation();moveStory('${c.id}','${g.id}','${s.id}',-1)">←</button>`:''}
+        ${i<g.stories.length-1?`<button class="btn-move" onclick="event.stopPropagation();moveStory('${c.id}','${g.id}','${s.id}',1)">→</button>`:''}
+      </div>
     </div>`).join('');
   const addCard=`<div class="add-story-card" onclick="addNewStory('${c.id}','${g.id}')"><div><div style="font-size:22px;margin-bottom:4px">+</div>Historia</div></div>`;
   const pills={pending:'pill-pending',sent:'pill-sent',approved:'pill-approved'};
@@ -575,6 +582,14 @@ function saveClientModal(){
 function removeStory(cid,gid,sid){
   const c=getC(cid),g=c.grupos.find(x=>x.id===gid);
   g.stories=g.stories.filter(s=>s.id!==sid);
+  renderClientMain();
+}
+function moveStory(cid,gid,sid,dir){
+  const c=getC(cid),g=c.grupos.find(x=>x.id===gid);
+  const idx=g.stories.findIndex(s=>s.id===sid);
+  const ni=idx+dir;
+  if(ni<0||ni>=g.stories.length)return;
+  [g.stories[idx],g.stories[ni]]=[g.stories[ni],g.stories[idx]];
   renderClientMain();
 }
 function deleteGroup(clientId,groupId){
