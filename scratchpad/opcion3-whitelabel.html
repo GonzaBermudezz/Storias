@@ -343,13 +343,13 @@ function selectClient(id){
 // ── MAIN RENDER ──────────────────────────────────────────────────
 function renderMain(){
   const c=getC(currentClientId);
-  const grupos=selectedDay?c.grupos.filter(g=>g.fecha===selectedDay):c.grupos;
   const mc=document.getElementById('main-content');
 
-  let groupsHTML=grupos.length?grupos.map(g=>renderGroup(c,g)).join(''):`
+  // Siempre mostrar TODOS los grupos — nunca filtrar por selectedDay
+  let groupsHTML=c.grupos.length?c.grupos.map(g=>renderGroup(c,g)).join(''):`
     <div class="empty-client">
       <div class="icon">📭</div>
-      <p>${selectedDay?`No hay historias para <strong>${fmtFecha(selectedDay)}</strong>`:`Sin publicaciones programadas para <strong>${c.name}</strong>`}</p>
+      <p>Sin publicaciones programadas para <strong>${c.name}</strong></p>
       <button class="btn-accent" onclick="openPubModal()">+ Agregar publicación</button>
     </div>`;
 
@@ -362,7 +362,6 @@ function renderMain(){
         <button class="btn-accent" onclick="openPubModal()">+ Publicación</button>
       </div>
     </div>
-    ${selectedDay?`<div style="margin-bottom:16px;display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:700">${fmtFecha(selectedDay)}</span><button style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline" onclick="selectedDay=null;renderMain();renderCalendar();renderDayChips()">Ver todas</button></div>`:''}
     ${groupsHTML}`;
 }
 
@@ -382,7 +381,7 @@ function renderGroup(c,g){
         Enviar link</button>
       <button class="btn-prev" onclick="window.open('${window.location.origin}/demo/aprobar','_blank')">👁 Ver</button>`;
   return `
-    <div class="week-block">
+    <div class="week-block" id="grp-${g.id}" style="scroll-margin-top:16px">
       <div class="week-header">
         <div class="week-title">${fmtFecha(g.fecha)} · ${g.hora} hs</div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -449,6 +448,7 @@ function savePubModal(){
   c.grupos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
   closePubModal(); selectedDay=fecha;
   renderMain(); renderCalendar(); renderDayChips();
+  setTimeout(()=>{const c=getC(currentClientId);const g=c.grupos.find(x=>x.fecha===fecha);if(g){const el=document.getElementById('grp-'+g.id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}},50);
 }
 
 // ── CLIENT MODAL ─────────────────────────────────────────────────
@@ -514,7 +514,19 @@ function renderCalendar(){
     const hasP=days.has(iso);
     let cls='cal-cell';if(isS)cls+=' selected';else if(isT)cls+=' today';if(hasP)cls+=' has-post';
     cell.className=cls;cell.textContent=d;
-    cell.onclick=()=>{selectedDay=selectedDay===iso?null:iso;renderCalendar();renderMain();renderDayChips();};
+    cell.onclick=()=>{
+      selectedDay=iso; renderCalendar(); renderDayChips();
+      const c=getC(currentClientId);
+      const exists=c&&c.grupos.find(g=>g.fecha===iso);
+      if(exists){
+        const el=document.getElementById('grp-'+exists.id);
+        if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+      } else if(c){
+        document.getElementById('pub-fecha').value=iso;
+        document.getElementById('pub-hora').value='09:00';
+        document.getElementById('pub-modal').classList.add('open');
+      }
+    };
     grid.appendChild(cell);
   }
   const total=first+daysN;const rem=total%7===0?0:7-(total%7);
@@ -526,7 +538,7 @@ function renderDayChips(){
   const chips=document.getElementById('day-chips');
   chips.innerHTML=c.grupos.length
     ?c.grupos.map(g=>`
-      <div class="cal-day-chip${selectedDay===g.fecha?' active-chip':''}" onclick="selectedDay=selectedDay==='${g.fecha}'?null:'${g.fecha}';renderCalendar();renderMain();renderDayChips()">
+      <div class="cal-day-chip${selectedDay===g.fecha?' active-chip':''}" onclick="(function(){selectedDay='${g.fecha}';renderCalendar();renderDayChips();const el=document.getElementById('grp-${g.id}');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});})()">
         <span style="flex:1">${fmtFecha(g.fecha).split(' ').slice(0,3).join(' ')}</span>
         <button class="chip-remove" onclick="event.stopPropagation();deleteGroup('${c.id}','${g.id}')">×</button>
       </div>`).join('')

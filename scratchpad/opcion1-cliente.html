@@ -196,7 +196,7 @@ function allDays(){ return Object.keys(STORIES_DB).sort(); }
 // ── RENDER CONTENT ────────────────────────────────────────────────
 function renderContent(){
   const cont = document.getElementById('week-content');
-  const days = selectedDay ? [selectedDay] : allDays();
+  const days = allDays(); // siempre mostrar todos — nunca filtrar por selectedDay
   if(!days.length){ cont.innerHTML='<div class="empty-week"><div class="icon">📭</div><p>No hay publicaciones programadas.</p></div>'; return; }
 
   cont.innerHTML = days.map(day => {
@@ -221,7 +221,7 @@ function renderContent(){
       </div>` : '';
 
     return `
-      <div class="week-block">
+      <div class="week-block" id="grp-${day}" style="scroll-margin-top:16px">
         <div class="week-header">
           <div class="week-title">${fmtFecha(day)} · ${db.hora} hs</div>
           <span class="status-pill ${statusClass}" id="pill-${day}">${statusText}</span>
@@ -281,8 +281,9 @@ function renderCalendar(){
     if(hasPosts)cls+=' has-post';
     cell.className=cls; cell.textContent=d;
     cell.onclick=()=>{
-      selectedDay=selectedDay===iso?null:iso;
-      renderCalendar(); renderContent(); renderDayChips();
+      selectedDay=iso; renderCalendar(); renderDayChips();
+      const el=document.getElementById('grp-'+iso);
+      if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
     };
     grid.appendChild(cell);
   }
@@ -297,7 +298,7 @@ function renderDayChips(){
   chips.innerHTML=days.map(day=>{
     const db=STORIES_DB[day];
     const allAppr=db.stories.every(s=>approved[s.id]);
-    return `<div class="cal-day-chip${selectedDay===day?' active-chip':''}" onclick="selectedDay=selectedDay==='${day}'?null:'${day}';renderCalendar();renderContent();renderDayChips()">
+    return `<div class="cal-day-chip${selectedDay===day?' active-chip':''}" onclick="(function(){selectedDay='${day}';renderCalendar();renderDayChips();const el=document.getElementById('grp-${day}');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});})()">
       <div class="chip-dot${allAppr?' approved':''}"></div>
       <span>${fmtFecha(day).split(' ').slice(0,3).join(' ')}</span>
     </div>`;
