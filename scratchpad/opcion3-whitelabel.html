@@ -89,6 +89,8 @@
     .btn-prev{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
     .btn-del-group{padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;margin-left:auto}
     .btn-del-group:hover{border-color:#ef4444;color:#ef4444}
+    .btn-del-story{position:absolute;top:5px;right:5px;z-index:20;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:13px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;padding:0}
+    .story-card:hover .btn-del-story{opacity:1}
     .empty-client{padding:52px 20px;text-align:center;color:var(--muted)}
     .empty-client .icon{font-size:36px;margin-bottom:12px}
     .empty-client p{font-size:13px;line-height:1.6;margin-bottom:16px}
@@ -372,6 +374,7 @@ function renderGroup(c,g){
       <div class="overlay"><div class="story-text">${s.text}</div></div>
       <div class="num-badge">#${i+1}</div>
       <div class="edit-hover"><button class="btn-edit-story">✏️ Editar</button></div>
+      <button class="btn-del-story" onclick="event.stopPropagation();removeStory('${c.id}','${g.id}','${s.id}')" title="Eliminar historia">×</button>
     </div>`).join('');
   const addCard=`<div class="add-story-card" onclick="addNewStory('${c.id}','${g.id}')"><div><div style="font-size:22px;margin-bottom:4px">+</div>Historia</div></div>`;
   const actionHTML=c.status==='approved'
@@ -479,6 +482,11 @@ function saveClientModal(){
 }
 
 // ── DELETE ────────────────────────────────────────────────────────
+function removeStory(cid,gid,sid){
+  const c=getC(cid),g=c.grupos.find(x=>x.id===gid);
+  g.stories=g.stories.filter(s=>s.id!==sid);
+  renderMain();
+}
 function deleteGroup(cid,gid){
   const c=getC(cid);
   const g=c.grupos.find(x=>x.id===gid);
