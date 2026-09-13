@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Panel Empleados — Storias</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap">
+  <style>
+    :root{--bg:#F5F1E8;--surface:#EDE8DC;--border:#D5CCBA;--fg:#1C1410;--muted:#6B5F52;--accent:#C94F1A}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--fg);font-family:'Geist',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;display:flex}
+
+    /* Sidebar */
+    .sidebar{width:220px;flex-shrink:0;border-right:1px solid var(--border);min-height:100vh;
+             display:flex;flex-direction:column;background:var(--surface)}
+    .sidebar-logo{padding:18px 16px;border-bottom:1px solid var(--border);font-size:17px;font-weight:800;letter-spacing:-.04em}
+    .sidebar-logo span{color:var(--accent)}
+    .sidebar-section{padding:10px 10px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+    .sidebar-item{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:8px;margin:2px 6px;
+                  font-size:13px;font-weight:500;cursor:pointer;color:var(--fg);transition:background .1s}
+    .sidebar-item:hover{background:var(--border)}
+    .sidebar-item.active{background:rgba(201,79,26,.1);color:var(--accent);font-weight:700}
+    .sidebar-item .icon{font-size:15px;width:20px;text-align:center}
+    .client-sidebar{margin-top:auto;padding:10px;border-top:1px solid var(--border)}
+    .client-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;transition:background .1s}
+    .client-item:hover{background:var(--border)}
+    .ca{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0}
+    .ca1{background:#C94F1A}.ca2{background:#6366F1}.ca3{background:#0EA5E9}.ca4{background:#10B981}.ca5{background:#F59E0B}
+    .dot{width:6px;height:6px;border-radius:50%;margin-left:auto}
+    .dot-p{background:#F59E0B}.dot-s{background:#6366F1}.dot-a{background:#10B981}
+
+    /* Main */
+    .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid var(--border);background:rgba(245,241,232,.95)}
+    .topbar h1{font-size:16px;font-weight:800;letter-spacing:-.02em}
+    .topbar-actions{display:flex;gap:8px}
+    .btn-primary{padding:8px 16px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-sec{padding:8px 14px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+
+    /* Content */
+    .content{flex:1;overflow-y:auto;padding:24px}
+
+    /* Stats row */
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+    .stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
+    .stat-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+    .stat-value{font-size:24px;font-weight:800;letter-spacing:-.03em}
+    .stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
+
+    /* Client cards */
+    .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+    .client-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;cursor:pointer;transition:border-color .15s,transform .15s}
+    .client-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+    .card-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+    .ca-lg{width:36px;height:36px;border-radius:50%;font-size:13px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center}
+    .card-name{font-size:14px;font-weight:700}
+    .card-sub{font-size:11px;color:var(--muted);margin-top:2px}
+    .stories-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:12px}
+    .mini-card{aspect-ratio:9/16;border-radius:7px;overflow:hidden;background:#ccc}
+    .mini-card img{width:100%;height:100%;object-fit:cover}
+    .card-footer{display:flex;align-items:center;justify-content:space-between}
+    .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px}
+    .badge-p{background:rgba(245,158,11,.12);color:#B45309}
+    .badge-s{background:rgba(99,102,241,.1);color:#6366F1}
+    .badge-a{background:rgba(16,185,129,.1);color:#059669}
+    .card-date{font-size:11px;color:var(--muted)}
+
+    /* Section title */
+    .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px}
+  </style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-logo">Sto<span>.</span></div>
+  <div style="padding:8px 0">
+    <div class="sidebar-section">Panel</div>
+    <div class="sidebar-item active"><span class="icon">📊</span>Resumen</div>
+    <div class="sidebar-item"><span class="icon">📅</span>Calendario</div>
+    <div class="sidebar-item"><span class="icon">✅</span>Aprobaciones</div>
+    <div class="sidebar-item"><span class="icon">📤</span>Publicados</div>
+    <div class="sidebar-section" style="margin-top:8px">Clientes</div>
+    <div class="sidebar-item"><span class="icon">👥</span>Todos los clientes</div>
+    <div class="sidebar-item"><span class="icon">➕</span>Nuevo cliente</div>
+  </div>
+  <div class="client-sidebar">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:0 8px;margin-bottom:6px">Recientes</div>
+    <div class="client-item"><div class="ca ca1">CA</div>CUAN Arquitectura<div class="dot dot-p"></div></div>
+    <div class="client-item"><div class="ca ca2">PD</div>Panadería Dora<div class="dot dot-s"></div></div>
+    <div class="client-item"><div class="ca ca3">DM</div>Dr. Martínez<div class="dot dot-a"></div></div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <h1>Panel Argo Media</h1>
+    <div class="topbar-actions">
+      <button class="btn-sec">Esta semana ▾</button>
+      <button class="btn-primary">+ Generar historias</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Clientes activos</div>
+        <div class="stat-value">12</div>
+        <div class="stat-sub">+2 este mes</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Pendientes de aprobación</div>
+        <div class="stat-value" style="color:#F59E0B">3</div>
+        <div class="stat-sub">Esta semana</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Aprobadas</div>
+        <div class="stat-value" style="color:#10B981">8</div>
+        <div class="stat-sub">Esta semana</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Publicadas</div>
+        <div class="stat-value">47</div>
+        <div class="stat-sub">Este mes</div>
+      </div>
+    </div>
+
+    <!-- Client cards -->
+    <div class="section-title">Clientes — esta semana</div>
+    <div class="cards-grid">
+
+      <div class="client-card">
+        <div class="card-header">
+          <div class="ca-lg ca1">CA</div>
+          <div><div class="card-name">CUAN Arquitectura</div><div class="card-sub">Mié 10 sep · 09:00 hs</div></div>
+        </div>
+        <div class="stories-mini">
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=200&h=355&fit=crop" alt=""></div>
+        </div>
+        <div class="card-footer">
+          <span class="badge badge-p">Pendiente</span>
+          <span class="card-date">4 historias</span>
+        </div>
+      </div>
+
+      <div class="client-card">
+        <div class="card-header">
+          <div class="ca-lg ca2">PD</div>
+          <div><div class="card-name">Panadería Dora</div><div class="card-sub">Jue 11 sep · 10:00 hs</div></div>
+        </div>
+        <div class="stories-mini">
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1509440159596-0249088772ff?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=200&h=355&fit=crop" alt=""></div>
+        </div>
+        <div class="card-footer">
+          <span class="badge badge-s">Link enviado</span>
+          <span class="card-date">4 historias</span>
+        </div>
+      </div>
+
+      <div class="client-card">
+        <div class="card-header">
+          <div class="ca-lg ca3">DM</div>
+          <div><div class="card-name">Dr. Martínez</div><div class="card-sub">Vie 12 sep · 09:00 hs</div></div>
+        </div>
+        <div class="stories-mini">
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=200&h=355&fit=crop" alt=""></div>
+          <div class="mini-card"><img src="https://images.unsplash.com/photo-1631217868264-e5b90bb7e133?w=200&h=355&fit=crop" alt=""></div>
+        </div>
+        <div class="card-footer">
+          <span class="badge badge-a">Aprobado ✓</span>
+          <span class="card-date">4 historias</span>
+        </div>
+      </div>
+
+      <div class="client-card" style="border-style:dashed;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:180px;color:var(--muted)">
+        <div style="text-align:center">
+          <div style="font-size:28px;margin-bottom:8px">+</div>
+          <div style="font-size:13px;font-weight:600">Generar para nuevo cliente</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
