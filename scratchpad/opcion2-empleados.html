@@ -65,11 +65,16 @@
     .badge-a{background:rgba(16,185,129,.1);color:#059669}
 
     /* ── CLIENT HEADER ── */
-    .client-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+    .client-header{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
     .ca-lg{width:42px;height:42px;border-radius:50%;font-size:14px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
     .client-header h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
     .client-header p{font-size:12px;color:var(--muted);margin-top:2px}
     .header-btns{margin-left:auto;display:flex;gap:6px}
+    .desc-block{margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+    .desc-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+    .desc-label span{font-size:14px}
+    .desc-ta{width:100%;background:transparent;border:none;color:var(--fg);font-size:12px;line-height:1.6;resize:none;font-family:inherit;min-height:56px;outline:none}
+    .desc-ta::placeholder{color:var(--muted)}
 
     /* ── STORIES (like opcion1 but with edit) ── */
     .week-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
@@ -336,20 +341,20 @@ const IMGS = [
 ];
 
 let CLIENTS = [
-  { id:'cuan', name:'CUAN Arquitectura', initials:'CA', color:'#C94F1A', phone:'+5491139531786', contacto:'Lucía Cuan', desc:'Estudio de arquitectura en Palermo', status:'pending',
+  { id:'cuan', name:'CUAN Arquitectura', initials:'CA', color:'#C94F1A', phone:'+5491139531786', contacto:'Lucía Cuan', desc:'Estudio de arquitectura y diseño de interiores en Palermo, Buenos Aires. Trabajamos con materiales nobles, madera, hormigón y acero. Proyectos residenciales de alta gama. Estética minimalista, funcional y sustentable. Clientes: familias de nivel socioeconómico alto, profesionales 35–60 años.', status:'pending',
     grupos:[{ id:'g1', fecha:'2026-09-10', hora:'09:00', stories:[
       { id:'s1', text:'La madera bien usada no envejece, se valoriza.', img:IMGS[0] },
       { id:'s2', text:'Espacios que respiran. Diseño que permanece.', img:IMGS[1] },
       { id:'s3', text:'Cada proyecto es único. Cada detalle importa.', img:IMGS[2] },
       { id:'s4', text:'Arquitectura consciente para vivir mejor.', img:IMGS[3] },
     ]}]},
-  { id:'dora', name:'Panadería Dora', initials:'PD', color:'#6366F1', phone:'+5491139531786', contacto:'Dora González', desc:'Panadería artesanal en San Telmo', status:'sent',
+  { id:'dora', name:'Panadería Dora', initials:'PD', color:'#6366F1', phone:'+5491139531786', contacto:'Dora González', desc:'Panadería artesanal familiar en San Telmo, CABA. Elaboración propia de panes, medialunas y facturas con masa madre. Abre de lunes a sábado de 7 a 13 hs. Tono cálido, auténtico y cercano. Público: vecinos del barrio, amantes del buen pan, turistas.', status:'sent',
     grupos:[{ id:'g2', fecha:'2026-09-11', hora:'10:00', stories:[
       { id:'s5', text:'Pan recién horneado, de 7 a 13 hs.', img:IMGS[4] },
       { id:'s6', text:'Horneado esta mañana. Caliente hasta el mediodía.', img:IMGS[5] },
       { id:'s7', text:'Ingredientes simples. Sabor que no se olvida.', img:IMGS[6] },
     ]}]},
-  { id:'mart', name:'Dr. Martínez', initials:'DM', color:'#0EA5E9', phone:'+5491139531786', contacto:'Dr. Carlos Martínez', desc:'Médico clínico, zona Palermo', status:'approved',
+  { id:'mart', name:'Dr. Martínez', initials:'DM', color:'#0EA5E9', phone:'+5491139531786', contacto:'Dr. Carlos Martínez', desc:'Médico clínico con más de 20 años de experiencia en Palermo, Buenos Aires. Atención personalizada, consultas presenciales y virtuales. Especialidad en medicina familiar y preventiva. Tono profesional pero humano y cercano. Pacientes: adultos y familias de clase media-alta.', status:'approved',
     grupos:[{ id:'g3', fecha:'2026-09-12', hora:'09:00', stories:[
       { id:'s8', text:'Tu salud, nuestra prioridad.', img:IMGS[7] },
       { id:'s9', text:'Más de 20 años cuidando familias en Palermo.', img:IMGS[8] },
@@ -468,6 +473,10 @@ function renderClientMain(){
     <div class="client-header">
       <div class="ca-lg" style="background:${c.color}">${c.initials}</div>
       <div><h2>${c.name}</h2><p>${STATUS_LABEL[c.status]} · ${c.contacto||''}</p></div>
+    </div>
+    <div class="desc-block">
+      <div class="desc-label"><span>🤖</span> Descripción del negocio <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(la IA usa esto para escribir los textos)</small></div>
+      <textarea class="desc-ta" placeholder="Describí el negocio: rubro, estilo, público, tono, diferencial…" onchange="getC('${c.id}').desc=this.value" rows="3">${c.desc||''}</textarea>
     </div>
     ${groupsHTML}`;
 }

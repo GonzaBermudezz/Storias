@@ -22,7 +22,12 @@
     .cal-sidebar{width:256px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
 
     /* Greeting */
-    .greeting{margin-bottom:28px}
+    .greeting{margin-bottom:16px}
+    .desc-block{margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+    .desc-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+    .desc-label span{font-size:14px}
+    .desc-ta{width:100%;background:transparent;border:none;color:var(--fg);font-size:12px;line-height:1.6;resize:none;font-family:inherit;min-height:56px;outline:none}
+    .desc-ta::placeholder{color:var(--muted)}
     .greeting h1{font-size:clamp(20px,3.5vw,28px);font-weight:800;letter-spacing:-.03em;margin-bottom:5px}
     .greeting p{font-size:13px;color:var(--muted);line-height:1.6}
 
@@ -149,6 +154,11 @@
       <p>Revisá tus historias de Instagram y aprobá antes de la fecha programada.</p>
     </div>
 
+    <div class="desc-block">
+      <div class="desc-label"><span>🤖</span> Descripción del negocio <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(la IA usa esto para escribir los textos)</small></div>
+      <textarea class="desc-ta" id="desc-ta-o1" placeholder="Describí el negocio: rubro, estilo, público, tono, diferencial…" onchange="CLIENT_DESC.desc=this.value" rows="3"></textarea>
+    </div>
+
     <div id="week-content"></div>
 
     <div class="history-section">
@@ -219,6 +229,11 @@
 
 <script>
 // ── DATA ──────────────────────────────────────────────────────────
+const CLIENT_DESC = {
+  name: 'CUAN Arquitectura',
+  desc: 'Estudio de arquitectura y diseño de interiores en Palermo, Buenos Aires. Trabajamos con materiales nobles, madera, hormigón y acero. Proyectos residenciales de alta gama. Estética minimalista, funcional y sustentable. Clientes: familias de nivel socioeconómico alto, profesionales 35–60 años.'
+};
+
 const STORIES_DB = {
   '2026-09-10': {
     hora: '09:00',
@@ -525,6 +540,7 @@ function renderDayChips(){
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
+document.getElementById('desc-ta-o1').value = CLIENT_DESC.desc;
 renderContent();
 renderCalendar();
 renderDayChips();
