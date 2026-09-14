@@ -329,26 +329,20 @@ function getC(id){return CLIENTS.find(c=>c.id===id);}
 function fmtFecha(iso){const[y,m,d]=iso.split('-').map(Number);const dt=new Date(y,m-1,d);return `${cap(DAYS_L[dt.getDay()])} ${d} de ${MONTHS_L[m-1]}`;}
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 function pad(n){return String(n).padStart(2,'0');}
-function horaOptions(current){
-  const [ch,cm]=current.split(':').map(Number);
-  let opts='';
-  for(let h=0;h<24;h++){
-    for(const m of [0,15,30,45]){
-      const val=`${pad(h)}:${pad(m)}`;
-      const ampm=h<12?'AM':'PM';
-      const dh=h%12||12;
-      const label=`${dh}:${pad(m)} ${ampm}`;
-      const sel=(h===ch&&m===cm)?'selected':'';
-      opts+=`<option value="${val}" ${sel}>${label}</option>`;
-    }
-  }
-  return opts;
+function horaHSelOpts(h24){ const hh=parseInt(h24),cur=hh%12||12; return [1,2,3,4,5,6,7,8,9,10,11,12].map(h=>`<option value="${h}"${h===cur?' selected':''}>${h}</option>`).join(''); }
+function horaMSelOpts(h24){ const mm=parseInt(h24.split(':')[1]); return [0,15,30,45].map(m=>`<option value="${m}"${m===mm?' selected':''}>${pad(m)}</option>`).join(''); }
+function horaAPOpts(h24){ const ap=parseInt(h24)<12?'AM':'PM'; return ['AM','PM'].map(a=>`<option value="${a}"${a===ap?' selected':''}>${a}</option>`).join(''); }
+function to24(h12,mm,ap){ let hh=h12%12; if(ap==='PM')hh+=12; return `${pad(hh)}:${pad(mm)}`; }
+function horaSelHTML3(cid,gid,h24){
+  const ss='background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:11px;padding:2px 3px;font-family:inherit;cursor:pointer;vertical-align:middle';
+  return `<select style="${ss}" onchange="setHoraH3('${cid}','${gid}',this)" onclick="event.stopPropagation()">${horaHSelOpts(h24)}</select>`+
+         `<span style="font-size:11px;vertical-align:middle;margin:0 1px">:</span>`+
+         `<select style="${ss}" onchange="setHoraM3('${cid}','${gid}',this)" onclick="event.stopPropagation()">${horaMSelOpts(h24)}</select>`+
+         `<select style="${ss};margin-left:3px" onchange="setHoraAP3('${cid}','${gid}',this)" onclick="event.stopPropagation()">${horaAPOpts(h24)}</select>`;
 }
-function setHora3(cid,gid,sel){
-  const c=getC(cid),g=c.grupos.find(x=>x.id===gid);
-  g.hora=sel.value;
-  renderMain();
-}
+function setHoraH3(cid,gid,sel){ const g=getC(cid).grupos.find(x=>x.id===gid); const [,mm]=g.hora.split(':').map(Number); const ap=parseInt(g.hora)<12?'AM':'PM'; g.hora=to24(parseInt(sel.value),mm,ap); renderMain(); }
+function setHoraM3(cid,gid,sel){ const g=getC(cid).grupos.find(x=>x.id===gid); const [hh]=g.hora.split(':').map(Number); const ap=hh<12?'AM':'PM'; g.hora=to24(hh%12||12,parseInt(sel.value),ap); renderMain(); }
+function setHoraAP3(cid,gid,sel){ const g=getC(cid).grupos.find(x=>x.id===gid); const [hh,mm]=g.hora.split(':').map(Number); g.hora=to24(hh%12||12,mm,sel.value); renderMain(); }
 
 // ── DRAWER ──────────────────────────────────────────────────────
 function openDrawer(){document.getElementById('drawer').classList.add('open');document.getElementById('overlay').classList.add('open');renderDrawer();}
@@ -422,7 +416,7 @@ function renderGroup(c,g){
   return `
     <div class="week-block" id="grp-${g.id}" style="scroll-margin-top:16px">
       <div class="week-header">
-        <div class="week-title">${fmtFecha(g.fecha)} · <select class="hora-sel-input" onchange="setHora3('${c.id}','${g.id}',this)" onclick="event.stopPropagation()" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:11px;padding:2px 4px;font-family:inherit;cursor:pointer;vertical-align:middle">${horaOptions(g.hora)}</select></div>
+        <div class="week-title">${fmtFecha(g.fecha)} · ${horaSelHTML3(c.id,g.id,g.hora)}</div>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="badge ${STATUS_CLASS[c.status]}">${STATUS_LABEL[c.status]}</span>
           <button class="btn-del-group" onclick="deleteGroup('${c.id}','${g.id}')">🗑</button>

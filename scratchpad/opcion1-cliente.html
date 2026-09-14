@@ -259,32 +259,53 @@ function allDays(){ return Object.keys(STORIES_DB).sort(); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
 // ── HORA HELPERS ──────────────────────────────────────────────────
-// db.hora is always stored as "HH:MM" 24h. Display as 12h AM/PM.
-function horaToDisplay(h24){
-  let [hh,mm]=h24.split(':').map(Number);
-  const ampm=hh<12?'AM':'PM';
-  let h=hh%12||12;
-  return `${h}:${pad(mm)} ${ampm}`;
+// db.hora stored as "HH:MM" 24h
+function horaHH(h24){ return h24.split(':').map(Number); }
+function horaSelH(h24){ const [hh]=horaHH(h24); return hh%12||12; }
+function horaSelM(h24){ return horaHH(h24)[1]; }
+function horaSelAP(h24){ return horaHH(h24)[0]<12?'AM':'PM'; }
+function horaHSelOpts(h24){
+  const cur=horaSelH(h24);
+  return [1,2,3,4,5,6,7,8,9,10,11,12].map(h=>`<option value="${h}"${h===cur?' selected':''}>${h}</option>`).join('');
 }
-function horaOptions(current){
-  const [ch,cm]=current.split(':').map(Number);
-  const cur24=ch*60+cm;
-  let opts='';
-  for(let h=0;h<24;h++){
-    for(const m of [0,15,30,45]){
-      const val=`${pad(h)}:${pad(m)}`;
-      const ampm=h<12?'AM':'PM';
-      const dh=h%12||12;
-      const label=`${dh}:${pad(m)} ${ampm}`;
-      const sel=(h===ch&&m===cm)?'selected':'';
-      opts+=`<option value="${val}" ${sel}>${label}</option>`;
-    }
-  }
-  return opts;
+function horaMSelOpts(h24){
+  const cur=horaSelM(h24);
+  return [0,15,30,45].map(m=>`<option value="${m}"${m===cur?' selected':''}>${pad(m)}</option>`).join('');
 }
-function setHora(day,sel){
-  STORIES_DB[day].hora=sel.value;
-  renderContent();
+function horaAPOpts(h24){
+  const cur=horaSelAP(h24);
+  return ['AM','PM'].map(ap=>`<option value="${ap}"${ap===cur?' selected':''}>${ap}</option>`).join('');
+}
+function horaSelHTML(day,h24){
+  const ss='background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:11px;padding:2px 3px;font-family:inherit;cursor:pointer;vertical-align:middle';
+  return `<select style="${ss}" onchange="setHoraH('${day}',this)" onclick="event.stopPropagation()">${horaHSelOpts(h24)}</select>`+
+         `<span style="font-size:11px;vertical-align:middle;margin:0 1px">:</span>`+
+         `<select style="${ss}" onchange="setHoraM('${day}',this)" onclick="event.stopPropagation()">${horaMSelOpts(h24)}</select>`+
+         `<select style="${ss};margin-left:3px" onchange="setHoraAP('${day}',this)" onclick="event.stopPropagation()">${horaAPOpts(h24)}</select>`;
+}
+function buildHora24(day){
+  const db=STORIES_DB[day];
+  const [hh,mm]=db.hora.split(':').map(Number);
+  return {hh,mm,ap:hh<12?'AM':'PM'};
+}
+function setHoraH(day,sel){
+  const db=STORIES_DB[day],[,mm]=db.hora.split(':').map(Number);
+  const hh=parseInt(sel.value); const ap=parseInt(db.hora)<12?'AM':'PM';
+  db.hora=to24(hh,mm,ap); renderContent();
+}
+function setHoraM(day,sel){
+  const db=STORIES_DB[day],[hh]=db.hora.split(':').map(Number);
+  const mm=parseInt(sel.value); const ap=hh<12?'AM':'PM';
+  db.hora=to24(hh%12||12,mm,ap); renderContent();
+}
+function setHoraAP(day,sel){
+  const db=STORIES_DB[day],[hh,mm]=db.hora.split(':').map(Number);
+  const h12=hh%12||12;
+  db.hora=to24(h12,mm,sel.value); renderContent();
+}
+function to24(h12,mm,ap){
+  let hh=h12%12; if(ap==='PM')hh+=12;
+  return `${pad(hh)}:${pad(mm)}`;
 }
 
 // ── RENDER CONTENT ────────────────────────────────────────────────
@@ -330,7 +351,7 @@ function renderContent(){
     return `
       <div class="week-block" id="grp-${day}" style="scroll-margin-top:16px">
         <div class="week-header">
-          <div class="week-title">${fmtFecha(day)} · <select class="hora-sel-input" onchange="setHora('${day}',this)" onclick="event.stopPropagation()" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:11px;padding:2px 4px;font-family:inherit;cursor:pointer;vertical-align:middle">${horaOptions(db.hora)}</select></div>
+          <div class="week-title">${fmtFecha(day)} · ${horaSelHTML(day,db.hora)}</div>
           <div style="display:flex;align-items:center;gap:8px">
             <span class="status-pill ${statusClass}" id="pill-${day}">${statusText}</span>
             <button onclick="deleteDay('${day}')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--muted);padding:2px 4px" title="Eliminar día">🗑</button>
