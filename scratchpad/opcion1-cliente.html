@@ -73,6 +73,11 @@
     .smod-ctrls{flex:1;display:flex;flex-direction:column;gap:10px}
     .smod-field label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
     .smod-field input,.smod-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;padding:9px 11px;font-family:inherit}
+    .smod-field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;padding:9px 11px;font-family:inherit;cursor:pointer}
+    .smod-field select:focus{outline:none;border-color:var(--accent)}
+    .obj-chips{display:flex;flex-wrap:wrap;gap:5px}
+    .obj-chip{padding:5px 10px;border-radius:99px;border:1.5px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+    .obj-chip.active{border-color:var(--accent);color:var(--accent);background:rgba(201,79,26,.1)}
     .smod-field textarea{resize:none;min-height:80px}
     .smod-field input:focus,.smod-field textarea:focus{outline:none;border-color:var(--accent)}
     .smod-file-btn{width:100%;padding:9px;border-radius:9px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s}
@@ -212,8 +217,19 @@
       </div>
       <div class="smod-ctrls">
         <div class="smod-field">
-          <label>Texto</label>
-          <textarea id="smod-cap" rows="4" placeholder="Texto de la historia…" oninput="document.getElementById('smod-prev-cap').textContent=this.value"></textarea>
+          <label>Objetivo del contenido</label>
+          <div class="obj-chips">
+            <button class="obj-chip" onclick="setObj1(this,'confianza')">🤝 Generar confianza</button>
+            <button class="obj-chip" onclick="setObj1(this,'interaccion')">💬 Generar interacciones</button>
+            <button class="obj-chip" onclick="setObj1(this,'venta')">🛒 Vender producto</button>
+            <button class="obj-chip" onclick="setObj1(this,'mostrar')">📸 Mostrar producto</button>
+            <button class="obj-chip" onclick="setObj1(this,'humanizar')">🫶 Humanizar marca</button>
+            <button class="obj-chip" onclick="setObj1(this,'fecha')">🎉 Fecha especial</button>
+          </div>
+        </div>
+        <div class="smod-field">
+          <label>Texto <span id="smod-gen-hint" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent);font-size:10px;margin-left:4px"></span></label>
+          <textarea id="smod-cap" rows="4" placeholder="Elegí un objetivo y la IA sugiere el texto…" oninput="document.getElementById('smod-prev-cap').textContent=this.value"></textarea>
         </div>
         <div class="smod-field">
           <label>URL de imagen</label>
@@ -459,7 +475,12 @@ function addStoryToDay(day){
   document.getElementById('smod-prev').src=img;
   document.getElementById('smod-overlay').classList.add('open');
 }
-function closeSmod(){ document.getElementById('smod-overlay').classList.remove('open'); }
+function closeSmod(){
+  document.getElementById('smod-overlay').classList.remove('open');
+  document.querySelectorAll('.obj-chip').forEach(b=>b.classList.remove('active'));
+  document.getElementById('smod-gen-hint').textContent='';
+  document.getElementById('smod-cap').dataset.autoFilled='';
+}
 function saveSmod(){
   const text=document.getElementById('smod-cap').value.trim()||'Sin texto';
   const img=document.getElementById('smod-img').value.trim()||IMGS_DEF[0];
@@ -540,6 +561,28 @@ function renderDayChips(){
       <span>${fmtFecha(day).split(' ').slice(0,3).join(' ')}</span>
     </div>`;
   }).join('');
+}
+
+// ── OBJETIVO CONTENIDO ───────────────────────────────────────────
+const OBJ_TEXTS = {
+  confianza:   'Más de X años haciendo lo que amamos. Cada detalle, cuidado.',
+  interaccion: '¿Cuál es tu favorito? Contanos en los comentarios 👇',
+  venta:       'Disponible ahora. Escribinos y lo reservamos para vos.',
+  mostrar:     'Así se ve por dentro. Cada detalle pensado para vos.',
+  humanizar:   'Este es el equipo detrás de todo. Hola 👋',
+  fecha:       '¡Feliz [fecha]! Hoy celebramos con vosotros.',
+};
+function setObj1(btn,obj){
+  document.querySelectorAll('.obj-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const sugerido=OBJ_TEXTS[obj]||'';
+  const cap=document.getElementById('smod-cap');
+  const hint=document.getElementById('smod-gen-hint');
+  if(!cap.value.trim()||cap.dataset.autoFilled==='1'){
+    cap.value=sugerido; cap.dataset.autoFilled='1';
+    document.getElementById('smod-prev-cap').textContent=sugerido;
+  }
+  hint.textContent='→ texto sugerido por IA';
 }
 
 // ── INIT ─────────────────────────────────────────────────────────

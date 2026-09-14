@@ -158,6 +158,9 @@
     .img-ctrls{flex:1;display:flex;flex-direction:column;gap:10px}
     .img-file-btn{width:100%;padding:9px;border-radius:9px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s}
     .img-file-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .obj-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px}
+    .obj-chip{padding:4px 9px;border-radius:99px;border:1.5px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+    .obj-chip.active{border-color:var(--accent);color:var(--accent);background:rgba(201,79,26,.08)}
     .btn-rand{padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
     .btn-rand:hover{background:var(--border)}
     .modal-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px}
@@ -244,7 +247,18 @@
           <div class="img-prev-overlay"><div class="img-prev-caption" id="smod-prev-cap"></div></div>
         </div>
         <div class="img-ctrls">
-          <div class="field"><label>Texto superpuesto</label><textarea id="smod-cap" rows="4" placeholder="Texto sobre la imagen…" oninput="document.getElementById('smod-prev-cap').textContent=this.value"></textarea></div>
+          <div class="field">
+            <label>Objetivo del contenido</label>
+            <div class="obj-chips">
+              <button class="obj-chip" onclick="setObj3(this,'confianza')">🤝 Confianza</button>
+              <button class="obj-chip" onclick="setObj3(this,'interaccion')">💬 Interacciones</button>
+              <button class="obj-chip" onclick="setObj3(this,'venta')">🛒 Vender</button>
+              <button class="obj-chip" onclick="setObj3(this,'mostrar')">📸 Mostrar producto</button>
+              <button class="obj-chip" onclick="setObj3(this,'humanizar')">🫶 Humanizar</button>
+              <button class="obj-chip" onclick="setObj3(this,'fecha')">🎉 Fecha especial</button>
+            </div>
+          </div>
+          <div class="field"><label>Texto superpuesto <span id="smod-gen-hint3" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent);font-size:10px;margin-left:4px"></span></label><textarea id="smod-cap" rows="4" placeholder="Elegí un objetivo y la IA sugiere el texto…" oninput="document.getElementById('smod-prev-cap').textContent=this.value"></textarea></div>
           <div class="field"><label>URL de imagen</label><input type="text" id="smod-img" placeholder="https://…" oninput="updPrev(this.value)"></div>
           <button class="img-file-btn" onclick="document.getElementById('smod-file').click()">📁 Seleccionar imagen del dispositivo</button>
           <button class="btn-rand" onclick="randImg()">🔀 Imagen aleatoria</button>
@@ -462,7 +476,21 @@ function addNewStory(cid,gid){
   document.getElementById('smod-time').value='09:00';
   document.getElementById('story-modal').classList.add('open');
 }
-function closeStoryModal(){document.getElementById('story-modal').classList.remove('open');}
+const OBJ_TEXTS={confianza:'Más de X años haciendo lo que amamos. Cada detalle, cuidado.',interaccion:'¿Cuál es tu favorito? Contanos en los comentarios 👇',venta:'Disponible ahora. Escribinos y lo reservamos para vos.',mostrar:'Así se ve por dentro. Cada detalle pensado para vos.',humanizar:'Este es el equipo detrás de todo. Hola 👋',fecha:'¡Feliz [fecha]! Hoy celebramos con vosotros.'};
+function setObj3(btn,obj){
+  btn.closest('.obj-chips').querySelectorAll('.obj-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const cap=document.getElementById('smod-cap');
+  const hint=document.getElementById('smod-gen-hint3');
+  if(!cap.value.trim()||cap.dataset.autoFilled==='1'){cap.value=OBJ_TEXTS[obj]||'';cap.dataset.autoFilled='1';document.getElementById('smod-prev-cap').textContent=cap.value;}
+  hint.textContent='→ texto sugerido por IA';
+}
+function closeStoryModal(){
+  document.getElementById('story-modal').classList.remove('open');
+  document.querySelectorAll('#story-modal .obj-chip').forEach(b=>b.classList.remove('active'));
+  const h=document.getElementById('smod-gen-hint3');if(h)h.textContent='';
+  document.getElementById('smod-cap').dataset.autoFilled='';
+}
 function updPrev(url){document.getElementById('smod-prev').src=url;}
 function randImg(){const u=IMGS[Math.floor(Math.random()*IMGS.length)];document.getElementById('smod-img').value=u;document.getElementById('smod-prev').src=u;}
 function loadImgFile3(input){const f=input.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{document.getElementById('smod-prev').src=e.target.result;document.getElementById('smod-img').value=e.target.result;};r.readAsDataURL(f);input.value='';}
