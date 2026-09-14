@@ -329,6 +329,26 @@ function getC(id){return CLIENTS.find(c=>c.id===id);}
 function fmtFecha(iso){const[y,m,d]=iso.split('-').map(Number);const dt=new Date(y,m-1,d);return `${cap(DAYS_L[dt.getDay()])} ${d} de ${MONTHS_L[m-1]}`;}
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 function pad(n){return String(n).padStart(2,'0');}
+function horaOptions(current){
+  const [ch,cm]=current.split(':').map(Number);
+  let opts='';
+  for(let h=0;h<24;h++){
+    for(const m of [0,15,30,45]){
+      const val=`${pad(h)}:${pad(m)}`;
+      const ampm=h<12?'AM':'PM';
+      const dh=h%12||12;
+      const label=`${dh}:${pad(m)} ${ampm}`;
+      const sel=(h===ch&&m===cm)?'selected':'';
+      opts+=`<option value="${val}" ${sel}>${label}</option>`;
+    }
+  }
+  return opts;
+}
+function setHora3(cid,gid,sel){
+  const c=getC(cid),g=c.grupos.find(x=>x.id===gid);
+  g.hora=sel.value;
+  renderMain();
+}
 
 // ── DRAWER ──────────────────────────────────────────────────────
 function openDrawer(){document.getElementById('drawer').classList.add('open');document.getElementById('overlay').classList.add('open');renderDrawer();}
@@ -402,7 +422,7 @@ function renderGroup(c,g){
   return `
     <div class="week-block" id="grp-${g.id}" style="scroll-margin-top:16px">
       <div class="week-header">
-        <div class="week-title">${fmtFecha(g.fecha)} · ${g.hora} hs</div>
+        <div class="week-title">${fmtFecha(g.fecha)} · <select class="hora-sel-input" onchange="setHora3('${c.id}','${g.id}',this)" onclick="event.stopPropagation()" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:11px;padding:2px 4px;font-family:inherit;cursor:pointer;vertical-align:middle">${horaOptions(g.hora)}</select></div>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="badge ${STATUS_CLASS[c.status]}">${STATUS_LABEL[c.status]}</span>
           <button class="btn-del-group" onclick="deleteGroup('${c.id}','${g.id}')">🗑</button>

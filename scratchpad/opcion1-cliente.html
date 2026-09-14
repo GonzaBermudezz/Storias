@@ -258,6 +258,35 @@ function isoDay(iso){ return iso.split('-').map(Number); }
 function allDays(){ return Object.keys(STORIES_DB).sort(); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
+// ── HORA HELPERS ──────────────────────────────────────────────────
+// db.hora is always stored as "HH:MM" 24h. Display as 12h AM/PM.
+function horaToDisplay(h24){
+  let [hh,mm]=h24.split(':').map(Number);
+  const ampm=hh<12?'AM':'PM';
+  let h=hh%12||12;
+  return `${h}:${pad(mm)} ${ampm}`;
+}
+function horaOptions(current){
+  const [ch,cm]=current.split(':').map(Number);
+  const cur24=ch*60+cm;
+  let opts='';
+  for(let h=0;h<24;h++){
+    for(const m of [0,15,30,45]){
+      const val=`${pad(h)}:${pad(m)}`;
+      const ampm=h<12?'AM':'PM';
+      const dh=h%12||12;
+      const label=`${dh}:${pad(m)} ${ampm}`;
+      const sel=(h===ch&&m===cm)?'selected':'';
+      opts+=`<option value="${val}" ${sel}>${label}</option>`;
+    }
+  }
+  return opts;
+}
+function setHora(day,sel){
+  STORIES_DB[day].hora=sel.value;
+  renderContent();
+}
+
 // ── RENDER CONTENT ────────────────────────────────────────────────
 function renderContent(){
   const cont = document.getElementById('week-content');
@@ -301,7 +330,7 @@ function renderContent(){
     return `
       <div class="week-block" id="grp-${day}" style="scroll-margin-top:16px">
         <div class="week-header">
-          <div class="week-title">${fmtFecha(day)} · ${db.hora} hs</div>
+          <div class="week-title">${fmtFecha(day)} · <select class="hora-sel-input" onchange="setHora('${day}',this)" onclick="event.stopPropagation()" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:11px;padding:2px 4px;font-family:inherit;cursor:pointer;vertical-align:middle">${horaOptions(db.hora)}</select></div>
           <div style="display:flex;align-items:center;gap:8px">
             <span class="status-pill ${statusClass}" id="pill-${day}">${statusText}</span>
             <button onclick="deleteDay('${day}')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--muted);padding:2px 4px" title="Eliminar día">🗑</button>

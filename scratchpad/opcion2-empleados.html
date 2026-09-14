@@ -378,6 +378,26 @@ function fmtFecha(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new D
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function isoToday(){ const t=new Date(); return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`; }
 function pad(n){ return String(n).padStart(2,'0'); }
+function horaOptions(current){
+  const [ch,cm]=current.split(':').map(Number);
+  let opts='';
+  for(let h=0;h<24;h++){
+    for(const m of [0,15,30,45]){
+      const val=`${pad(h)}:${pad(m)}`;
+      const ampm=h<12?'AM':'PM';
+      const dh=h%12||12;
+      const label=`${dh}:${pad(m)} ${ampm}`;
+      const sel=(h===ch&&m===cm)?'selected':'';
+      opts+=`<option value="${val}" ${sel}>${label}</option>`;
+    }
+  }
+  return opts;
+}
+function setHora2(cid,gid,sel){
+  const c=getC(cid),g=c.grupos.find(x=>x.id===gid);
+  g.hora=sel.value;
+  renderClientMain();
+}
 
 // ── SIDEBAR ──────────────────────────────────────────────────────
 function renderSidebar(){
@@ -485,7 +505,7 @@ function renderGroup(c,g){
   return `
     <div id="grp-${g.id}" style="margin-bottom:16px;scroll-margin-top:16px">
       <div class="week-header">
-        <div><div class="week-title">${fmtFecha(g.fecha)} · ${g.hora} hs</div></div>
+        <div><div class="week-title">${fmtFecha(g.fecha)} · <select class="hora-sel-input" onchange="setHora2('${c.id}','${g.id}',this)" onclick="event.stopPropagation()" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:11px;padding:2px 4px;font-family:inherit;cursor:pointer;vertical-align:middle">${horaOptions(g.hora)}</select></div></div>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="status-pill ${pills[c.status]}">${statusLabel[c.status]}</span>
           <button class="btn-del-group" onclick="deleteGroup('${c.id}','${g.id}')">🗑</button>
