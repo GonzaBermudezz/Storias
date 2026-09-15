@@ -1,6 +1,6 @@
 # Estado del proyecto — Portal Storias / Argo Media
 
-Última actualización: 2026-09-15 (Gonza). Este documento es para que Matías retome el trabajo sin tener que preguntar por WhatsApp qué se hizo — se actualiza cada vez que se cierra un bloque. El contrato técnico completo (tablas, modelos Pydantic, firmas de función) sigue viviendo en `AGENTS.md`/`CLAUDE.md` en la raíz del repo — esto es el resumen humano de qué se hizo y qué falta.
+Última actualización: 2026-09-16 (Gonza). Este documento es para que Matías retome el trabajo sin tener que preguntar por WhatsApp qué se hizo — se actualiza cada vez que se cierra un bloque. El contrato técnico completo (tablas, modelos Pydantic, firmas de función) sigue viviendo en `AGENTS.md`/`CLAUDE.md` en la raíz del repo — esto es el resumen humano de qué se hizo y qué falta.
 
 ## Dónde está el código
 
@@ -42,8 +42,31 @@ Conecta el motor de A1 con el resto del sistema:
 - Queda un cliente de prueba real en la tabla `clients` (`CUAN A3 Real Smoke...`, id `628e4d79-f55c-4f1b-9210-f28f77777b2b`) — decidir si se borra o se deja de referencia antes de sumar clientes reales de Felix.
 - **Nota**: por ahora la carpeta de Drive es una carpeta común (no Unidad Compartida), porque el plan de Google Workspace de Argo Media todavía no está confirmado — ver sección de decisiones abajo. Migrar a Unidad Compartida antes de sumar clientes reales de producción.
 
+## A4a — API del portal de empleados (lista, verificada)
+
+- `app/routers/portal.py`: listado de clientes, detalle, edición de prompt (con auditoría atómica en `prompt_history`), "probar prompt" (sin efectos secundarios — no sube nada a Cloudinary ni escribe en Supabase), listado/edición/reorden/cancelación de historias.
+- **Acceso por agencia, no por asignación individual**: cualquier empleado ve y edita cualquier cliente de su misma `agency_id` (decisión de Gonza — los PMs de Felix rotan de cliente seguido). `employee_clients` sigue existiendo solo como filtro opcional `?solo_mios=true`, no como restricción dura.
+- Edición de historias usa siempre `image_original_url` (nunca la ya editada).
+- Reordenamiento transaccional y cancelación lógica de historias (no borrado físico) vía `migrations/20260915_a4_portal_cancelled_stories.sql`.
+- Sin cambios en `app/engine/**`, auth ni el mockup HTML.
+- **51/51 tests en verde** (`python -m pytest`) + 4/4 checks de validación PostgreSQL.
+- **Amendment (A4b, 2026-09-16)**: al cablear el frontend, Codex encontró un bug real en `reorder_stories` (el reorden no era consistente cuando había historias canceladas de por medio) y lo corrigió en la misma migración `migrations/20260915_a4_portal_cancelled_stories.sql`. **Importante**: si ya aplicaste esta migración en tu Supabase real (parte de A0), hay que volver a correrla para actualizar la función `reorder_stories` con el fix.
+
+## A4b — Portal conectado a la API real (listo, verificado)
+
+- El mockup `opcion2-empleados.html` dejó de ser un prototipo con datos hardcodeados: ahora es la página real de la app, servida en `/portal` detrás de la auth de empleado (no accesible sin login).
+- Sidebar de clientes, filtro `solo_mios`, descripción del negocio, enfoque semanal (`weekly_focus`, repurposeando el chip de "objetivo del contenido" del mockup original), "probar prompt", edición/reorden/cancelación de historias: todo dispara la llamada real correspondiente a `app/routers/portal.py`.
+- Manejo de 401 (redirige a login) y 403 (mensaje claro) sin romper la página. Loading states mínimos mientras esperan respuesta real.
+- Fix de una condición de carrera: respuestas tardías de `fetch` ya no pueden pisar/sobrescribir el cliente seleccionado si el usuario cambió de cliente mientras tanto.
+- Reordenar después de cancelar una historia funciona de forma atómica (ver amendment de A4a arriba — requirió tocar la función SQL `reorder_stories`).
+- **54/54 tests en verde** (`python -m pytest`) + 4/4 validación SQL + `node --check static/portal.js` sin errores.
+- **Verificación visual en curso (2026-09-16)**: al probar el login real en local, aparecieron 3 problemas de setup/código, ya resueltos:
+  1. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` habían quedado con el valor placeholder del `.env.example` — nunca se había creado el OAuth Client ID real en Google Cloud (proyecto `stories-argomedia`). Se creó la pantalla de consentimiento + credencial OAuth (Web application, redirect URI `http://localhost:5001/auth/callback`) y se cargaron las credenciales reales.
+  2. El proyecto de Supabase (free tier) estaba dormido por inactividad — un 522 de Cloudflare en el primer request lo "despertó"; quedó healthy después.
+  3. **Bug real de código, corregido**: `app/main.py` registraba `SessionMiddleware` (Starlette, para el `oauth_state` del login) sin `session_cookie=...`, por lo que usaba el nombre por defecto `"session"` — el mismo nombre que `_set_session_cookie()` en `app/routers/auth.py` usa para la cookie de sesión del empleado. Ambos pisaban la misma cookie en la respuesta del callback: el middleware, al vaciar `oauth_state` con `.pop()`, mandaba un `Set-Cookie` que borraba la cookie de login que el propio endpoint acababa de setear, generando un loop infinito `/portal → /login → /auth/google`. Fix aplicado a mano en `app/main.py`: `app.add_middleware(SessionMiddleware, secret_key=s.secret_key, https_only=s.is_production, session_cookie="oauth_session")`. Con las tres cosas resueltas, el login + `/portal` funcionan de punta a punta (falta solo la revisión visual del resto del flujo — editar/guardar/reordenar — con datos reales cargados).
+  - Se creó la agencia real `Argo Media` (tabla `agencies`) y a Gonza como primer empleado (`employees`, email `gonza.bermudez98@gmail.com`, role `admin`) para poder loguearse — la agencia todavía no tiene clientes asociados.
+
 ## Qué NO está hecho todavía
-- **A4 — Portal de empleados**: conectar el mockup `opcion2-empleados.html` a datos reales — login de Google, `employee_clients` para que cada PM vea solo lo suyo, el campo de descripción de negocio + "enfoque de la semana", botón de "probar prompt", historial de cambios, edición/reorden de historias.
 - **A5 — Piloto end-to-end**: 2-3 clientes reales de Felix corriendo un ciclo semanal completo.
 - Fase B completa (conexión de Instagram self-serve con Facebook Login for Business — depende de que Felix haya iniciado el trámite de App Review de Meta —, alta masiva de clientes, dashboard de salud del sistema, rollout gradual).
 
@@ -56,4 +79,4 @@ Conecta el motor de A1 con el resto del sistema:
 
 ## Próximo paso sugerido para quien retome esto
 
-Si sos Matías y estás leyendo esto: lo más útil ahora es (a) revisar el diff de esta rama contra `main`, (b) armar el proyecto de Supabase real y aplicar la migración de A2, y (c) si querés seguir con código, A4 (portal de empleados) es el bloque que más falta y el que más impacto visual tiene para mostrarle a Felix.
+Si sos Matías y estás leyendo esto: A0 a A4b ya están hechos y probados (infra real conectada, motor, cola de trabajo, no-repetición, API del portal y el portal ya conectado a esa API de verdad). **Antes de nada, si tu Supabase ya tenía la migración de A4 aplicada, volvé a correr `migrations/20260915_a4_portal_cancelled_stories.sql`** — A4b le agregó un fix a la función `reorder_stories`. Lo que sigue es la verificación visual de Gonza en `/portal`, y después A5 (piloto end-to-end con 2-3 clientes reales de Felix).
