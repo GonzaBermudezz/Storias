@@ -25,13 +25,24 @@ Conecta el motor de A1 con el resto del sistema:
 - 33 tests Python + 10 grupos de validación SQL (PGlite) en verde.
 - **Pendiente**: la migración todavía no se aplicó a un Supabase real — no hay proyecto de Supabase creado todavía (es parte de la A0, ver abajo).
 
-**A3 — No-repetición real de imágenes entre semanas**
-*(Actualizar esta sección con el resultado una vez que termine de correr — quedó lanzado la noche del 15/09 en Codex, sobre esta misma rama)*
-Debería resolver: selección de imágenes que prioriza las nunca usadas, después las usadas hace más de `NO_REPEAT_WEEKS` (3 por defecto), y si el pool se agota, recicla las más viejas en vez de frenar la generación (queda marcado como advertencia "pool_bajo" para un futuro dashboard, no como error). Reemplaza el `TODO(A3)` que había quedado en `content_jobs.py`.
+**A3 — No-repetición real de imágenes entre semanas (listo, verificado)**
+- `seleccionar_imagenes(...)` prioriza: (1) imágenes nunca usadas, (2) imágenes fuera del cooldown, (3) si el pool está agotado, recicla las más antiguas (`last_used_at` más viejo primero) en vez de frenar la generación.
+- `NO_REPEAT_WEEKS = 3` queda centralizado y configurable en un solo lugar.
+- `generate_weekly()` ahora lee `client_images` antes de seleccionar (reemplaza el `TODO(A3)`) y persiste la advertencia `pool_bajo` cuando recicla, con marcador `TODO(B3)` para el futuro dashboard de salud.
+- Confirmado: `app/engine/**`, migraciones y auth sin modificar.
+
+**Suite completa verificada de punta a punta: `python -m pytest` en `C:\Storias` → 36/36 tests en verde** (17 de A1 + los de A2 + los de A3, corridos juntos en un estado limpio, con `pip install -r requirements.txt` recién hecho). Nota para quien corra esto de nuevo: usar `python -m pytest`, no `pytest` solo — con el comando `pytest` a secas da `ModuleNotFoundError: No module named 'app'` en este entorno.
+
+## A0 — Infraestructura real (lista para desarrollo/piloto)
+
+- Proyecto de Supabase real creado, schema + migración de A2 aplicados.
+- Carpeta de Drive normal (no Unidad Compartida todavía — ver nota abajo) compartida con una service account, `GOOGLE_SERVICE_ACCOUNT_FILE` configurado, scope `drive.readonly`.
+- Claude, Cloudinary y clave de encriptación cargados en `.env`.
+- **Smoke test real de punta a punta corrido con éxito el 2026-09-15** (`scratchpad/smoke_real_a3.py`, no commiteado — script de un solo uso): bajó 4 imágenes reales de Drive, Claude generó 4 historias reales con el prompt de CUAN, se subieron 8 URLs reales a Cloudinary (4 crudas + 4 editadas), y quedó persistido en Supabase (`story_group` + 4 `stories` + 4 filas en `client_images`). Cero errores. **Confirma que A1+A2+A3 funcionan juntos contra servicios reales, no solo en tests mockeados.**
+- Queda un cliente de prueba real en la tabla `clients` (`CUAN A3 Real Smoke...`, id `628e4d79-f55c-4f1b-9210-f28f77777b2b`) — decidir si se borra o se deja de referencia antes de sumar clientes reales de Felix.
+- **Nota**: por ahora la carpeta de Drive es una carpeta común (no Unidad Compartida), porque el plan de Google Workspace de Argo Media todavía no está confirmado — ver sección de decisiones abajo. Migrar a Unidad Compartida antes de sumar clientes reales de producción.
 
 ## Qué NO está hecho todavía
-
-- **A0 — Setup de infraestructura real**: no hay proyecto de Supabase creado, no hay Unidad Compartida de Google Drive con service account configurado. Todo lo de A1/A2/A3 está probado con mocks/tests, no corrió nunca contra servicios reales.
 - **A4 — Portal de empleados**: conectar el mockup `opcion2-empleados.html` a datos reales — login de Google, `employee_clients` para que cada PM vea solo lo suyo, el campo de descripción de negocio + "enfoque de la semana", botón de "probar prompt", historial de cambios, edición/reorden de historias.
 - **A5 — Piloto end-to-end**: 2-3 clientes reales de Felix corriendo un ciclo semanal completo.
 - Fase B completa (conexión de Instagram self-serve con Facebook Login for Business — depende de que Felix haya iniciado el trámite de App Review de Meta —, alta masiva de clientes, dashboard de salud del sistema, rollout gradual).
