@@ -5,7 +5,7 @@ Todas las variables sensibles vienen del .env — NUNCA hardcodeadas.
 from __future__ import annotations
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -49,6 +49,9 @@ class Settings(BaseSettings):
 
     # ── Redis / Celery ─────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
+    publication_hour: int = Field(default=9, ge=0, le=23)
+    publication_minute: int = Field(default=0, ge=0, le=59)
+    google_service_account_file: str = ""
 
     # ── Tokens ─────────────────────────────────────────────────────────────────
     approval_token_ttl_hours: int = 48   # cuánto dura el link de aprobación

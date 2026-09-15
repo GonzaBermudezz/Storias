@@ -1,0 +1,230 @@
+from copy import deepcopy
+from datetime import date, datetime, timezone, timedelta
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from app.engine.exceptions import ClaudeGenerationError, MetaPublishError
+from app.engine.schemas import HiloGenerado, ResultadoPublicacion
+from app.services import content_jobs as jobs
+
+
+class Query:
+    def __init__(self, db, name):
+        self.db, self.name, self.filters = db, name, []
+        self.values = None
+        self.sort = []
+        self.bounds = None
+
+    def select(self, *_): return self
+    def eq(self, key, value):
+        self.filters.append((key, value))
+        return self
+    def order(self, key):
+        self.sort.append(key)
+        return self
+    def update(self, values):
+        self.values = values
+        return self
+    def range(self, start, end):
+        self.bounds = (start, end)
+        return self
+    def execute(self):
+        rows = [r for r in self.db.rows[self.name]
+                if all(r.get(k) == v for k, v in self.filters)]
+        for key in reversed(self.sort):
+            rows.sort(key=lambda r: r[key])
+        if self.bounds:
+            rows = rows[self.bounds[0]:self.bounds[1] + 1]
+        if self.values is not None:
+            for row in rows: row.update(self.values)
+        return SimpleNamespace(data=deepcopy(rows))
+
+
+class Database:
+    def __init__(self, clients=(), stories=()):
+        self.rows = {"clients": list(clients), "stories": list(stories), "story_groups": []}
+        self.saved = []
+
+    def table(self, name): return Query(self, name)
+    def rpc(self, name, payload):
+        assert name == "persist_generated_thread"
+        self.saved.append(payload)
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data="group-id"))
+
+
+def client(id="good", **overrides):
+    return dict(id=id, agency_id="agency", name="Studio", active=True,
+                business_description="Helpful studio", tone_examples=[["a", "b", "c", "d"]],
+                topics=["design"], weekly_focus="Launch", weekly_focus_expires_at="2026-09-20",
+                drive_folder_id=id, logo_url="logo", calendly_link="booking", prob_link=1,
+                **overrides)
+
+
+def images(n=5): return [(f"file-{i}", f"image-{i}.jpg", b"image") for i in range(n)]
+
+
+def generated():
+    return HiloGenerado(historias=[f"Story {i}" for i in range(4)],
+        imagenes_originales_url=[f"raw-{i}" for i in range(4)],
+        imagenes_editadas_url=[f"edited-{i}" for i in range(4)],
+        drive_file_ids_usados=[f"file-{i}" for i in range(4)])
+
+
+@pytest.fixture
+def generation(monkeypatch):
+    drive = Mock(return_value=images())
+    engine = Mock(return_value=generated())
+    monkeypatch.setattr(jobs.drive, "list_images", drive)
+    monkeypatch.setattr(jobs.content, "generar_hilo", engine)
+    return drive, engine
+
+
+def test_weekly_continues_after_insufficient_images_and_saves_complete_thread(generation):
+    drive, engine = generation
+    drive.side_effect = lambda folder: images(2 if folder == "a-short" else 5)
+    db = Database([client("a-short"), client()])
+    jobs.generate_weekly(db, date(2026, 9, 18))
+    assert "sin imágenes suficientes" in db.rows["clients"][0]["generation_error"]
+    assert db.rows["clients"][0]["weekly_focus"] == "Launch"
+    assert len(db.saved) == 1
+    config, selected = engine.call_args.args
+    assert config.client_id == "good" and config.nombre_negocio == "Studio"
+    assert config.topics == ["design"] and config.tone_examples == [["a", "b", "c", "d"]]
+    assert [image.drive_file_id for image in selected] == [f"file-{i}" for i in range(4)]
+    saved = db.saved[0]
+    assert saved["p_used_focus"] == "Launch"
+    assert saved["p_used_focus_expires_at"] == "2026-09-20"
+    assert saved["p_generation_week"] == "2026-09-14"
+    assert saved["p_scheduled_date"] == "2026-09-21"
+    assert len(saved["p_stories"]) == 4 and len(saved["p_images"]) == 4
+    assert saved["p_stories"][0]["image_original_url"] == "raw-0"
+    assert saved["p_stories"][0]["image_url"] == "edited-0"
+    assert saved["p_stories"][3]["agregar_cta"] is True
+    assert saved["p_images"][0] == {"drive_file_id": "file-0", "drive_file_name": "image-0.jpg"}
+
+
+def test_engine_error_does_not_stop_next_client_or_consume_focus(generation):
+    _, engine = generation
+    engine.side_effect = [ClaudeGenerationError("Claude unavailable"), generated()]
+    db = Database([client("broken"), client()])
+    jobs.generate_weekly(db, date(2026, 9, 18))
+    assert db.rows["clients"][0]["generation_error"] == "Claude unavailable"
+    assert db.rows["clients"][0]["weekly_focus"] == "Launch"
+    assert [p["p_client_id"] for p in db.saved] == ["good"]
+
+
+def test_inactive_and_already_generated_clients_skip_engine(generation):
+    drive, engine = generation
+    disabled = client("disabled")
+    disabled["active"] = False
+    db = Database([disabled, client()])
+    db.rows["story_groups"].append({"client_id": "good", "generation_week": "2026-09-14"})
+    jobs.generate_weekly(db, date(2026, 9, 18))
+    drive.assert_not_called()
+    engine.assert_not_called()
+
+
+def test_invalid_engine_result_is_not_partially_saved(generation):
+    _, engine = generation
+    result = generated()
+    result.historias.pop()
+    engine.return_value = result
+    db = Database([client()])
+    jobs.generate_weekly(db, date(2026, 9, 18))
+    assert db.saved == []
+    assert "four" in db.rows["clients"][0]["generation_error"]
+
+
+def test_select_images_prioritizes_never_used_over_expired():
+    now = datetime(2026, 9, 18, tzinfo=timezone.utc)
+    available = images(6)
+    history = [{"drive_file_id": "file-0", "last_used_at": (now - timedelta(weeks=4)).isoformat()},
+               {"drive_file_id": "file-1", "last_used_at": (now - timedelta(weeks=1)).isoformat()}]
+    selected, recycled = jobs.seleccionar_imagenes(available, history, now)
+    assert [item[0] for item in selected] == ["file-2", "file-3", "file-4", "file-5"]
+    assert recycled is False
+
+
+def test_select_images_uses_expired_before_recent_and_marks_recycling():
+    now = datetime(2026, 9, 18, tzinfo=timezone.utc)
+    available = images(4)
+    history = [{"drive_file_id": f"file-{i}",
+                "last_used_at": (now - timedelta(weeks=1 + i)).isoformat()}
+               for i in range(4)]
+    selected, recycled = jobs.seleccionar_imagenes(available, history, now)
+    assert [item[0] for item in selected] == ["file-3", "file-2", "file-1", "file-0"]
+    assert recycled is True
+
+
+def test_weekly_recycling_is_recorded_as_pool_warning(generation):
+    now = datetime.now(timezone.utc)
+    _, engine = generation
+    db = Database([client()])
+    db.rows["client_images"] = [{"client_id": "good", "drive_file_id": f"file-{i}",
+        "last_used_at": (now - timedelta(days=1)).isoformat()} for i in range(3)]
+    engine.return_value = HiloGenerado(
+        historias=[f"Story {i}" for i in range(4)],
+        imagenes_originales_url=[f"raw-{i}" for i in range(4)],
+        imagenes_editadas_url=[f"edited-{i}" for i in range(4)],
+        drive_file_ids_usados=["file-3", "file-4", "file-0", "file-1"],
+    )
+    jobs.generate_weekly(db, date(2026, 9, 18))
+    assert db.rows["clients"][0]["generation_error"].startswith("pool_bajo")
+
+
+def story(id="story", **updates):
+    row = dict(id=id, story_group_id="group", client_id="good", order=1,
+               image_url="edited", fecha_publicacion="2026-09-21", estado="pendiente",
+               agregar_cta=True, clients={"instagram_account_id": "ig",
+               "meta_access_token_encrypted": "encrypted", "calendly_link": "booking"})
+    row.update(updates)
+    return row
+
+
+@pytest.fixture
+def publication(monkeypatch):
+    engine = Mock(return_value=ResultadoPublicacion(ok=True, ig_media_id="media"))
+    decrypt = Mock(return_value="plain-token")
+    monkeypatch.setattr(jobs.content, "publicar_historia", engine)
+    monkeypatch.setattr(jobs, "decrypt", decrypt)
+    return engine, decrypt
+
+
+def test_publication_success_uses_decrypted_token_and_only_pending_today(publication):
+    engine, decrypt = publication
+    db = Database(stories=[story(), story("future", fecha_publicacion="2026-09-22"),
+                          story("old", estado="error")])
+    jobs.publish_daily(db, date(2026, 9, 21))
+    engine.assert_called_once_with(image_url="edited", instagram_account_id="ig",
+        meta_access_token="plain-token", agregar_cta=True, calendly_link="booking")
+    decrypt.assert_called_once_with("encrypted")
+    assert db.rows["stories"][0]["estado"] == "publicado"
+    assert db.rows["stories"][0]["ig_media_id"] == "media"
+    assert db.rows["stories"][1]["estado"] == "pendiente"
+    assert db.rows["stories"][2]["estado"] == "error"
+
+
+@pytest.mark.parametrize("failure", [MetaPublishError("Meta failed"),
+    ResultadoPublicacion(ok=False, error="Meta failed")])
+def test_publication_error_is_saved_and_next_story_runs(publication, failure):
+    engine, _ = publication
+    engine.side_effect = [failure, ResultadoPublicacion(ok=True, ig_media_id="second")]
+    db = Database(stories=[story(), story("next", order=2)])
+    jobs.publish_daily(db, date(2026, 9, 21))
+    assert db.rows["stories"][0]["estado"] == "error"
+    assert db.rows["stories"][0]["error"] == "Meta failed"
+    assert db.rows["stories"][1]["estado"] == "publicado"
+    jobs.publish_daily(db, date(2026, 9, 21))
+    assert engine.call_count == 2  # No automatic retries of errors or published rows.
+
+
+def test_encryption_failure_never_calls_meta(publication):
+    engine, decrypt = publication
+    decrypt.side_effect = ValueError("Token de cifrado inválido o alterado")
+    db = Database(stories=[story()])
+    jobs.publish_daily(db, date(2026, 9, 21))
+    engine.assert_not_called()
+    assert db.rows["stories"][0]["estado"] == "error"
+    assert "cifrado" in db.rows["stories"][0]["error"]

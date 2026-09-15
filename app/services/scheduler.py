@@ -3,15 +3,42 @@ Tareas de Celery — publicación programada en Instagram.
 """
 from __future__ import annotations
 from celery import Celery
+from celery.schedules import crontab
 from app.config import get_settings
 
-def _make_celery() -> Celery:
-    _s = get_settings()
+TIMEZONE = "America/Argentina/Buenos_Aires"
+
+def _make_celery(settings=None) -> Celery:
+    _s = settings or get_settings()
     app = Celery("storias", broker=_s.redis_url, backend=_s.redis_url)
-    app.conf.timezone = "America/Argentina/Buenos_Aires"
+    app.conf.timezone = TIMEZONE
+    app.conf.beat_schedule = {
+        "generate-weekly-threads": {
+            "task": "app.services.scheduler.generar_hilos_semanales",
+            "schedule": crontab(minute=0, hour=18, day_of_week="fri"),
+        },
+        "publish-daily-stories": {
+            "task": "app.services.scheduler.publicar_historias_pendientes",
+            "schedule": crontab(minute=_s.publication_minute, hour=_s.publication_hour),
+        },
+    }
     return app
 
 celery_app = _make_celery()
+
+
+@celery_app.task(name="app.services.scheduler.generar_hilos_semanales")
+def generar_hilos_semanales() -> None:
+    from app.db.supabase import get_admin_client
+    from app.services.content_jobs import generate_weekly
+    generate_weekly(get_admin_client())
+
+
+@celery_app.task(name="app.services.scheduler.publicar_historias_pendientes")
+def publicar_historias_pendientes() -> None:
+    from app.db.supabase import get_admin_client
+    from app.services.content_jobs import publish_daily
+    publish_daily(get_admin_client())
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
