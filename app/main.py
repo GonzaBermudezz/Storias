@@ -14,7 +14,8 @@ Seguridad aplicada por capas:
 from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
-
+from dotenv import load_dotenv
+load_dotenv()
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware

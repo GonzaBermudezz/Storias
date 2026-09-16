@@ -1,0 +1,192 @@
+"""Authenticated API used by the employee portal."""
+from __future__ import annotations
+
+from datetime import date
+
+import requests
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field, field_validator
+
+from app.db.supabase import get_admin_client
+from app.deps import EmployeeDep
+from app.engine import content
+from app.engine.schemas import ClientContentConfig, ImagenCandidata
+from app.services import drive
+
+router = APIRouter(prefix="/portal", tags=["portal"])
+
+_CLIENT_DETAIL = (
+    "id,agency_id,name,business_description,weekly_focus,"
+    "weekly_focus_expires_at,tone_examples,topics,drive_folder_id,logo_url,"
+    "calendly_link,prob_link,generation_error,generation_error_at"
+)
+
+
+class ClientPatch(BaseModel):
+    business_description: str | None = None
+    weekly_focus: str | None = None
+    weekly_focus_expires_at: date | None = None
+    tone_examples: list[list[str]] | None = None
+    topics: list[str] | None = None
+
+    @field_validator("tone_examples", mode="before")
+    @classmethod
+    def tone_examples_cannot_be_null(cls, value):
+        if value is None:
+            raise ValueError("tone_examples no puede ser null")
+        return value
+
+
+class StoryPatch(BaseModel):
+    texto_nuevo: str = Field(min_length=1)
+
+
+class StoryOrder(BaseModel):
+    story_id: str
+    nuevo_order: int = Field(ge=1, le=10)
+
+
+class ReorderRequest(BaseModel):
+    historias: list[StoryOrder] = Field(min_length=1)
+
+
+def _client_or_error(db, client_id: str, agency_id: str) -> dict:
+    result = db.table("clients").select(_CLIENT_DETAIL).eq("id", client_id).maybe_single().execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    if result.data["agency_id"] != agency_id:
+        raise HTTPException(status_code=403, detail="Cliente fuera de la agencia")
+    return result.data
+
+
+def _content_config(row: dict) -> ClientContentConfig:
+    return ClientContentConfig(
+        client_id=row["id"], nombre_negocio=row["name"],
+        business_description=row.get("business_description") or "",
+        weekly_focus=row.get("weekly_focus"), tone_examples=row.get("tone_examples") or [],
+        topics=row.get("topics"), logo_url=row.get("logo_url"),
+        calendly_link=row.get("calendly_link"), prob_link=row.get("prob_link") or 0.0,
+    )
+
+
+@router.get("/clientes")
+async def list_clients(employee: EmployeeDep, solo_mios: bool = False):
+    db = get_admin_client()
+    query = db.table("clients").select(_CLIENT_DETAIL).eq("agency_id", employee.agency_id)
+    if solo_mios:
+        assignments = db.table("employee_clients").select("client_id").eq(
+            "employee_id", employee.id
+        ).execute().data or []
+        client_ids = [row["client_id"] for row in assignments]
+        if not client_ids:
+            return []
+        query = query.in_("id", client_ids)
+    return query.order("name").execute().data or []
+
+
+@router.get("/clientes/{client_id}")
+async def get_client(client_id: str, employee: EmployeeDep):
+    return _client_or_error(get_admin_client(), client_id, employee.agency_id)
+
+
+@router.patch("/clientes/{client_id}")
+async def patch_client(client_id: str, body: ClientPatch, employee: EmployeeDep):
+    db = get_admin_client()
+    current = _client_or_error(db, client_id, employee.agency_id)
+    supplied = body.model_dump(mode="json", exclude_unset=True)
+    changes = {key: value for key, value in supplied.items() if current.get(key) != value}
+    if not changes:
+        return current
+
+    updated = db.rpc("update_client_prompt", {
+        "p_client_id": client_id, "p_employee_id": employee.id,
+        "p_agency_id": employee.agency_id, "p_patch": changes,
+    }).execute().data
+    return updated or {**current, **changes}
+
+
+@router.post("/clientes/{client_id}/probar-prompt")
+async def try_prompt(client_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    client = _client_or_error(db, client_id, employee.agency_id)
+    image = drive.first_image(client.get("drive_folder_id"))
+    if not image:
+        raise HTTPException(status_code=422, detail="El cliente no tiene imágenes disponibles")
+    image_id, image_name, image_bytes = image
+    candidate = ImagenCandidata(
+        drive_file_id=image_id, drive_file_name=image_name, image_bytes=image_bytes,
+    )
+    return {"historias": content.generar_texto_de_prueba(_content_config(client), candidate)}
+
+
+@router.get("/clientes/{client_id}/historias")
+async def list_stories(client_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    groups = db.table("story_groups").select("*,stories(*)").eq("client_id", client_id).gte(
+        "scheduled_date", date.today().isoformat()
+    ).order("scheduled_date").execute().data or []
+    for group in groups:
+        group["stories"] = [
+            story for story in group.get("stories") or []
+            if story.get("estado") != "cancelada"
+        ]
+    return groups
+
+
+@router.patch("/historias/reordenar")
+async def reorder_stories(body: ReorderRequest, employee: EmployeeDep):
+    ids = [item.story_id for item in body.historias]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="Cada historia debe aparecer una sola vez")
+    db = get_admin_client()
+    stories = db.table("stories").select("id,story_group_id,client_id").in_("id", ids).execute().data or []
+    if len(stories) != len(ids):
+        raise HTTPException(status_code=404, detail="Historia no encontrada")
+    if len({row["story_group_id"] for row in stories}) != 1 or len({row["client_id"] for row in stories}) != 1:
+        raise HTTPException(status_code=422, detail="Las historias deben pertenecer al mismo grupo")
+    _client_or_error(db, stories[0]["client_id"], employee.agency_id)
+    if len({item.nuevo_order for item in body.historias}) != len(body.historias):
+        raise HTTPException(status_code=422, detail="Cada posición debe ser única")
+    db.rpc("reorder_stories", {"p_orders": [
+        {"story_id": item.story_id, "new_order": item.nuevo_order}
+        for item in body.historias
+    ]}).execute()
+    return {"detail": "Orden actualizado"}
+
+
+@router.patch("/historias/{story_id}")
+async def patch_story(story_id: str, body: StoryPatch, employee: EmployeeDep):
+    db = get_admin_client()
+    story = db.table("stories").select(
+        "id,client_id,order,text,image_url,image_original_url"
+    ).eq("id", story_id).maybe_single().execute().data
+    if not story:
+        raise HTTPException(status_code=404, detail="Historia no encontrada")
+    client = _client_or_error(db, story["client_id"], employee.agency_id)
+    if not story.get("image_original_url"):
+        raise HTTPException(status_code=422, detail="La historia no tiene imagen original")
+    response = requests.get(story["image_original_url"], timeout=30)
+    response.raise_for_status()
+    image_url = content.editar_historia(
+        _content_config(client), response.content, body.texto_nuevo, story["order"],
+    )
+    updated = db.table("stories").update({
+        "text": body.texto_nuevo, "image_url": image_url,
+    }).eq("id", story_id).execute().data
+    return updated[0] if isinstance(updated, list) and updated else {
+        **story, "text": body.texto_nuevo, "image_url": image_url,
+    }
+
+
+@router.delete("/historias/{story_id}")
+async def cancel_story(story_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    story = db.table("stories").select("id,client_id").eq(
+        "id", story_id
+    ).maybe_single().execute().data
+    if not story:
+        raise HTTPException(status_code=404, detail="Historia no encontrada")
+    _client_or_error(db, story["client_id"], employee.agency_id)
+    db.table("stories").update({"estado": "cancelada"}).eq("id", story_id).execute()
+    return {"detail": "Historia cancelada"}

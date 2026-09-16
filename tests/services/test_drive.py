@@ -40,3 +40,15 @@ def test_missing_folder_fails_before_google(monkeypatch):
     with pytest.raises(ValueError, match="drive_folder_id"):
         drive.list_images("")
     factory.assert_not_called()
+
+
+def test_first_image_downloads_only_first_sorted_file(monkeypatch):
+    files = Mock()
+    files.list.return_value.execute.return_value = {"files": [
+        {"id": "z", "name": "z.jpg"}, {"id": "a", "name": "a.jpg"},
+    ]}
+    files.get_media.return_value.execute.return_value = b"first"
+    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+
+    assert drive.first_image("folder") == ("a", "a.jpg", b"first")
+    files.get_media.assert_called_once_with(fileId="a", supportsAllDrives=True)

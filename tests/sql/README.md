@@ -8,6 +8,7 @@ $sqlRuntime = Join-Path ([System.IO.Path]::GetTempPath()) 'storias-sql-validatio
 npm.cmd install --prefix $sqlRuntime --no-package-lock --no-save @electric-sql/pglite@0.5.8
 $env:PGLITE_PACKAGE_ROOT = Join-Path $sqlRuntime 'node_modules/@electric-sql/pglite'
 node tests/sql/verify.mjs
+node tests/sql/verify_portal.mjs
 ```
 
 Success prints `"checks": 10` and exits with code 0; a failed assertion exits nonzero.

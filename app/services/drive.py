@@ -17,8 +17,7 @@ def _drive_client():
     return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
 
-def list_images(drive_folder_id: str) -> list[tuple[str, str, bytes]]:
-    """Return every image directly inside the folder, in stable name/ID order."""
+def _image_files(drive_folder_id: str):
     if not drive_folder_id:
         raise ValueError("drive_folder_id is required")
     folder = drive_folder_id.replace("\\", "\\\\").replace("'", "\\'")
@@ -35,6 +34,22 @@ def list_images(drive_folder_id: str) -> list[tuple[str, str, bytes]]:
         token = page.get("nextPageToken")
         if not token:
             break
+    return files, sorted(metadata, key=lambda item: (item["name"], item["id"]))
+
+
+def list_images(drive_folder_id: str) -> list[tuple[str, str, bytes]]:
+    """Return every image directly inside the folder, in stable name/ID order."""
+    files, metadata = _image_files(drive_folder_id)
     return [(item["id"], item["name"], files.get_media(
         fileId=item["id"], supportsAllDrives=True,
-    ).execute()) for item in sorted(metadata, key=lambda item: (item["name"], item["id"]))]
+    ).execute()) for item in metadata]
+
+
+def first_image(drive_folder_id: str) -> tuple[str, str, bytes] | None:
+    """Return the first stable image while downloading bytes for only that file."""
+    files, metadata = _image_files(drive_folder_id)
+    if not metadata:
+        return None
+    item = metadata[0]
+    image_bytes = files.get_media(fileId=item["id"], supportsAllDrives=True).execute()
+    return item["id"], item["name"], image_bytes
