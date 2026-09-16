@@ -28,6 +28,7 @@ from slowapi.util import get_remote_address
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
+from app.db.supabase import close_supabase_clients
 from app.routers import auth, aprobar, demo, portal
 
 s = get_settings()
@@ -40,7 +41,10 @@ async def lifespan(app: FastAPI):
     print(f"  Storias — {s.environment.upper()}")
     print(f"  http://localhost:5001")
     print(f"{'═'*50}\n")
-    yield
+    try:
+        yield
+    finally:
+        close_supabase_clients()
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
