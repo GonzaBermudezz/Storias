@@ -169,6 +169,28 @@ def test_patch_client_ritmo_saves_four_distinct_days(monkeypatch, client):
     assert db.updates == [("clients", {"publish_days": saved_days}, [("id", "c1")])]
 
 
+@pytest.mark.parametrize("saved_days", [
+    [{"day": 2, "time": "10:00"}],
+    [{"day": 0, "time": "08:00"}, {"day": 4, "time": "18:00"}],
+    [{"day": 1, "time": "08:00"}, {"day": 3, "time": "12:00"},
+     {"day": 6, "time": "20:00"}],
+])
+def test_patch_client_ritmo_saves_one_to_three_distinct_days(
+        monkeypatch, client, saved_days):
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+             [{"id": "c1", "publish_days": saved_days}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/ritmo", json={"publish_days": saved_days})
+    assert response.status_code == 200
+    assert response.json()["publish_days"] == saved_days
+    assert db.updates == [("clients", {"publish_days": saved_days}, [("id", "c1")])]
+
+
+def test_patch_client_ritmo_rejects_empty_days(client):
+    response = client.patch("/portal/clientes/c1/ritmo", json={"publish_days": []})
+    assert response.status_code == 422
+
+
 def test_patch_client_ritmo_rejects_non_distinct_days(monkeypatch, client):
     response = client.patch("/portal/clientes/c1/ritmo", json={"publish_days": [
         {"day": 1, "time": "08:00"}, {"day": 1, "time": "09:00"},
@@ -229,7 +251,8 @@ def test_patch_client_font_rejects_unknown_key(monkeypatch, client):
 def test_create_manual_story_creates_group_and_first_story(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1"}, [], [{"id": "g1"}], [{"id": "s1", "order": 1}]])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag: "https://cdn/img.jpg")
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag:
+                        SimpleNamespace(url="https://cdn/img.jpg", public_id="manual/one"))
     response = client.post("/portal/clientes/c1/historias/manual",
         data={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"},
         files={"image": ("photo.jpg", b"fake-bytes", "image/jpeg")})
@@ -243,27 +266,25 @@ def test_create_manual_story_creates_group_and_first_story(monkeypatch, client):
     assert story_insert["aprobado"] is False
 
 
-def test_create_manual_story_starts_a_fresh_group_when_the_existing_one_is_agendado(monkeypatch, client):
-    # The group lookup filters on agendado = False, so an already-scheduled
-    # group for that date never matches — a brand new group is created
-    # instead of silently reopening a confirmed one.
-    db = DB([{"id": "c1", "agency_id": "agency-1"}, [], [{"id": "g2"}], [{"id": "s1", "order": 1}]])
+def test_create_manual_story_conflicts_when_the_existing_group_is_agendado(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "g1", "agendado": True}]])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag: "https://cdn/img.jpg")
+    upload_calls = []
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda *args: upload_calls.append(args))
     response = client.post("/portal/clientes/c1/historias/manual",
         data={"fecha_publicacion": "2026-09-21", "hora_publicacion": "10:00"},
         files={"image": ("photo.jpg", b"fake-bytes", "image/jpeg")})
-    assert response.status_code == 200
-    group_insert = next(p for t, p in db.inserts if t == "story_groups")
-    assert group_insert["scheduled_date"] == "2026-09-21"
-    story_insert = next(p for t, p in db.inserts if t == "stories")
-    assert story_insert["story_group_id"] == "g2" and story_insert["order"] == 1
+    assert response.status_code == 409
+    assert "grupo manual agendado" in response.json()["detail"]
+    assert db.inserts == []
+    assert upload_calls == []
 
 
 def test_create_manual_story_adds_to_existing_manual_group_on_same_date(monkeypatch, client):
-    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "g1"}], [{"order": 2}], [{"id": "s2", "order": 3}]])
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "g1", "agendado": False}], [{"order": 2}], [{"id": "s2", "order": 3}]])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag: "https://cdn/img2.jpg")
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag:
+                        SimpleNamespace(url="https://cdn/img2.jpg", public_id="manual/two"))
     response = client.post("/portal/clientes/c1/historias/manual",
         data={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"},
         files={"image": ("photo.jpg", b"fake-bytes", "image/jpeg")})
@@ -271,6 +292,32 @@ def test_create_manual_story_adds_to_existing_manual_group_on_same_date(monkeypa
     story_insert = next(p for t, p in db.inserts if t == "stories")
     assert story_insert["order"] == 3 and story_insert["story_group_id"] == "g1"
     assert not any(t == "story_groups" for t, _ in db.inserts)
+
+
+def test_create_manual_story_returns_conflict_when_group_insert_races(monkeypatch, client):
+    class ConflictQuery(Query):
+        def execute(self):
+            if self.table == "story_groups" and self.payload is not None:
+                raise APIError({"message": "duplicate", "code": "23505", "details": None, "hint": None})
+            return super().execute()
+
+    class ConflictDB(DB):
+        def table(self, name):
+            return ConflictQuery(self, name)
+
+    db = ConflictDB([{"id": "c1", "agency_id": "agency-1"}, []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    upload_calls = []
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda *args: upload_calls.append(args))
+
+    response = client.post("/portal/clientes/c1/historias/manual",
+        data={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"},
+        files={"image": ("photo.jpg", b"fake-bytes", "image/jpeg")})
+
+    assert response.status_code == 409
+    assert "Ya existe un grupo manual" in response.json()["detail"]
+    assert not any(table == "stories" for table, _ in db.inserts)
+    assert upload_calls == []
 
 
 def test_create_manual_story_rejects_invalid_date(monkeypatch, client):
@@ -285,7 +332,7 @@ def test_create_manual_story_rejects_invalid_date(monkeypatch, client):
 
 def test_create_manual_story_surfaces_upload_errors(monkeypatch, client):
     from app.services import uploads
-    db = DB([{"id": "c1", "agency_id": "agency-1"}])
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [], [{"id": "g1"}], None])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     def boom(data, client_id, tag): raise uploads.UploadError("El archivo no es una imagen válida.")
     monkeypatch.setattr("app.routers.portal.uploads.upload_image", boom)
@@ -293,7 +340,36 @@ def test_create_manual_story_surfaces_upload_errors(monkeypatch, client):
         data={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"},
         files={"image": ("photo.jpg", b"not-an-image", "image/jpeg")})
     assert response.status_code == 422
-    assert db.inserts == []
+    assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
+
+
+def test_create_manual_story_cleans_reserved_group_when_story_insert_fails(monkeypatch, client):
+    class StoryFailureQuery(Query):
+        def execute(self):
+            if self.table == "stories" and isinstance(self.payload, dict):
+                raise APIError({"message": "insert failed", "code": "XX000", "details": None, "hint": None})
+            return super().execute()
+
+    class StoryFailureDB(DB):
+        def table(self, name):
+            return StoryFailureQuery(self, name)
+
+    db = StoryFailureDB([
+        {"id": "c1", "agency_id": "agency-1"}, [], [{"id": "g1"}], None,
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda *args:
+                        SimpleNamespace(url="https://cdn/img.jpg", public_id="manual/failed"))
+    destroyed = []
+    monkeypatch.setattr("app.routers.portal.uploads.delete_image", destroyed.append)
+
+    with pytest.raises(APIError):
+        client.post("/portal/clientes/c1/historias/manual",
+            data={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"},
+            files={"image": ("photo.jpg", b"fake-bytes", "image/jpeg")})
+
+    assert destroyed == ["manual/failed"]
+    assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
 
 
 def test_approve_story_toggles_flag(monkeypatch, client):
@@ -388,12 +464,54 @@ def test_schedule_day_succeeds_when_all_approved(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1"},
               [{"id": "s1", "estado": "pendiente", "aprobado": True, "story_group_id": "g1"},
                {"id": "s2", "estado": "pendiente", "aprobado": True, "story_group_id": "g1"}],
+              None,
+              [{"id": "s1", "estado": "pendiente", "agendado": True},
+               {"id": "s2", "estado": "pendiente", "agendado": True}],
               None])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.patch("/portal/clientes/c1/dias/2026-09-25/agendar")
     assert response.status_code == 200
     assert response.json() == {"detail": "Publicación agendada"}
-    assert db.updates == [("story_groups", {"agendado": True}, [("id", "g1")])]
+    assert db.updates == [
+        ("stories", {"agendado": True}, [("id", ["s1", "s2"])]),
+        ("story_groups", {"agendado": True}, [("id", "g1")]),
+    ]
+
+
+def test_schedule_day_keeps_other_dates_in_weekly_group_actionable(monkeypatch, client):
+    """Confirming Monday must not complete a Mon/Wed/Fri/Sun AI group."""
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+              [{"id": "mon", "estado": "pendiente", "aprobado": True,
+                "story_group_id": "weekly"}],
+              None,
+              [{"id": "mon", "estado": "pendiente", "agendado": True},
+               {"id": "wed", "estado": "pendiente", "agendado": False},
+               {"id": "fri", "estado": "pendiente", "agendado": False},
+               {"id": "sun", "estado": "pendiente", "agendado": False}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/dias/2026-09-21/agendar")
+
+    assert response.status_code == 200
+    assert db.updates == [("stories", {"agendado": True}, [("id", ["mon"])])]
+
+
+def test_schedule_day_marks_weekly_group_complete_on_final_date(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+              [{"id": "sun", "estado": "pendiente", "aprobado": True,
+                "story_group_id": "weekly"}],
+              None,
+              [{"id": "mon", "estado": "pendiente", "agendado": True},
+               {"id": "wed", "estado": "pendiente", "agendado": True},
+               {"id": "fri", "estado": "pendiente", "agendado": True},
+               {"id": "sun", "estado": "pendiente", "agendado": True}],
+              None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/dias/2026-09-27/agendar")
+
+    assert response.status_code == 200
+    assert db.updates[-1] == ("story_groups", {"agendado": True}, [("id", "weekly")])
 
 
 def test_schedule_day_bundles_every_group_sharing_that_date(monkeypatch, client):
@@ -402,11 +520,13 @@ def test_schedule_day_bundles_every_group_sharing_that_date(monkeypatch, client)
     db = DB([{"id": "c1", "agency_id": "agency-1"},
               [{"id": "s1", "estado": "pendiente", "aprobado": True, "story_group_id": "ai-group"},
                {"id": "s2", "estado": "pendiente", "aprobado": True, "story_group_id": "manual-group"}],
-              None, None])
+              None,
+              [{"id": "s1", "estado": "pendiente", "agendado": True}], None,
+              [{"id": "s2", "estado": "pendiente", "agendado": True}], None])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.patch("/portal/clientes/c1/dias/2026-09-25/agendar")
     assert response.status_code == 200
-    updated_ids = {filters[0][1] for _, _, filters in db.updates}
+    updated_ids = {filters[0][1] for table, _, filters in db.updates if table == "story_groups"}
     assert updated_ids == {"ai-group", "manual-group"}
 
 
@@ -424,6 +544,9 @@ def test_schedule_day_ignores_cancelled_stories(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1"},
               [{"id": "s1", "estado": "pendiente", "aprobado": True, "story_group_id": "g1"},
                {"id": "s2", "estado": "cancelada", "aprobado": False, "story_group_id": "g1"}],
+              None,
+              [{"id": "s1", "estado": "pendiente", "agendado": True},
+               {"id": "s2", "estado": "cancelada", "agendado": False}],
               None])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.patch("/portal/clientes/c1/dias/2026-09-25/agendar")

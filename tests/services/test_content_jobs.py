@@ -59,7 +59,8 @@ class Query:
 
 class Database:
     def __init__(self, clients=(), stories=()):
-        self.rows = {"clients": list(clients), "stories": list(stories), "story_groups": []}
+        self.rows = {"clients": list(clients), "stories": list(stories), "story_groups": [],
+                     "client_images": []}
         self.saved = []
 
     def table(self, name): return Query(self, name)
@@ -81,6 +82,9 @@ def client(id="good", **overrides):
 def images(n=5): return [(f"file-{i}", f"image-{i}.jpg", b"image") for i in range(n)]
 
 
+def image_metadata(n=5): return [(f"file-{i}", f"image-{i}.jpg") for i in range(n)]
+
+
 def generated(cta_agregado=True):
     return HiloGenerado(historias=[f"Story {i}" for i in range(4)],
         imagenes_originales_url=[f"raw-{i}" for i in range(4)],
@@ -91,9 +95,11 @@ def generated(cta_agregado=True):
 
 @pytest.fixture
 def generation(monkeypatch):
-    drive = Mock(return_value=images())
+    drive = Mock(return_value=image_metadata())
+    download = Mock(side_effect=lambda rows, limit: [(*row, b"image") for row in rows[:limit]])
     engine = Mock(return_value=generated())
-    monkeypatch.setattr(jobs.drive, "list_images", drive)
+    monkeypatch.setattr(jobs.drive, "list_image_metadata", drive)
+    monkeypatch.setattr(jobs.drive, "download_images", download)
     monkeypatch.setattr(jobs.content, "generar_hilo", engine)
     return drive, engine
 
@@ -114,7 +120,7 @@ def test_weekly_does_not_crash_for_client_with_no_business_description_yet(gener
 
 def test_weekly_continues_after_insufficient_images_and_saves_complete_thread(generation):
     drive, engine = generation
-    drive.side_effect = lambda folder: images(2 if folder == "a-short" else 5)
+    drive.side_effect = lambda folder: image_metadata(2 if folder == "a-short" else 5)
     db = Database([client("a-short"), client()])
     jobs.generate_weekly(db, date(2026, 9, 18))
     assert "sin imágenes suficientes" in db.rows["clients"][0]["generation_error"]
@@ -152,6 +158,26 @@ def test_weekly_uses_clients_custom_publish_schedule(generation):
         "08:00:00", "12:30:00", "18:00:00", "20:15:00"]
 
 
+@pytest.mark.parametrize("custom,expected_dates,expected_times", [
+    ([{"day": 2, "time": "10:00"}],
+     ["2026-09-23"] * 4, ["10:00:00"] * 4),
+    ([{"day": 0, "time": "08:00"}, {"day": 4, "time": "18:00"}],
+     ["2026-09-21", "2026-09-21", "2026-09-25", "2026-09-25"],
+     ["08:00:00", "08:00:00", "18:00:00", "18:00:00"]),
+    ([{"day": 1, "time": "08:00"}, {"day": 3, "time": "12:00"},
+      {"day": 6, "time": "20:00"}],
+     ["2026-09-22", "2026-09-22", "2026-09-24", "2026-09-27"],
+     ["08:00:00", "08:00:00", "12:00:00", "20:00:00"]),
+])
+def test_weekly_balances_four_stories_across_one_to_three_days(
+        generation, custom, expected_dates, expected_times):
+    db = Database([client(publish_days=custom)])
+    jobs.generate_weekly(db, date(2026, 9, 18))
+    stories = db.saved[0]["p_stories"]
+    assert [story["fecha_publicacion"] for story in stories] == expected_dates
+    assert [story["hora_publicacion"] for story in stories] == expected_times
+
+
 _GLOBAL_SCHEDULE = tuple((offset, "09:00") for offset in jobs.PUBLISH_DAY_OFFSETS)
 
 
@@ -161,6 +187,10 @@ _GLOBAL_SCHEDULE = tuple((offset, "09:00") for offset in jobs.PUBLISH_DAY_OFFSET
      ((0,"08:00"),(2,"08:00"),(4,"08:00"),(6,"08:00"))),
     ([{"day":6,"time":"08:00"},{"day":0,"time":"08:00"},{"day":2,"time":"08:00"},{"day":4,"time":"08:00"}],
      ((0,"08:00"),(2,"08:00"),(4,"08:00"),(6,"08:00"))),  # sorted by day
+    ([{"day":5,"time":"18:00"},{"day":1,"time":"08:00"}],
+     ((1,"08:00"),(5,"18:00"))),
+    ([{"day":3,"time":"12:30"}], ((3,"12:30"),)),
+    ([], _GLOBAL_SCHEDULE),
     ([{"day":0,"time":"08:00"},{"day":0,"time":"09:00"},{"day":2,"time":"08:00"},{"day":4,"time":"08:00"}],
      _GLOBAL_SCHEDULE),  # not 4 distinct days -> fall back
     ([{"day":0,"time":"08:00"},{"day":2,"time":"08:00"},{"day":4,"time":"08:00"},{"day":7,"time":"08:00"}],
@@ -181,6 +211,33 @@ def test_engine_error_does_not_stop_next_client_or_consume_focus(generation):
     assert db.rows["clients"][0]["generation_error"] == "Claude unavailable"
     assert db.rows["clients"][0]["weekly_focus"] == "Launch"
     assert [p["p_client_id"] for p in db.saved] == ["good"]
+
+
+def test_history_read_failure_is_logged_marks_error_and_skips_only_that_client(
+        generation, caplog):
+    drive, engine = generation
+
+    class HistoryFailureQuery(Query):
+        def execute(self):
+            if ("client_id", "broken") in self.filters:
+                raise RuntimeError("Supabase history unavailable")
+            return super().execute()
+
+    class HistoryFailureDatabase(Database):
+        def table(self, name):
+            if name == "client_images":
+                return HistoryFailureQuery(self, name)
+            return super().table(name)
+
+    db = HistoryFailureDatabase([client("broken"), client()])
+    with caplog.at_level("ERROR"):
+        jobs.generate_weekly(db, date(2026, 9, 18))
+
+    assert "No se pudo leer el historial" in db.rows["clients"][0]["generation_error"]
+    assert "Could not read image history for client broken" in caplog.text
+    assert [p["p_client_id"] for p in db.saved] == ["good"]
+    assert engine.call_count == 1
+    assert drive.call_count == 2
 
 
 def test_inactive_and_already_generated_clients_skip_engine(generation):

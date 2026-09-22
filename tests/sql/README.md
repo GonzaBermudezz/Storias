@@ -9,9 +9,10 @@ npm.cmd install --prefix $sqlRuntime --no-package-lock --no-save @electric-sql/p
 $env:PGLITE_PACKAGE_ROOT = Join-Path $sqlRuntime 'node_modules/@electric-sql/pglite'
 node tests/sql/verify.mjs
 node tests/sql/verify_portal.mjs
+node tests/sql/verify_a5.mjs
 ```
 
-Success prints `"checks": 10` and exits with code 0; a failed assertion exits nonzero.
+Success prints a JSON summary and exits with code 0; a failed assertion exits nonzero.
 
 ## Coverage
 
@@ -19,6 +20,8 @@ The harness loads the current schema, applies the migration twice, and exercises
 the real PL/pgSQL RPC: successful persistence, ordered stories, image counters,
 weekly idempotence, focus consumption, concurrent focus replacement preservation,
 atomic rollback, input validation, foreign keys, and function permissions.
+The A5 regression applies every migration in lexical order and checks per-story
+publication dates/times, manual-day uniqueness, and immutable published groups.
 
 To verify an upgrade, pass an original schema snapshot as the first argument:
 

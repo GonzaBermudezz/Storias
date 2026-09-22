@@ -46,19 +46,19 @@ def _valid_hhmm(value) -> bool:
 
 
 def publish_schedule(row: dict) -> tuple[tuple[int, str], ...]:
-    """A client's custom (weekday, 'HH:MM') publish schedule — 4 entries, each
-    a distinct weekday (0=Mon..6=Sun) with its own time — or the global
+    """A client's custom (weekday, 'HH:MM') publish schedule — 1 to 4 entries,
+    each a distinct weekday (0=Mon..6=Sun) with its own time — or the global
     default (PUBLISH_DAY_OFFSETS at the configured publication hour) if
     `clients.publish_days` is unset or malformed."""
     days = row.get("publish_days")
-    if isinstance(days, list) and len(days) == 4:
+    if isinstance(days, list) and 1 <= len(days) <= 4:
         try:
             parsed = [(int(entry["day"]), str(entry["time"])) for entry in days]
         except (KeyError, TypeError, ValueError):
             parsed = None
         if parsed is not None:
             weekdays = {day for day, _ in parsed}
-            if len(weekdays) == 4 and all(0 <= day <= 6 for day in weekdays) \
+            if len(weekdays) == len(parsed) and all(0 <= day <= 6 for day in weekdays) \
                     and all(_valid_hhmm(hhmm) for _, hhmm in parsed):
                 return tuple(sorted(parsed))
     settings = get_settings()
@@ -88,7 +88,11 @@ def _thread_payload(row: dict, config: ClientContentConfig, result: HiloGenerado
     monday = today - timedelta(days=today.weekday())
     next_monday = monday + timedelta(days=7)
     schedule = publish_schedule(row)
-    publish_dates = [next_monday + timedelta(days=offset) for offset, _ in schedule]
+    # The engine always returns four stories. Expand 1-4 selected weekdays into
+    # four chronological slots, distributing stories as evenly as possible:
+    # 1 => 4, 2 => 2+2, 3 => 2+1+1, 4 => 1 each.
+    story_schedule = [schedule[(i * len(schedule)) // 4] for i in range(4)]
+    publish_dates = [next_monday + timedelta(days=offset) for offset, _ in story_schedule]
     return {
         "p_client_id": config.client_id,
         "p_generation_week": monday.isoformat(),
@@ -99,7 +103,7 @@ def _thread_payload(row: dict, config: ClientContentConfig, result: HiloGenerado
         "p_stories": [{"text": result.historias[i], "image_url": result.imagenes_editadas_url[i],
             "image_original_url": result.imagenes_originales_url[i],
             "fecha_publicacion": publish_dates[i].isoformat(),
-            "hora_publicacion": f"{schedule[i][1]}:00",
+            "hora_publicacion": f"{story_schedule[i][1]}:00",
             # Read what the engine actually drew on the image (result.cta_agregado),
             # don't re-roll the dice here: a second independent draw could disagree
             # with the composed image and persist a flag that doesn't match it.
@@ -109,9 +113,9 @@ def _thread_payload(row: dict, config: ClientContentConfig, result: HiloGenerado
     }
 
 
-def seleccionar_imagenes(disponibles: list[tuple[str, str, bytes]], historial: list[dict],
-                         ahora: datetime, semanas_cooldown: int = NO_REPEAT_WEEKS
-                         ) -> tuple[list[tuple[str, str, bytes]], bool]:
+def seleccionar_imagenes(disponibles: list[tuple], historial: list[dict],
+                         ahora: datetime, semanas_cooldown: int = NO_REPEAT_WEEKS,
+                         limite: int | None = 4) -> tuple[list[tuple], bool]:
     """Select four images, preferring never-used and cooldown-expired files."""
     cutoff = ahora - timedelta(weeks=semanas_cooldown)
     history = {row["drive_file_id"]: row.get("last_used_at") for row in historial}
@@ -134,10 +138,9 @@ def seleccionar_imagenes(disponibles: list[tuple[str, str, bytes]], historial: l
             recent.append((used_at, image))
 
     chosen = never + [image for _, image in sorted(expired, key=lambda item: item[0])]
-    if len(chosen) >= 4:
-        return chosen[:4], False
-    recycled = chosen + [image for _, image in sorted(recent, key=lambda item: item[0])]
-    return recycled[:4], len(recycled) < 4 or len(chosen) < 4
+    ranked = chosen + [image for _, image in sorted(recent, key=lambda item: item[0])]
+    selected = ranked if limite is None else ranked[:limite]
+    return selected, len(selected) < 4 or len(chosen) < 4
 
 
 def generate_weekly(db, today: date | None = None) -> None:
@@ -151,17 +154,24 @@ def generate_weekly(db, today: date | None = None) -> None:
             if existing:
                 continue
             config = build_content_config(row)
-            available = drive.list_images(row.get("drive_folder_id"))
+            available = drive.list_image_metadata(row.get("drive_folder_id"))
             if len(available) < 4:
                 raise ValueError(f"sin imágenes suficientes: {len(available)} disponibles; se requieren 4")
             try:
                 history = _all_rows(db.table("client_images").select(
                     "drive_file_id,last_used_at"
                 ).eq("client_id", row["id"]))
-            except Exception:
-                history = []
-            selected_rows, recycled = seleccionar_imagenes(available, history,
-                datetime.now(timezone.utc))
+            except Exception as exc:
+                logger.exception("Could not read image history for client %s", row["id"])
+                raise RuntimeError("No se pudo leer el historial de imágenes usadas") from exc
+            now = datetime.now(timezone.utc)
+            ranked, _ = seleccionar_imagenes(available, history, now, limite=None)
+            selected_rows = drive.download_images(ranked, limit=4)
+            if len(selected_rows) < 4:
+                raise ValueError(
+                    f"sin imágenes legibles suficientes: {len(selected_rows)} disponibles; se requieren 4"
+                )
+            _, recycled = seleccionar_imagenes(selected_rows, history, now)
             selected = [ImagenCandidata(drive_file_id=id, drive_file_name=name, image_bytes=data)
                         for id, name, data in selected_rows]
             result = content.generar_hilo(config, selected)

@@ -51,6 +51,32 @@ def test_portal_frontend_uses_real_api_without_prototype_data():
     assert "images.unsplash.com" not in source
 
 
+def test_portal_frontend_supports_variable_rhythm_and_keeps_all_pending_groups_active():
+    page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
+        "sub": "emp-1", "email": "pm@example.com", "name": "PM",
+        "agency_id": "agency-1", "role": "employee",
+    })})
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "Elegí entre 1 y 4 días" in page.text
+    assert "Elegí al menos un día de publicación." in source
+    assert "function storyIsScheduled(story, group)" in source
+    assert "if (!storyIsScheduled(story, group)) continue;" in source
+    assert "if (storyIsScheduled(story, group)) continue;" in source
+    assert "for (const g of state.groups)" in source
+    assert "draftDates = new Set(); setControlsDisabled(true)" in source
+
+
+def test_portal_frontend_keeps_story_reordering_inside_its_group():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert 'data-story-group-id="${escapeHtml(groupId)}"' in source
+    assert "draggedStoryGroupId=card.dataset.storyGroupId" in source
+    assert "card.dataset.storyGroupId !== draggedStoryGroupId" in source
+    assert "Generación IA" in source
+    assert "Carga manual" in source
+
+
 def test_static_assets_are_never_cached_in_development():
     # portal.js/portal.html change every few minutes during dev and are
     # served fresh from disk under the same URL every time — without this,

@@ -23,3 +23,20 @@ export async function createDatabase() {
   await db.exec(fs.readFileSync(process.argv[2] || 'supabase_schema.sql', 'utf8'));
   return db;
 }
+
+export function migrationFiles({ from = '', through = '' } = {}) {
+  return fs.readdirSync('migrations')
+    .filter((name) => name.endsWith('.sql'))
+    .filter((name) => !from || name >= from)
+    .filter((name) => !through || name <= through)
+    .sort()
+    .map((name) => path.join('migrations', name));
+}
+
+export async function applyMigrations(db, options = {}) {
+  const files = migrationFiles(options);
+  for (const file of files) {
+    await db.exec(fs.readFileSync(file, 'utf8'));
+  }
+  return files;
+}

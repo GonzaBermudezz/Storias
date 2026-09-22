@@ -51,21 +51,35 @@ def _image_files(drive_folder_id: str):
     return files, sorted(metadata, key=lambda item: (item["name"], item["id"]))
 
 
+def list_image_metadata(drive_folder_id: str) -> list[tuple[str, str]]:
+    """Return image IDs and names without downloading file contents."""
+    _, metadata = _image_files(drive_folder_id)
+    return [(item["id"], item["name"]) for item in metadata]
+
+
+def download_images(images: list[tuple[str, str]], limit: int | None = None
+                    ) -> list[tuple[str, str, bytes]]:
+    """Download readable images in the requested order, stopping at ``limit``."""
+    files = _drive_client().files()
+    downloaded = []
+    for file_id, file_name in images:
+        data = files.get_media(fileId=file_id, supportsAllDrives=True).execute()
+        if not _is_readable_image(data):
+            logger.warning("Skipping unreadable Drive image %s (%s)", file_id, file_name)
+            continue
+        downloaded.append((file_id, file_name, data))
+        if limit is not None and len(downloaded) >= limit:
+            break
+    return downloaded
+
+
 def list_images(drive_folder_id: str) -> list[tuple[str, str, bytes]]:
     """Return every readable image directly inside the folder, in stable name/ID order.
 
     Files that fail to decode (corrupt, unsupported format like HEIC, etc.)
     are skipped with a warning instead of aborting the whole client's batch.
     """
-    files, metadata = _image_files(drive_folder_id)
-    images = []
-    for item in metadata:
-        data = files.get_media(fileId=item["id"], supportsAllDrives=True).execute()
-        if not _is_readable_image(data):
-            logger.warning("Skipping unreadable Drive image %s (%s)", item["id"], item["name"])
-            continue
-        images.append((item["id"], item["name"], data))
-    return images
+    return download_images(list_image_metadata(drive_folder_id))
 
 
 def count_images(drive_folder_id: str) -> int:

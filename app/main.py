@@ -99,7 +99,8 @@ async def security_headers(request: Request, call_next):
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
-app.include_router(aprobar.router)
+# WhatsApp approval was discarded in favor of automatic publishing.
+# app.include_router(aprobar.router)
 app.include_router(demo.router)
 app.include_router(portal.router)
 

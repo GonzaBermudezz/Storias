@@ -180,7 +180,7 @@
   }
   async function selectClient(clientId) {
     const selectionVersion = ++state.selectionVersion;
-    state.selectedClientId = clientId; state.client = null; state.groups = []; state.editingStory = null; setControlsDisabled(true);
+    state.selectedClientId = clientId; state.client = null; state.groups = []; state.editingStory = null; draftDates = new Set(); setControlsDisabled(true);
     if ($('story-dialog').open) $('story-dialog').close();
     clearMessage(); $('empty').classList.add('hidden'); $('client-view').classList.remove('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
@@ -236,39 +236,45 @@
     return isoDate ? new Intl.DateTimeFormat('es-AR', {weekday:'short', day:'numeric', timeZone:'UTC'}).format(new Date(`${isoDate}T00:00:00Z`)) : '';
   }
   function activeGroup() {
-    // The nearest upcoming group by date (state.groups is date-sorted by the
-    // backend) — used only for the week-badge/activity summary.
-    return state.groups[0];
+    // Prefer the nearest group still awaiting confirmation; if everything is
+    // already scheduled, keep showing the nearest confirmed publication.
+    return state.groups.find((group) => (group.stories || []).some((story) => !storyIsScheduled(story, group))) || state.groups[0];
+  }
+  function storyIsScheduled(story, group) {
+    // story.agendado is the per-date source of truth.  The group fallback
+    // keeps records created before the per-story migration readable.
+    return story.agendado === true || (story.agendado === undefined && group.agendado === true);
   }
   function activeDates() {
-    // Every date covered by the nearest not-yet-agendado group, plus any date
-    // the employee has clicked on the calendar this session — these render as
-    // editable rows in "Historias generadas". Everything else (including any
-    // manual day already confirmed as agendado) is just "scheduled" and shows
-    // as a compact preview in "Plan de la próxima semana" instead.
+    // Every date covered by every not-yet-agendado group, plus any date the
+    // employee has clicked on the calendar this session. It is valid to have
+    // a manual upload and the weekly AI batch awaiting confirmation together;
+    // neither may disappear from the editable area.
     const dates = new Set();
     const agendadoDates = new Set();
     for (const g of state.groups) {
-      if (g.agendado) for (const story of (g.stories || [])) if (story.fecha_publicacion) agendadoDates.add(story.fecha_publicacion);
-    }
-    const group = state.groups.find((g) => !g.agendado);
-    if (group) {
-      for (const story of (group.stories || [])) if (story.fecha_publicacion) dates.add(story.fecha_publicacion);
-      if (!dates.size && group.scheduled_date) dates.add(group.scheduled_date);
+      let groupHasDate = false;
+      for (const story of (g.stories || [])) {
+        if (!story.fecha_publicacion) continue;
+        if (storyIsScheduled(story, g)) agendadoDates.add(story.fecha_publicacion);
+        else {
+          dates.add(story.fecha_publicacion);
+          groupHasDate = true;
+        }
+      }
+      if (!groupHasDate && !(g.stories || []).length && !g.agendado && g.scheduled_date) dates.add(g.scheduled_date);
     }
     for (const iso of draftDates) if (!agendadoDates.has(iso)) dates.add(iso);
     return dates;
   }
   function planItemsByDate() {
-    // Every date whose content is "done" — an agendado manual group, or a
-    // date outside the active editable window — grouped into one entry per
-    // day, since Plan shows one box per day with ALL of that day's images.
-    const active = activeDates();
+    // Only confirmed groups belong in Plan. Pending AI and manual groups stay
+    // in "Historias generadas" until the employee schedules them.
     const byDate = new Map();
     for (const group of state.groups) {
       for (const story of (group.stories || [])) {
         if (!story.fecha_publicacion) continue;
-        if (!(group.agendado || !active.has(story.fecha_publicacion))) continue;
+        if (!storyIsScheduled(story, group)) continue;
         if (!byDate.has(story.fecha_publicacion)) byDate.set(story.fecha_publicacion, {stories: [], descripcion: null});
         const entry = byDate.get(story.fecha_publicacion);
         entry.stories.push(story);
@@ -309,11 +315,11 @@
     const byDate = new Map();
     const manualGroupByDate = new Map(); // date -> its manual (non-AI) group, if any
     for (const group of state.groups) {
-      if (group.agendado) continue; // already confirmed — lives in "Plan" only, never here
       for (const story of (group.stories || [])) {
+        if (storyIsScheduled(story, group)) continue; // confirmed date lives in Plan
         if (!story.fecha_publicacion || !active.has(story.fecha_publicacion)) continue;
         if (!byDate.has(story.fecha_publicacion)) byDate.set(story.fecha_publicacion, []);
-        byDate.get(story.fecha_publicacion).push(story);
+        byDate.get(story.fecha_publicacion).push({group, story});
         if (!group.generation_week) manualGroupByDate.set(story.fecha_publicacion, group);
       }
     }
@@ -328,8 +334,19 @@
     $('week-badge').textContent = first === last ? dayLabel(first) : `${dayLabel(first)} – ${dayLabel(last)}`;
     $('week-badge').classList.remove('hidden');
     const rows = dates.map((iso) => {
-      const stories = byDate.get(iso).sort((a,b) => a.order - b.order);
-      const cards = stories.map((story,index) => storyCard(story,index)).join('');
+      const entries = byDate.get(iso);
+      const stories = entries.map(({story}) => story);
+      const batches = new Map();
+      for (const {group, story} of entries) {
+        if (!batches.has(group.id)) batches.set(group.id, {group, stories: []});
+        batches.get(group.id).stories.push(story);
+      }
+      const batchRows = [...batches.values()].map(({group, stories: batchStories}) => {
+        batchStories.sort((a,b) => a.order - b.order);
+        const label = group.generation_week ? 'Generación IA' : 'Carga manual';
+        const cards = batchStories.map((story,index) => storyCard(story,index,group.id)).join('');
+        return `<div class="story-batch" data-story-group-id="${escapeHtml(group.id)}"><div class="story-batch-label">${label}</div><div class="day-row-cards">${cards}</div></div>`;
+      }).join('');
       const manualGroup = manualGroupByDate.get(iso);
       // A day publishes once — AI batch and manual uploads sharing a date are
       // one publication, so "listo para agendar" only needs everything for
@@ -340,7 +357,8 @@
       const timeValue = stories.length && stories[0].hora_publicacion ? String(stories[0].hora_publicacion).slice(0,5) : '09:00';
       const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}" ${timeEditable ? '' : 'disabled title="Este día usa el horario de Editar ritmo"'}>`;
       const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué va este hilo?">` : '';
-      return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${scheduleBtn}${timeInput}</div>${descInput}</div><div class="day-row-cards">${cards}<div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div></div></div>`;
+      const addRow = `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div></div>`;
+      return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${scheduleBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
     }).join('');
     $('stories').innerHTML = `<section class="group">${rows}</section>`;
   }
@@ -362,11 +380,11 @@
       ? `<div class="status-card warn"><span>⚠️</span><div><strong>Necesita atención</strong><p>${escapeHtml(state.client.generation_error)}</p></div></div>`
       : `<div class="status-card ok"><span>✓</span><div><strong>Todo en orden</strong><p>No hay errores de generación pendientes.</p></div></div>`;
   }
-  function storyCard(story, index) {
+  function storyCard(story, index, groupId) {
     const dateBadge = story.fecha_publicacion ? `<span class="story-date">${escapeHtml(dayLabel(story.fecha_publicacion))}</span>` : '';
     const approvedClass = story.aprobado ? ' approved' : '';
     const approvedBadge = story.aprobado ? '<span class="approved-badge" title="Aprobada">✓</span>' : '';
-    return `<article class="story${approvedClass}" draggable="true" data-story-id="${escapeHtml(story.id)}">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="Historia ${index+1}">` : ''}<span class="story-num">${index+1}</span>${dateBadge}${approvedBadge}<div class="story-actions"><button class="icon-btn" data-action="preview" aria-label="Ver en grande">👁</button><button class="icon-btn" data-action="edit" aria-label="Editar">✎</button><button class="icon-btn" data-action="delete" aria-label="Eliminar">×</button></div><div class="story-overlay"><p class="story-text">${escapeHtml(story.text || 'Sin texto todavía')}</p></div></article>`;
+    return `<article class="story${approvedClass}" draggable="true" data-story-id="${escapeHtml(story.id)}" data-story-group-id="${escapeHtml(groupId)}">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="Historia ${index+1}">` : ''}<span class="story-num">${index+1}</span>${dateBadge}${approvedBadge}<div class="story-actions"><button class="icon-btn" data-action="preview" aria-label="Ver en grande">👁</button><button class="icon-btn" data-action="edit" aria-label="Editar">✎</button><button class="icon-btn" data-action="delete" aria-label="Eliminar">×</button></div><div class="story-overlay"><p class="story-text">${escapeHtml(story.text || 'Sin texto todavía')}</p></div></article>`;
   }
   async function saveClientField(field, buttonId) {
     const name = field === 'weekly_focus' ? 'focus' : 'description';
@@ -414,7 +432,7 @@
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled=false; }
   }
   const CAL_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-  let ritmoDays = []; // [{day, time}], up to 4 — the AI's recurring weekly cadence
+  let ritmoDays = []; // [{day, time}], 1–4 days — four stories are distributed across them
   let calMonthOffset = 0;
   let pendingUploadDate = null; // set right before triggering the hidden file input
   let pendingUploadHora = '09:00'; // read from that day's inline time input at the same moment
@@ -461,7 +479,10 @@
     if (!clientId) return;
     const idx = ritmoDays.findIndex((e) => e.day === day);
     const next = [...ritmoDays];
-    if (idx >= 0) next.splice(idx, 1);
+    if (idx >= 0) {
+      if (next.length === 1) { showMessage('Elegí al menos un día de publicación.', true); return; }
+      next.splice(idx, 1);
+    }
     else { if (next.length >= 4) { showMessage('Ya elegiste 4 días — sacá uno para agregar otro.', true); return; } next.push({day, time:'09:00'}); }
     try {
       const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/ritmo`, {method:'PATCH', body:JSON.stringify({publish_days:next})});
@@ -525,8 +546,9 @@
     // or both) counts toward "ready", from any group not already agendado.
     const dayStories = [];
     for (const group of state.groups) {
-      if (group.agendado) continue;
-      for (const story of (group.stories || [])) if (story.fecha_publicacion === iso) dayStories.push(story);
+      for (const story of (group.stories || [])) {
+        if (!storyIsScheduled(story, group) && story.fecha_publicacion === iso) dayStories.push(story);
+      }
     }
     if (!dayStories.length || !dayStories.every((s) => s.aprobado)) return;
     const confirmed = await confirmDialog(`Se aprobaron todas las historias del ${dayLabel(iso)}. ¿Agendar la publicación para ese día?`, {okLabel:'Agendar'});
@@ -797,9 +819,11 @@
     toggleApproval(found.story);
   });
   let draggedStoryId = null;
+  let draggedStoryGroupId = null;
   $('stories').addEventListener('dragstart',(event)=>{
     const card=event.target.closest('.story[data-story-id]'); if(!card)return;
     draggedStoryId=card.dataset.storyId;
+    draggedStoryGroupId=card.dataset.storyGroupId;
     event.dataTransfer.effectAllowed='move';
     card.classList.add('dragging');
   });
@@ -807,9 +831,11 @@
     const card=event.target.closest('.story[data-story-id]'); if(card)card.classList.remove('dragging');
     document.querySelectorAll('#stories .drag-over').forEach((el)=>el.classList.remove('drag-over'));
     draggedStoryId=null;
+    draggedStoryGroupId=null;
   });
   $('stories').addEventListener('dragover',(event)=>{
     const card=event.target.closest('.story[data-story-id]'); if(!card||!draggedStoryId)return;
+    if (card.dataset.storyGroupId !== draggedStoryGroupId) return;
     event.preventDefault();
     if (card.dataset.storyId!==draggedStoryId) card.classList.add('drag-over');
   });
@@ -818,6 +844,7 @@
   });
   $('stories').addEventListener('drop',(event)=>{
     const card=event.target.closest('.story[data-story-id]'); if(!card||!draggedStoryId)return;
+    if (card.dataset.storyGroupId !== draggedStoryGroupId) return;
     event.preventDefault(); card.classList.remove('drag-over');
     const targetId=card.dataset.storyId; if(targetId===draggedStoryId)return;
     const found=findStory(draggedStoryId); if(found)reorderStory(found.group,draggedStoryId,targetId);

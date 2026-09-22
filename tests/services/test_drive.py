@@ -45,6 +45,32 @@ def test_empty_folder_returns_no_images(monkeypatch):
     files.get_media.assert_not_called()
 
 
+def test_list_image_metadata_does_not_download_file_contents(monkeypatch):
+    files = Mock()
+    files.list.return_value.execute.return_value = {"files": [
+        {"id": "two", "name": "two.png"}, {"id": "one", "name": "one.jpg"},
+    ]}
+    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+
+    assert drive.list_image_metadata("folder") == [("one", "one.jpg"), ("two", "two.png")]
+    files.get_media.assert_not_called()
+
+
+def test_download_images_stops_after_requested_readable_limit(monkeypatch):
+    files = Mock()
+    files.get_media.return_value.execute.side_effect = [b"not-an-image", _ONE, _TWO]
+    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+
+    result = drive.download_images(
+        [("bad", "bad.heic"), ("one", "one.jpg"), ("two", "two.png"),
+         ("unused", "unused.jpg")],
+        limit=2,
+    )
+
+    assert result == [("one", "one.jpg", _ONE), ("two", "two.png", _TWO)]
+    assert files.get_media.call_count == 3
+
+
 def test_missing_folder_fails_before_google(monkeypatch):
     factory = Mock()
     monkeypatch.setattr(drive, "_drive_client", factory)

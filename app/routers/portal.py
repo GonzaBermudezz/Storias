@@ -69,12 +69,12 @@ class ClientRitmoPatch(BaseModel):
 
     @field_validator("publish_days")
     @classmethod
-    def exactly_four_distinct_weekdays(cls, value):
+    def one_to_four_distinct_weekdays(cls, value):
         if value is None:
             return None
         days = [entry.day for entry in value]
-        if len(value) != 4 or len(set(days)) != 4:
-            raise ValueError("publish_days debe tener exactamente 4 días distintos (0=lunes..6=domingo)")
+        if not 1 <= len(value) <= 4 or len(set(days)) != len(value):
+            raise ValueError("publish_days debe tener entre 1 y 4 días distintos (0=lunes..6=domingo)")
         return sorted(value, key=lambda entry: entry.day)
 
 
@@ -336,7 +336,7 @@ def patch_client_font(client_id: str, body: ClientFontPatch, employee: EmployeeD
 
 @router.patch("/clientes/{client_id}/ritmo")
 def patch_client_ritmo(client_id: str, body: ClientRitmoPatch, employee: EmployeeDep):
-    """Which 4 weekdays (and what time each one) this client's weekly thread
+    """Which 1-4 weekdays (and what time each one) this client's weekly thread
     publishes on — purely a scheduling setting, so a plain update instead of
     the audited RPC."""
     db = get_admin_client()
@@ -406,16 +406,16 @@ async def create_manual_story(client_id: str, employee: EmployeeDep,
     if not _valid_hhmm(hora_publicacion):
         raise HTTPException(status_code=422, detail="Hora inválida (formato HH:MM)")
 
-    data = await image.read()
-    try:
-        url = uploads.upload_image(data, client_id, f"{fecha_publicacion}-{parsed_date.toordinal()}-{hora_publicacion.replace(':','')}")
-    except uploads.UploadError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    group = db.table("story_groups").select("id").eq("client_id", client_id).eq(
+    group = db.table("story_groups").select("id,agendado").eq("client_id", client_id).eq(
         "scheduled_date", fecha_publicacion
-    ).is_("generation_week", "null").eq("agendado", False).execute().data
+    ).is_("generation_week", "null").is_("manual_duplicate_of", "null").execute().data
+    created_group = False
     if group:
+        if group[0]["agendado"]:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya existe un grupo manual agendado para ese cliente y fecha.",
+            )
         group_id = group[0]["id"]
         existing = db.table("stories").select("order").eq(
             "story_group_id", group_id
@@ -424,21 +424,58 @@ async def create_manual_story(client_id: str, employee: EmployeeDep,
         if next_order > 10:
             raise HTTPException(status_code=422, detail="Ya hay demasiadas historias en este día")
     else:
-        created = db.table("story_groups").insert({
-            "client_id": client_id, "agency_id": employee.agency_id,
-            "scheduled_date": fecha_publicacion, "scheduled_time": f"{hora_publicacion}:00",
-            "status": "pending",
-        }).execute().data
+        try:
+            created = db.table("story_groups").insert({
+                "client_id": client_id, "agency_id": employee.agency_id,
+                "scheduled_date": fecha_publicacion, "scheduled_time": f"{hora_publicacion}:00",
+                "status": "pending",
+            }).execute().data
+        except APIError as exc:
+            if exc.code == "23505":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Ya existe un grupo manual para ese cliente y fecha. Recargá y probá de nuevo.",
+                ) from exc
+            raise
         group_id = created[0]["id"]
         next_order = 1
+        created_group = True
 
-    story = db.table("stories").insert({
-        "story_group_id": group_id, "client_id": client_id, "order": next_order,
-        "text": "", "image_url": url, "image_original_url": url,
-        "fecha_publicacion": fecha_publicacion, "hora_publicacion": f"{hora_publicacion}:00",
-        "estado": "pendiente", "agregar_cta": False, "aprobado": False,
-    }).execute().data
+    data = await image.read()
+    try:
+        uploaded = uploads.upload_image(data, client_id, f"{fecha_publicacion}-{parsed_date.toordinal()}-{hora_publicacion.replace(':','')}")
+    except uploads.UploadError as exc:
+        if created_group:
+            _delete_manual_group_if_empty(db, group_id)
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    try:
+        story = db.table("stories").insert({
+            "story_group_id": group_id, "client_id": client_id, "order": next_order,
+            "text": "", "image_url": uploaded.url, "image_original_url": uploaded.url,
+            "fecha_publicacion": fecha_publicacion, "hora_publicacion": f"{hora_publicacion}:00",
+            "estado": "pendiente", "agregar_cta": False, "aprobado": False,
+        }).execute().data
+        if not story:
+            raise RuntimeError("No se pudo guardar la historia manual")
+    except Exception:
+        try:
+            uploads.delete_image(uploaded.public_id)
+        except uploads.UploadError:
+            pass
+        if created_group:
+            _delete_manual_group_if_empty(db, group_id)
+        raise
     return story[0]
+
+
+def _delete_manual_group_if_empty(db, group_id: str) -> None:
+    """Atomically remove a failed reservation only while it has no stories."""
+    try:
+        db.rpc("delete_empty_manual_group", {"p_group_id": group_id}).execute()
+    except Exception:
+        # Cleanup must not hide the original upload/database failure.
+        pass
 
 
 class StoryApproval(BaseModel):
@@ -540,9 +577,20 @@ def schedule_day(client_id: str, fecha_publicacion: str, employee: EmployeeDep):
         raise HTTPException(status_code=422, detail="No hay historias para agendar ese día")
     if not all(row.get("aprobado") for row in active):
         raise HTTPException(status_code=422, detail="Todavía hay historias sin aprobar ese día")
+    story_ids = [row["id"] for row in active]
+    db.table("stories").update({"agendado": True}).in_("id", story_ids).execute()
+
+    # An AI group spans several publication dates.  Keep the legacy group flag
+    # as a summary only: it becomes true after every active story in that group
+    # has been scheduled, never after confirming just one date.
     group_ids = {row["story_group_id"] for row in active}
     for group_id in group_ids:
-        db.table("story_groups").update({"agendado": True}).eq("id", group_id).execute()
+        group_stories = db.table("stories").select("id,estado,agendado").eq(
+            "story_group_id", group_id
+        ).execute().data or []
+        relevant = [row for row in group_stories if row.get("estado") not in _LOCKED_STATES]
+        if relevant and all(row.get("agendado") for row in relevant):
+            db.table("story_groups").update({"agendado": True}).eq("id", group_id).execute()
     return {"detail": "Publicación agendada"}
 
 
