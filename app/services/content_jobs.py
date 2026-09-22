@@ -143,45 +143,61 @@ def seleccionar_imagenes(disponibles: list[tuple], historial: list[dict],
     return selected, len(selected) < 4 or len(chosen) < 4
 
 
+def generate_for_client(db, row: dict, today: date) -> dict:
+    """Generate and persist the upcoming weekly thread for one client.
+
+    ``created=False`` is an idempotent no-op: content for this generation
+    week already exists. All operational failures propagate so each caller can
+    decide whether to persist, display, or otherwise handle them.
+    """
+    week = (today - timedelta(days=today.weekday())).isoformat()
+    existing = db.table("story_groups").select("id").eq(
+        "client_id", row["id"]
+    ).eq("generation_week", week).execute().data
+    if existing:
+        return {"created": False, "group_id": existing[0].get("id"), "recycled": False}
+
+    config = build_content_config(row)
+    available = drive.list_image_metadata(row.get("drive_folder_id"))
+    if len(available) < 4:
+        raise ValueError(f"sin imágenes suficientes: {len(available)} disponibles; se requieren 4")
+    try:
+        history = _all_rows(db.table("client_images").select(
+            "drive_file_id,last_used_at"
+        ).eq("client_id", row["id"]))
+    except Exception as exc:
+        logger.exception("Could not read image history for client %s", row["id"])
+        raise RuntimeError("No se pudo leer el historial de imágenes usadas") from exc
+    now = datetime.now(timezone.utc)
+    ranked, _ = seleccionar_imagenes(available, history, now, limite=None)
+    selected_rows = drive.download_images(ranked, limit=4)
+    if len(selected_rows) < 4:
+        raise ValueError(
+            f"sin imágenes legibles suficientes: {len(selected_rows)} disponibles; se requieren 4"
+        )
+    _, recycled = seleccionar_imagenes(selected_rows, history, now)
+    selected = [ImagenCandidata(drive_file_id=id, drive_file_name=name, image_bytes=data)
+                for id, name, data in selected_rows]
+    result = content.generar_hilo(config, selected)
+    persisted = db.rpc(
+        "persist_generated_thread", _thread_payload(row, config, result, selected, today)
+    ).execute()
+    if recycled:
+        # This is a benign, informational event, not a failure: don't write
+        # it into generation_error, whose documented contract (AGENTS.md)
+        # is "the last generation error" and gets cleared on every success.
+        # TODO(B3): give this its own column and expose it in the health dashboard.
+        logger.warning("Client %s generated with image recycling (pool_bajo)", row["id"])
+    group_id = str(persisted.data) if persisted.data is not None else None
+    return {"created": True, "group_id": group_id, "recycled": recycled}
+
+
 def generate_weekly(db, today: date | None = None) -> None:
     today = today or local_today()
-    week = (today - timedelta(days=today.weekday())).isoformat()
     clients = _all_rows(db.table("clients").select("*").eq("active", True).order("id"))
     for row in clients:
         try:
-            existing = db.table("story_groups").select("id").eq(
-                "client_id", row["id"]).eq("generation_week", week).execute().data
-            if existing:
-                continue
-            config = build_content_config(row)
-            available = drive.list_image_metadata(row.get("drive_folder_id"))
-            if len(available) < 4:
-                raise ValueError(f"sin imágenes suficientes: {len(available)} disponibles; se requieren 4")
-            try:
-                history = _all_rows(db.table("client_images").select(
-                    "drive_file_id,last_used_at"
-                ).eq("client_id", row["id"]))
-            except Exception as exc:
-                logger.exception("Could not read image history for client %s", row["id"])
-                raise RuntimeError("No se pudo leer el historial de imágenes usadas") from exc
-            now = datetime.now(timezone.utc)
-            ranked, _ = seleccionar_imagenes(available, history, now, limite=None)
-            selected_rows = drive.download_images(ranked, limit=4)
-            if len(selected_rows) < 4:
-                raise ValueError(
-                    f"sin imágenes legibles suficientes: {len(selected_rows)} disponibles; se requieren 4"
-                )
-            _, recycled = seleccionar_imagenes(selected_rows, history, now)
-            selected = [ImagenCandidata(drive_file_id=id, drive_file_name=name, image_bytes=data)
-                        for id, name, data in selected_rows]
-            result = content.generar_hilo(config, selected)
-            db.rpc("persist_generated_thread", _thread_payload(row, config, result, selected, today)).execute()
-            if recycled:
-                # This is a benign, informational event, not a failure: don't write
-                # it into generation_error, whose documented contract (AGENTS.md)
-                # is "the last generation error" and gets cleared on every success.
-                # TODO(B3): give this its own column and expose it in the health dashboard.
-                logger.warning("Client %s generated with image recycling (pool_bajo)", row["id"])
+            generate_for_client(db, row, today)
         except Exception as exc:
             logger.error("Weekly generation failed for client %s: %s", row["id"], type(exc).__name__)
             try:

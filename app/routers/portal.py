@@ -1,7 +1,8 @@
 """Authenticated API used by the employee portal."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
+import logging
 
 import requests
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -15,10 +16,11 @@ from app.engine import content
 from app.engine.exceptions import ClaudeGenerationError
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
-from app.services import drive, uploads
+from app.services import content_jobs, drive, uploads
 from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config
 
 router = APIRouter(prefix="/portal", tags=["portal"])
+logger = logging.getLogger(__name__)
 
 # Stories in these states already happened (or are mid-flight) on Instagram:
 # editing or cancelling them would silently diverge the DB from what's live.
@@ -353,6 +355,32 @@ def get_default_ritmo(employee: EmployeeDep):
     settings = get_settings()
     default_time = f"{settings.publication_hour:02d}:{settings.publication_minute:02d}"
     return {"publish_days": [{"day": day, "time": default_time} for day in PUBLISH_DAY_OFFSETS]}
+
+
+@router.post("/clientes/{client_id}/generar-semana")
+def generar_semana(client_id: str, employee: EmployeeDep):
+    """Generate this client's upcoming weekly thread immediately."""
+    db = get_admin_client()
+    client = _client_or_error(db, client_id, employee.agency_id)
+    try:
+        result = content_jobs.generate_for_client(db, client, content_jobs.local_today())
+    except Exception as exc:
+        try:
+            db.table("clients").update({
+                "generation_error": str(exc),
+                "generation_error_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", client_id).execute()
+        except Exception:
+            logger.exception("Could not persist generation error for client %s", client_id)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if not result["created"]:
+        return {"detail": "Ya se generó contenido para esta semana.", "created": False}
+    return {
+        "detail": "Se generaron 4 historias para la semana que viene.",
+        "created": True,
+        "recycled": result["recycled"],
+    }
 
 
 @router.post("/clientes/{client_id}/probar-prompt")

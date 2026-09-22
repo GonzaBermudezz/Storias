@@ -61,7 +61,7 @@
     });
   }
   function initials(name) { return String(name || '?').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(); }
-  function setControlsDisabled(disabled) { ['save-description','save-focus','try-prompt','save-story'].forEach((id) => { $(id).disabled = disabled; }); }
+  function setControlsDisabled(disabled) { ['save-description','save-focus','try-prompt','save-story','generate-weekly'].forEach((id) => { $(id).disabled = disabled; }); }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
   function clearSelection() {
     state.selectionVersion += 1; state.selectedClientId = null; state.client = null; state.groups = []; state.editingStory = null;
@@ -491,6 +491,34 @@
       showMessage('Días automáticos actualizados.');
     } catch(error) { showMessage(error.message, true); }
   }
+  function openRitmoDialog() {
+    const feedback = $('ritmo-generation-message');
+    feedback.textContent = '';
+    feedback.classList.add('hidden');
+    $('ritmo-dialog').showModal();
+  }
+  async function generateWeeklyNow() {
+    const button = $('generate-weekly'), feedback = $('ritmo-generation-message');
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    const previousLabel = button.textContent;
+    feedback.textContent = ''; feedback.classList.add('hidden');
+    button.disabled = true; button.textContent = 'Generando...';
+    try {
+      const result = await api(`/portal/clientes/${encodeURIComponent(clientId)}/generar-semana`, {method:'POST'});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      $('ritmo-dialog').close();
+      await selectClient(clientId);
+      showMessage(result.detail);
+    } catch(error) {
+      if (selectionVersion === state.selectionVersion && clientId === state.client?.id) {
+        feedback.textContent = error.message;
+        feedback.classList.remove('hidden');
+      }
+    } finally {
+      button.disabled = false; button.textContent = previousLabel;
+    }
+  }
   async function uploadManualImage(iso, hora, file) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
@@ -785,9 +813,10 @@
     pendingUploadDate = null; event.target.value = '';
     if (file && iso) uploadManualImage(iso, hora, file);
   });
-  $('edit-ritmo').addEventListener('click',()=>$('ritmo-dialog').showModal());
+  $('edit-ritmo').addEventListener('click',openRitmoDialog);
   $('close-ritmo').addEventListener('click',()=>$('ritmo-dialog').close());
   $('close-ritmo-2').addEventListener('click',()=>$('ritmo-dialog').close());
+  $('generate-weekly').addEventListener('click',generateWeeklyNow);
   $('ig-preview-close').addEventListener('click',()=>$('ig-preview-dialog').close());
   $('ig-preview-prev').addEventListener('click',previewPrev);
   $('ig-preview-next').addEventListener('click',previewNext);

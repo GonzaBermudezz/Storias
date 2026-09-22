@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -211,6 +213,73 @@ def test_default_ritmo_reports_global_offsets(client):
     assert response.json() == {"publish_days": [
         {"day": 0, "time": "09:00"}, {"day": 2, "time": "09:00"},
         {"day": 4, "time": "09:00"}, {"day": 6, "time": "09:00"}]}
+
+
+def test_generate_weekly_for_client_returns_created(monkeypatch, client):
+    row = {"id": "c1", "agency_id": "agency-1", "publish_days": [{"day": 1, "time": "09:00"}]}
+    db = DB([row])
+    generated = Mock(return_value={"created": True, "group_id": "g1", "recycled": False})
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.content_jobs.local_today", lambda: date(2026, 9, 18))
+    monkeypatch.setattr("app.routers.portal.content_jobs.generate_for_client", generated)
+
+    response = client.post("/portal/clientes/c1/generar-semana")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "detail": "Se generaron 4 historias para la semana que viene.",
+        "created": True,
+        "recycled": False,
+    }
+    generated.assert_called_once_with(db, row, date(2026, 9, 18))
+
+
+def test_generate_weekly_for_client_reports_existing_as_normal_state(monkeypatch, client):
+    row = {"id": "c1", "agency_id": "agency-1"}
+    db = DB([row])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.content_jobs.generate_for_client", lambda *_: {
+        "created": False, "group_id": "existing", "recycled": False,
+    })
+
+    response = client.post("/portal/clientes/c1/generar-semana")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "detail": "Ya se generó contenido para esta semana.", "created": False,
+    }
+
+
+def test_generate_weekly_for_client_surfaces_and_persists_error(monkeypatch, client):
+    row = {"id": "c1", "agency_id": "agency-1"}
+    db = DB([row, []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    def fail(*_):
+        raise ValueError("sin imágenes suficientes: 2 disponibles; se requieren 4")
+
+    monkeypatch.setattr("app.routers.portal.content_jobs.generate_for_client", fail)
+
+    response = client.post("/portal/clientes/c1/generar-semana")
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "sin imágenes suficientes: 2 disponibles; se requieren 4"
+    table, payload, filters = db.updates[0]
+    assert table == "clients" and filters == [("id", "c1")]
+    assert payload["generation_error"] == "sin imágenes suficientes: 2 disponibles; se requieren 4"
+    assert payload["generation_error_at"]
+
+
+def test_generate_weekly_for_client_rejects_other_agency(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-2"}])
+    generated = Mock()
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.content_jobs.generate_for_client", generated)
+
+    response = client.post("/portal/clientes/c1/generar-semana")
+
+    assert response.status_code == 403
+    generated.assert_not_called()
 
 
 def test_list_font_choices_reports_all_bundled_fonts(client):

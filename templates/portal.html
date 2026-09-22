@@ -235,6 +235,7 @@
     .modal-body{padding:19px;max-height:60vh;overflow:auto}
     .modal-body textarea{min-height:130px}
     .modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:0 19px 19px}
+    .modal-feedback{margin:12px 0 0;padding:9px 11px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:12px;line-height:1.45}
     dialog.story-edit{width:min(860px,calc(100% - 32px))}
     .story-edit-body{display:flex;gap:20px;padding:19px}
     .story-edit-preview{flex:0 0 320px;aspect-ratio:9/16;border-radius:14px;overflow:hidden;background:#161616;max-height:70vh}
@@ -388,7 +389,7 @@
     <div class="modal-foot"><button id="cancel-story-edit" class="btn">Cancelar</button><button id="save-story" class="btn primary">Guardar historia</button></div>
   </dialog>
   <dialog id="history-dialog" class="wide"><div class="modal-head"><strong>Historial de cambios</strong><button id="close-history" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body" id="history-list"></div><div class="modal-foot"><button id="close-history-2" class="btn">Cerrar</button></div></dialog>
-  <dialog id="ritmo-dialog"><div class="modal-head"><strong>Editar ritmo de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días de la semana. La IA distribuye las 4 historias entre los días elegidos, así que si seleccionás menos de 4 puede publicar más de una el mismo día.</p><div id="ritmo-chips" class="ritmo-chips"></div></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button></div></dialog>
+  <dialog id="ritmo-dialog"><div class="modal-head"><strong>Editar ritmo de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días de la semana. La IA distribuye las 4 historias entre los días elegidos, así que si seleccionás menos de 4 puede publicar más de una el mismo día.</p><div id="ritmo-chips" class="ritmo-chips"></div><p id="ritmo-generation-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button><button id="generate-weekly" class="btn primary">🚀 Generar historias para la semana que viene</button></div></dialog>
   <dialog id="confirm-dialog"><div class="modal-head"><strong>Confirmar</strong><button id="confirm-close" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p id="confirm-text"></p></div><div class="modal-foot"><button id="confirm-cancel" class="btn">Volver</button><button id="confirm-ok" class="btn primary">Confirmar</button></div></dialog>
   <dialog id="ig-preview-dialog" class="ig-preview">
     <div class="ig-preview-frame">

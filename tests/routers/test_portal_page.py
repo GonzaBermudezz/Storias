@@ -59,7 +59,12 @@ def test_portal_frontend_supports_variable_rhythm_and_keeps_all_pending_groups_a
     source = TestClient(app).get("/static/portal.js").text
 
     assert "Elegí entre 1 y 4 días" in page.text
+    assert 'id="generate-weekly"' in page.text
+    assert 'id="ritmo-generation-message"' in page.text
     assert "Elegí al menos un día de publicación." in source
+    assert "/generar-semana" in source
+    assert "button.textContent = 'Generando...'" in source
+    assert "feedback.textContent = error.message" in source
     assert "function storyIsScheduled(story, group)" in source
     assert "if (!storyIsScheduled(story, group)) continue;" in source
     assert "if (storyIsScheduled(story, group)) continue;" in source

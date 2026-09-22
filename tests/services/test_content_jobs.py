@@ -110,6 +110,43 @@ def test_build_content_config_defaults_null_business_description_and_tone_exampl
     assert config.business_description == "" and config.tone_examples == [] and config.prob_link == 0.0
 
 
+def test_generate_for_client_returns_existing_group_without_external_work(generation):
+    drive, engine = generation
+    db = Database([client()])
+    db.rows["story_groups"].append({
+        "id": "existing-group", "client_id": "good", "generation_week": "2026-09-14",
+    })
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result == {"created": False, "group_id": "existing-group", "recycled": False}
+    drive.assert_not_called()
+    engine.assert_not_called()
+    assert db.saved == []
+
+
+def test_generate_for_client_persists_and_reports_success(generation):
+    db = Database([client()])
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result == {"created": True, "group_id": "group-id", "recycled": False}
+    assert len(db.saved) == 1
+    assert db.saved[0]["p_client_id"] == "good"
+
+
+def test_generate_for_client_propagates_operational_errors(generation):
+    drive, _ = generation
+    drive.side_effect = RuntimeError("Drive unavailable")
+    db = Database([client()])
+
+    with pytest.raises(RuntimeError, match="Drive unavailable"):
+        jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert db.saved == []
+    assert "generation_error" not in db.rows["clients"][0]
+
+
 def test_weekly_does_not_crash_for_client_with_no_business_description_yet(generation):
     _, engine = generation
     db = Database([client("onboarding", business_description=None, tone_examples=None), client()])
