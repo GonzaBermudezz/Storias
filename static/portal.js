@@ -64,6 +64,7 @@
   function setControlsDisabled(disabled) {
     ['save-description','save-focus','try-prompt','save-story','generate-weekly'].forEach((id) => { $(id).disabled = disabled; });
     $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating;
+    $('edit-ritmo').disabled = disabled || ritmoLoading;
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
   function clearSelection() {
@@ -435,7 +436,8 @@
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled=false; }
   }
   const CAL_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-  let ritmoDays = []; // [{day, time}], 1–4 days — four stories are distributed across them
+  let ritmoDays = []; // [{day, time, count}], 1–4 days whose counts always total four stories
+  let ritmoLoading = false;
   let ritmoSaving = false;
   let weeklyGenerating = false;
   let calMonthOffset = 0;
@@ -470,72 +472,148 @@
       `<span class="ritmo-chip${activeDays.has(day)?' active':''}" data-day="${day}">${label}</span>`
     ).join('');
   }
+  function evenSplitCounts(n) {
+    const counts = Array(n).fill(0);
+    for (let i = 0; i < 4; i++) counts[(i * n) / 4 | 0]++;
+    return counts;
+  }
+  function normalizeRitmoDays(days, publishTogether=false) {
+    const sorted = (Array.isArray(days) ? days : [])
+      .map((entry) => ({day:Number(entry.day), time:String(entry.time || '09:00'), count:entry.count}))
+      .sort((a,b) => a.day - b.day);
+    const explicit = sorted.length > 0 && sorted.every((entry) => Number.isInteger(entry.count) && entry.count >= 1 && entry.count <= 4)
+      && sorted.reduce((sum, entry) => sum + entry.count, 0) === 4;
+    if (explicit) return sorted;
+    if (publishTogether && sorted.length) return [{...sorted[0], count:4}];
+    const counts = evenSplitCounts(sorted.length);
+    return sorted.map((entry, index) => ({...entry, count:counts[index]}));
+  }
+  function ritmoDetailEntries() {
+    return [...document.querySelectorAll('#ritmo-days-detail .ritmo-day-detail')].map((row) => ({
+      day:Number(row.dataset.day),
+      time:row.querySelector('[data-ritmo-time]').value,
+      count:Number(row.querySelector('[data-ritmo-count]').value),
+    }));
+  }
+  function refreshRitmoDetailTotal() {
+    const entries = ritmoDetailEntries();
+    const valid = entries.length > 0 && entries.every((entry) => /^\d{2}:\d{2}$/.test(entry.time)
+      && Number.isInteger(entry.count) && entry.count >= 1 && entry.count <= 4);
+    const total = entries.reduce((sum, entry) => sum + (Number.isFinite(entry.count) ? entry.count : 0), 0);
+    $('ritmo-count-total').textContent = `Total: ${total} / 4 historias`;
+    $('save-ritmo-detail').disabled = ritmoSaving || weeklyGenerating || !valid || total !== 4;
+    return {entries, valid, total};
+  }
+  function renderRitmoDaysDetail() {
+    ritmoDays.sort((a,b) => a.day - b.day);
+    $('ritmo-days-detail').innerHTML = ritmoDays.map((entry) => `
+      <div class="ritmo-day-detail" data-day="${entry.day}">
+        <strong>${CAL_LABELS[entry.day]}</strong>
+        <label>Hora <input type="time" data-ritmo-time data-day="${entry.day}" value="${escapeHtml(entry.time)}"></label>
+        <label>Historias <input type="number" min="1" max="4" data-ritmo-count data-day="${entry.day}" value="${entry.count}"></label>
+      </div>`).join('');
+    refreshRitmoDetailTotal();
+  }
+  function showRitmoDetailMessage(message, isError=false) {
+    const feedback = $('ritmo-detail-message');
+    feedback.textContent = message;
+    feedback.classList.toggle('hidden', !message);
+    feedback.classList.toggle('success', Boolean(message) && !isError);
+  }
   function refreshRitmoControls() {
-    const rhythmControlsBlocked = ritmoSaving || weeklyGenerating;
-    $('publish-together-toggle').disabled = rhythmControlsBlocked;
+    const rhythmControlsBlocked = ritmoLoading || ritmoSaving || weeklyGenerating;
     $('ritmo-chips').classList.toggle('is-saving', rhythmControlsBlocked);
     $('ritmo-chips').setAttribute('aria-disabled', String(rhythmControlsBlocked));
+    document.querySelectorAll('#ritmo-days-detail input').forEach((input) => { input.disabled = rhythmControlsBlocked; });
+    refreshRitmoDetailTotal();
     $('generate-weekly').disabled = rhythmControlsBlocked || !state.client;
+    $('edit-ritmo').disabled = rhythmControlsBlocked || !state.client;
   }
   function setRitmoSaving(saving) {
     ritmoSaving = saving;
     refreshRitmoControls();
   }
   async function loadCalendar() {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    ritmoLoading = true;
+    ritmoDays = [];
+    renderRitmoChips();
+    renderRitmoDaysDetail();
+    refreshRitmoControls();
     calMonthOffset = 0;
     draftDates = new Set();
     renderCalendarMonth();
     let days = state.client?.publish_days;
-    if (!days) { try { days = (await api('/portal/ritmo-default')).publish_days; } catch(_) { days = [{day:0,time:'09:00'},{day:2,time:'09:00'},{day:4,time:'09:00'},{day:6,time:'09:00'}]; } }
-    ritmoDays = days.map((d) => ({day: d.day, time: d.time}));
-    renderRitmoChips();
+    try {
+      if (!days) { try { days = (await api('/portal/ritmo-default')).publish_days; } catch(_) { days = [{day:0,time:'09:00',count:1},{day:2,time:'09:00',count:1},{day:4,time:'09:00',count:1},{day:6,time:'09:00',count:1}]; } }
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      ritmoDays = normalizeRitmoDays(days, Boolean(state.client?.publish_together));
+      renderRitmoChips();
+      renderRitmoDaysDetail();
+    } finally {
+      if (selectionVersion === state.selectionVersion && clientId === state.client?.id) {
+        ritmoLoading = false;
+        refreshRitmoControls();
+      }
+    }
   }
   async function toggleRitmoDay(day) {
     if (ritmoSaving || weeklyGenerating) return;
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
+    const renderedTimes = new Map(ritmoDetailEntries().map((entry) => [entry.day, entry.time]));
+    ritmoDays = ritmoDays.map((entry) => ({
+      ...entry,
+      time:renderedTimes.has(entry.day) ? renderedTimes.get(entry.day) : entry.time,
+    }));
     const idx = ritmoDays.findIndex((e) => e.day === day);
-    const next = [...ritmoDays];
+    const next = ritmoDays.map((entry) => ({...entry}));
     if (idx >= 0) {
       if (next.length === 1) { showMessage('Elegí al menos un día de publicación.', true); return; }
       next.splice(idx, 1);
     }
-    else { if (next.length >= 4) { showMessage('Ya elegiste 4 días — sacá uno para agregar otro.', true); return; } next.push({day, time:'09:00'}); }
+    else { if (next.length >= 4) { showMessage('Ya elegiste 4 días — sacá uno para agregar otro.', true); return; } next.push({day, time:'09:00', count:1}); }
+    next.sort((a,b) => a.day - b.day);
+    const counts = evenSplitCounts(next.length);
+    next.forEach((entry, index) => { entry.count = counts[index]; });
     setRitmoSaving(true);
     try {
       const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/ritmo`, {method:'PATCH', body:JSON.stringify({publish_days:next})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
-      state.client.publish_days = updated.publish_days; ritmoDays = updated.publish_days; renderRitmoChips();
+      state.client = {...state.client, ...updated}; ritmoDays = normalizeRitmoDays(updated.publish_days); renderRitmoChips(); renderRitmoDaysDetail();
       showMessage('Días automáticos actualizados.');
     } catch(error) { showMessage(error.message, true); }
     finally { setRitmoSaving(false); }
   }
   function openRitmoDialog() {
+    if (ritmoLoading || !state.client) return;
     const feedback = $('ritmo-generation-message');
-    const publishTogether = Boolean(state.client?.publish_together);
-    $('publish-together-toggle').checked = publishTogether;
-    $('publish-together-hint').classList.toggle('hidden', !publishTogether);
     feedback.textContent = '';
     feedback.classList.add('hidden');
+    showRitmoDetailMessage('');
+    renderRitmoDaysDetail();
     $('ritmo-dialog').showModal();
   }
-  async function togglePublishTogether(event) {
-    const toggle = event.currentTarget;
+  async function saveRitmoDetail() {
     if (ritmoSaving || weeklyGenerating) return;
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
-    const nextValue = toggle.checked;
+    const {entries, valid, total} = refreshRitmoDetailTotal();
+    if (!valid || total !== 4) {
+      showRitmoDetailMessage('Los conteos deben sumar exactamente 4 y cada horario debe ser válido.', true);
+      return;
+    }
+    showRitmoDetailMessage('');
     setRitmoSaving(true);
     try {
-      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/ritmo`, {method:'PATCH', body:JSON.stringify({publish_together:nextValue})});
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/ritmo`, {method:'PATCH', body:JSON.stringify({publish_days:entries})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
-      state.client = {...state.client, ...updated, publish_together: nextValue};
-      $('publish-together-hint').classList.toggle('hidden', !nextValue);
-      showMessage('Modo de publicación actualizado.');
+      state.client = {...state.client, ...updated};
+      ritmoDays = normalizeRitmoDays(updated.publish_days);
+      renderRitmoChips(); renderRitmoDaysDetail();
+      showRitmoDetailMessage('Horarios y reparto guardados.');
     } catch(error) {
-      toggle.checked = Boolean(state.client?.publish_together);
-      $('publish-together-hint').classList.toggle('hidden', !toggle.checked);
-      showMessage(error.message, true);
+      showRitmoDetailMessage(error.message, true);
     } finally {
       setRitmoSaving(false);
     }
@@ -861,7 +939,8 @@
   $('close-ritmo').addEventListener('click',()=>$('ritmo-dialog').close());
   $('close-ritmo-2').addEventListener('click',()=>$('ritmo-dialog').close());
   $('generate-weekly').addEventListener('click',generateWeeklyNow);
-  $('publish-together-toggle').addEventListener('change',togglePublishTogether);
+  $('save-ritmo-detail').addEventListener('click',saveRitmoDetail);
+  $('ritmo-days-detail').addEventListener('input',refreshRitmoDetailTotal);
   $('ig-preview-close').addEventListener('click',()=>$('ig-preview-dialog').close());
   $('ig-preview-prev').addEventListener('click',previewPrev);
   $('ig-preview-next').addEventListener('click',previewNext);

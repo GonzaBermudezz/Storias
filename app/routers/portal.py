@@ -56,6 +56,7 @@ class ClientTeamPatch(BaseModel):
 class ScheduleEntry(BaseModel):
     day: int = Field(ge=0, le=6)
     time: str
+    count: int | None = Field(default=None, ge=1, le=4)
 
     @field_validator("time")
     @classmethod
@@ -68,7 +69,6 @@ class ScheduleEntry(BaseModel):
 
 class ClientRitmoPatch(BaseModel):
     publish_days: list[ScheduleEntry] | None = None
-    publish_together: bool | None = None
 
     @field_validator("publish_days")
     @classmethod
@@ -78,6 +78,13 @@ class ClientRitmoPatch(BaseModel):
         days = [entry.day for entry in value]
         if not 1 <= len(value) <= 4 or len(set(days)) != len(value):
             raise ValueError("publish_days debe tener entre 1 y 4 días distintos (0=lunes..6=domingo)")
+        counts = [entry.count for entry in value]
+        if any(count is not None for count in counts):
+            if any(count is None for count in counts) or sum(counts) != 4:
+                raise ValueError(
+                    "Si se especifica count en algún día, todos los días deben traer count "
+                    "y la suma tiene que dar 4 (una historia por cada una de las 4 del hilo)."
+                )
         return sorted(value, key=lambda entry: entry.day)
 
 
@@ -339,16 +346,12 @@ def patch_client_font(client_id: str, body: ClientFontPatch, employee: EmployeeD
 
 @router.patch("/clientes/{client_id}/ritmo")
 def patch_client_ritmo(client_id: str, body: ClientRitmoPatch, employee: EmployeeDep):
-    """Which 1-4 weekdays (and what time each one) this client's weekly thread
-    publishes on — purely a scheduling setting, so a plain update instead of
-    the audited RPC."""
+    """Save weekdays, time and count for the client's four weekly stories."""
     db = get_admin_client()
     _client_or_error(db, client_id, employee.agency_id)
     payload = {}
     if body.publish_days is not None:
         payload["publish_days"] = [entry.model_dump() for entry in body.publish_days]
-    if body.publish_together is not None:
-        payload["publish_together"] = body.publish_together
     if not payload:
         raise HTTPException(status_code=400, detail="Nada para actualizar")
     updated = db.table("clients").update(payload).eq(
@@ -361,7 +364,8 @@ def patch_client_ritmo(client_id: str, body: ClientRitmoPatch, employee: Employe
 def get_default_ritmo(employee: EmployeeDep):
     settings = get_settings()
     default_time = f"{settings.publication_hour:02d}:{settings.publication_minute:02d}"
-    return {"publish_days": [{"day": day, "time": default_time} for day in PUBLISH_DAY_OFFSETS]}
+    return {"publish_days": [{"day": day, "time": default_time, "count": 1}
+                             for day in PUBLISH_DAY_OFFSETS]}
 
 
 @router.post("/clientes/{client_id}/generar-semana")

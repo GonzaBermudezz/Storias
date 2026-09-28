@@ -160,8 +160,10 @@ def test_summary_aggregates_published_upcoming_and_team_breakdown(monkeypatch, c
 
 
 def test_patch_client_ritmo_saves_four_distinct_days(monkeypatch, client):
-    saved_days = [{"day": 1, "time": "08:00"}, {"day": 3, "time": "12:00"},
-                  {"day": 5, "time": "18:00"}, {"day": 6, "time": "20:00"}]
+    saved_days = [{"day": 1, "time": "08:00", "count": 1},
+                  {"day": 3, "time": "12:00", "count": 1},
+                  {"day": 5, "time": "18:00", "count": 1},
+                  {"day": 6, "time": "20:00", "count": 1}]
     db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "c1", "publish_days": saved_days}]])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     unsorted = [saved_days[3], saved_days[0], saved_days[1], saved_days[2]]
@@ -172,10 +174,12 @@ def test_patch_client_ritmo_saves_four_distinct_days(monkeypatch, client):
 
 
 @pytest.mark.parametrize("saved_days", [
-    [{"day": 2, "time": "10:00"}],
-    [{"day": 0, "time": "08:00"}, {"day": 4, "time": "18:00"}],
-    [{"day": 1, "time": "08:00"}, {"day": 3, "time": "12:00"},
-     {"day": 6, "time": "20:00"}],
+    [{"day": 2, "time": "10:00", "count": 4}],
+    [{"day": 0, "time": "08:00", "count": 2},
+     {"day": 4, "time": "18:00", "count": 2}],
+    [{"day": 1, "time": "08:00", "count": 2},
+     {"day": 3, "time": "12:00", "count": 1},
+     {"day": 6, "time": "20:00", "count": 1}],
 ])
 def test_patch_client_ritmo_saves_one_to_three_distinct_days(
         monkeypatch, client, saved_days):
@@ -188,21 +192,32 @@ def test_patch_client_ritmo_saves_one_to_three_distinct_days(
     assert db.updates == [("clients", {"publish_days": saved_days}, [("id", "c1")])]
 
 
-def test_patch_client_ritmo_updates_publish_together_without_clearing_days(
+def test_patch_client_ritmo_ignores_publish_together_and_requires_publish_days(
         monkeypatch, client):
-    current_days = [{"day": 1, "time": "08:00"}, {"day": 5, "time": "18:00"}]
-    db = DB([
-        {"id": "c1", "agency_id": "agency-1", "publish_days": current_days},
-        [{"id": "c1", "publish_days": current_days, "publish_together": True}],
-    ])
+    db = DB([{"id": "c1", "agency_id": "agency-1"}])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
 
     response = client.patch("/portal/clientes/c1/ritmo", json={"publish_together": True})
 
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Nada para actualizar"}
+    assert db.updates == []
+
+
+def test_patch_client_ritmo_saves_explicit_uneven_counts(monkeypatch, client):
+    saved_days = [
+        {"day": 0, "time": "08:00", "count": 3},
+        {"day": 4, "time": "18:00", "count": 1},
+    ]
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+             [{"id": "c1", "publish_days": saved_days}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/ritmo", json={"publish_days": saved_days})
+
     assert response.status_code == 200
-    assert response.json()["publish_days"] == current_days
-    assert response.json()["publish_together"] is True
-    assert db.updates == [("clients", {"publish_together": True}, [("id", "c1")])]
+    assert response.json()["publish_days"] == saved_days
+    assert db.updates == [("clients", {"publish_days": saved_days}, [("id", "c1")])]
 
 
 def test_patch_client_ritmo_rejects_empty_payload(monkeypatch, client):
@@ -235,12 +250,30 @@ def test_patch_client_ritmo_rejects_bad_time_format(monkeypatch, client):
     assert response.status_code == 422
 
 
+def test_patch_client_ritmo_rejects_counts_not_summing_to_four(client):
+    response = client.patch("/portal/clientes/c1/ritmo", json={"publish_days": [
+        {"day": 1, "time": "08:00", "count": 1},
+        {"day": 5, "time": "18:00", "count": 1},
+    ]})
+    assert response.status_code == 422
+
+
+def test_patch_client_ritmo_rejects_partial_counts(client):
+    response = client.patch("/portal/clientes/c1/ritmo", json={"publish_days": [
+        {"day": 1, "time": "08:00", "count": 3},
+        {"day": 5, "time": "18:00"},
+    ]})
+    assert response.status_code == 422
+
+
 def test_default_ritmo_reports_global_offsets(client):
     response = client.get("/portal/ritmo-default")
     assert response.status_code == 200
     assert response.json() == {"publish_days": [
-        {"day": 0, "time": "09:00"}, {"day": 2, "time": "09:00"},
-        {"day": 4, "time": "09:00"}, {"day": 6, "time": "09:00"}]}
+        {"day": 0, "time": "09:00", "count": 1},
+        {"day": 2, "time": "09:00", "count": 1},
+        {"day": 4, "time": "09:00", "count": 1},
+        {"day": 6, "time": "09:00", "count": 1}]}
 
 
 def test_generate_weekly_for_client_returns_created(monkeypatch, client):

@@ -45,25 +45,45 @@ def _valid_hhmm(value) -> bool:
     return hour.isdigit() and minute.isdigit() and 0 <= int(hour) <= 23 and 0 <= int(minute) <= 59
 
 
-def publish_schedule(row: dict) -> tuple[tuple[int, str], ...]:
-    """A client's custom (weekday, 'HH:MM') publish schedule — 1 to 4 entries,
-    each a distinct weekday (0=Mon..6=Sun) with its own time — or the global
-    default (PUBLISH_DAY_OFFSETS at the configured publication hour) if
-    `clients.publish_days` is unset or malformed."""
+def publish_schedule(row: dict) -> tuple[tuple[int, str, int], ...]:
+    """Return the client's per-day schedule and story counts.
+
+    Rows saved before explicit counts existed preserve their old even split,
+    including the legacy ``publish_together`` behavior. Malformed schedules
+    fall back to the four global publication days with one story per day.
+    """
     days = row.get("publish_days")
+    parsed = None
     if isinstance(days, list) and 1 <= len(days) <= 4:
         try:
-            parsed = [(int(entry["day"]), str(entry["time"])) for entry in days]
+            entries = [(int(entry["day"]), str(entry["time"]), entry.get("count"))
+                       for entry in days]
         except (KeyError, TypeError, ValueError):
-            parsed = None
-        if parsed is not None:
-            weekdays = {day for day, _ in parsed}
-            if len(weekdays) == len(parsed) and all(0 <= day <= 6 for day in weekdays) \
-                    and all(_valid_hhmm(hhmm) for _, hhmm in parsed):
-                return tuple(sorted(parsed))
-    settings = get_settings()
-    default_time = f"{settings.publication_hour:02d}:{settings.publication_minute:02d}"
-    return tuple((offset, default_time) for offset in PUBLISH_DAY_OFFSETS)
+            entries = None
+        if entries is not None:
+            weekdays = {day for day, _, _ in entries}
+            if len(weekdays) == len(entries) and all(0 <= day <= 6 for day in weekdays) \
+                    and all(_valid_hhmm(hhmm) for _, hhmm, _ in entries):
+                parsed = sorted(entries, key=lambda entry: entry[0])
+    if parsed is None:
+        settings = get_settings()
+        default_time = f"{settings.publication_hour:02d}:{settings.publication_minute:02d}"
+        return tuple((offset, default_time, 1) for offset in PUBLISH_DAY_OFFSETS)
+
+    counts = [count for _, _, count in parsed]
+    if all(isinstance(count, int) and not isinstance(count, bool) and 1 <= count <= 4
+           for count in counts) and sum(counts) == 4:
+        return tuple((day, time, count) for day, time, count in parsed)
+
+    n = len(parsed)
+    if row.get("publish_together"):
+        legacy_counts = [4] + [0] * (n - 1)
+    else:
+        legacy_counts = [0] * n
+        for i in range(4):
+            legacy_counts[(i * n) // 4] += 1
+    return tuple((day, time, count)
+                 for (day, time, _), count in zip(parsed, legacy_counts))
 
 
 def _all_rows(query):
@@ -88,15 +108,7 @@ def _thread_payload(row: dict, config: ClientContentConfig, result: HiloGenerado
     monday = today - timedelta(days=today.weekday())
     next_monday = monday + timedelta(days=7)
     schedule = publish_schedule(row)
-    if row.get("publish_together"):
-        # Sequence mode uses only the first ordered client slot; any other
-        # selected weekdays are intentionally ignored for this weekly thread.
-        story_schedule = [schedule[0]] * 4
-    else:
-        # The engine always returns four stories. Expand 1-4 selected weekdays
-        # into four chronological slots, distributing stories evenly:
-        # 1 => 4, 2 => 2+2, 3 => 2+1+1, 4 => 1 each.
-        story_schedule = [schedule[(i * len(schedule)) // 4] for i in range(4)]
+    story_schedule = [(day, time) for day, time, count in schedule for _ in range(count)]
     publish_dates = [next_monday + timedelta(days=offset) for offset, _ in story_schedule]
     return {
         "p_client_id": config.client_id,

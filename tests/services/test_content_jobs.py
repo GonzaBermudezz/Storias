@@ -206,6 +206,34 @@ def test_weekly_publish_together_uses_first_ordered_slot_for_all_four_stories(ge
     assert [story["hora_publicacion"] for story in stories] == ["08:30:00"] * 4
 
 
+def test_weekly_uses_explicit_uneven_story_counts(generation):
+    custom = [
+        {"day": 0, "time": "08:00", "count": 3},
+        {"day": 4, "time": "18:00", "count": 1},
+    ]
+    # An old true flag may remain after the new UI saves explicit counts;
+    # explicit counts must take precedence over the legacy fallback.
+    db = Database([client(publish_days=custom, publish_together=True)])
+
+    jobs.generate_weekly(db, date(2026, 9, 18))
+
+    stories = db.saved[0]["p_stories"]
+    assert [story["fecha_publicacion"] for story in stories] == [
+        "2026-09-21", "2026-09-21", "2026-09-21", "2026-09-25"]
+    assert [story["hora_publicacion"] for story in stories] == [
+        "08:00:00", "08:00:00", "08:00:00", "18:00:00"]
+
+
+def test_weekly_single_explicit_day_replaces_publish_together(generation):
+    db = Database([client(publish_days=[{"day": 2, "time": "10:15", "count": 4}])])
+
+    jobs.generate_weekly(db, date(2026, 9, 18))
+
+    stories = db.saved[0]["p_stories"]
+    assert [story["fecha_publicacion"] for story in stories] == ["2026-09-23"] * 4
+    assert [story["hora_publicacion"] for story in stories] == ["10:15:00"] * 4
+
+
 @pytest.mark.parametrize("publish_together", [False, None])
 def test_weekly_publish_together_disabled_or_missing_preserves_distribution(
         generation, publish_together):
@@ -244,18 +272,24 @@ def test_weekly_balances_four_stories_across_one_to_three_days(
     assert [story["hora_publicacion"] for story in stories] == expected_times
 
 
-_GLOBAL_SCHEDULE = tuple((offset, "09:00") for offset in jobs.PUBLISH_DAY_OFFSETS)
+_GLOBAL_SCHEDULE = tuple((offset, "09:00", 1) for offset in jobs.PUBLISH_DAY_OFFSETS)
 
 
 @pytest.mark.parametrize("days,expected", [
     (None, _GLOBAL_SCHEDULE),
     ([{"day":0,"time":"08:00"},{"day":2,"time":"08:00"},{"day":4,"time":"08:00"},{"day":6,"time":"08:00"}],
-     ((0,"08:00"),(2,"08:00"),(4,"08:00"),(6,"08:00"))),
+     ((0,"08:00",1),(2,"08:00",1),(4,"08:00",1),(6,"08:00",1))),
     ([{"day":6,"time":"08:00"},{"day":0,"time":"08:00"},{"day":2,"time":"08:00"},{"day":4,"time":"08:00"}],
-     ((0,"08:00"),(2,"08:00"),(4,"08:00"),(6,"08:00"))),  # sorted by day
+     ((0,"08:00",1),(2,"08:00",1),(4,"08:00",1),(6,"08:00",1))),  # sorted by day
     ([{"day":5,"time":"18:00"},{"day":1,"time":"08:00"}],
-     ((1,"08:00"),(5,"18:00"))),
-    ([{"day":3,"time":"12:30"}], ((3,"12:30"),)),
+     ((1,"08:00",2),(5,"18:00",2))),
+    ([{"day":3,"time":"12:30"}], ((3,"12:30",4),)),
+    ([{"day":0,"time":"08:00","count":3},{"day":4,"time":"18:00","count":1}],
+     ((0,"08:00",3),(4,"18:00",1))),
+    ([{"day":0,"time":"08:00","count":1},{"day":4,"time":"18:00","count":1}],
+     ((0,"08:00",2),(4,"18:00",2))),  # invalid total -> legacy split
+    ([{"day":0,"time":"08:00","count":3},{"day":4,"time":"18:00"}],
+     ((0,"08:00",2),(4,"18:00",2))),  # partial counts -> legacy split
     ([], _GLOBAL_SCHEDULE),
     ([{"day":0,"time":"08:00"},{"day":0,"time":"09:00"},{"day":2,"time":"08:00"},{"day":4,"time":"08:00"}],
      _GLOBAL_SCHEDULE),  # not 4 distinct days -> fall back

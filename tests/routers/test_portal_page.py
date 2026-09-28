@@ -61,6 +61,10 @@ def test_portal_frontend_supports_variable_rhythm_and_keeps_all_pending_groups_a
     assert "Elegí entre 1 y 4 días" in page.text
     assert 'id="generate-weekly"' in page.text
     assert 'id="ritmo-generation-message"' in page.text
+    assert 'id="ritmo-days-detail"' in page.text
+    assert 'id="ritmo-count-total"' in page.text
+    assert 'id="save-ritmo-detail"' in page.text
+    assert 'id="publish-together-toggle"' not in page.text
     assert "Elegí al menos un día de publicación." in source
     assert "/generar-semana" in source
     assert "button.textContent = 'Generando...'" in source
@@ -76,14 +80,21 @@ def test_portal_frontend_blocks_generation_during_any_rhythm_save():
     source = TestClient(app).get("/static/portal.js").text
 
     assert "let ritmoSaving = false" in source
+    assert "let ritmoLoading = false" in source
     assert "function setRitmoSaving(saving)" in source
     assert source.count("setRitmoSaving(true)") == 2
     assert source.count("setRitmoSaving(false)") == 2
-    assert "const rhythmControlsBlocked = ritmoSaving || weeklyGenerating" in source
-    assert "$('publish-together-toggle').disabled = rhythmControlsBlocked" in source
+    assert "const rhythmControlsBlocked = ritmoLoading || ritmoSaving || weeklyGenerating" in source
+    assert "document.querySelectorAll('#ritmo-days-detail input')" in source
+    assert "$('save-ritmo-detail').disabled = ritmoSaving || weeklyGenerating" in source
     assert "$('generate-weekly').disabled = rhythmControlsBlocked" in source
     assert "classList.toggle('is-saving', rhythmControlsBlocked)" in source
     assert source.count("if (ritmoSaving || weeklyGenerating) return") == 3
+    assert "const renderedTimes = new Map(ritmoDetailEntries().map" in source
+    assert source.index("const renderedTimes = new Map") < source.index("const next = ritmoDays.map")
+    assert "ritmoDays = [];" in source
+    assert "$('edit-ritmo').disabled = rhythmControlsBlocked || !state.client" in source
+    assert "if (ritmoLoading || !state.client) return;" in source
 
 
 def test_portal_frontend_keeps_story_reordering_inside_its_group():
