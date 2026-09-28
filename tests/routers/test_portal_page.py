@@ -82,10 +82,71 @@ def test_generated_day_time_is_editable_and_uses_day_endpoint():
     assert 'class="day-time"' in source
     assert 'disabled title="Este día usa el horario de Editar ritmo"' not in source
     assert "/dias/${encodeURIComponent(iso)}/hora" in source
-    assert "dayTimeSaving.has(iso)" in source
-    assert "dayTimeSaving.add(iso)" in source
-    assert "dayTimeSaving.delete(iso)" in source
-    assert "renderStories(); // state still contains the persisted value" in source
+    assert "const operationKey = dayOperationKey(clientId, selectionVersion, iso)" in source
+    assert "dayTimeSaving.has(operationKey)" in source
+    assert "dayTimeSaving.add(operationKey)" in source
+    assert "dayTimeSaving.delete(operationKey)" in source
+    assert "const pendingDayTimes = new Map()" in source
+    assert "pendingDayTimes.set(operationKey, hhmm)" in source
+    assert "Always reload, including after an error" in source
+    assert "A change that arrived while reloading must still be persisted" in source
+    assert "retryValue = pendingDayTimes.get(operationKey) || null" in source
+    assert "updateDayTime(iso, queued, input)" in source
+
+
+def test_generated_day_can_publish_immediately_with_double_click_guard():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "data-publish-now-date" in source
+    assert "/publicar-ahora" in source
+    assert "async function publishDayNow" in source
+    assert "const publishingDates = new Set()" in source
+    assert "publishingDates.has(operationKey)" in source
+    assert "Esto publica de verdad en Instagram ahora mismo" in source
+    assert "La publicación se realizó, pero no se pudo actualizar la pantalla" in source
+
+
+def test_generated_day_actions_ignore_already_locked_stories():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "const LOCKED_STORY_STATES = new Set(['publicando', 'publicado', 'cancelada'])" in source
+    assert "const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado)" in source
+    assert "const actionableStories = stories.filter((story) => !storyIsLocked(story))" in source
+    assert "actionableStories.length > 0 && actionableStories.every" in source
+    assert "const batchReorderable = (group.stories || []).every((story) => !storyIsLocked(story))" in source
+    assert "const mutationActions = locked ? ''" in source
+    assert 'draggable="${reorderable ? \'true\' : \'false\'}"' in source
+    assert "if (storyIsLocked(found.story)) return;" in source
+    assert "if(card.dataset.reorderable!=='true' || !found || storyIsLocked(found.story))" in source
+    assert "if ((group.stories || []).some((story) => storyIsLocked(story))) return;" in source
+    assert "$('ig-preview-edit').classList.toggle('hidden', locked)" in source
+    assert "$('ig-preview-delete').classList.toggle('hidden', locked)" in source
+    assert "storiesForDay.some((story) => storyIsLocked(story))" in source
+    assert "const addRow = dayLocked ? ''" in source
+
+
+def test_plan_day_delete_is_unavailable_when_any_story_on_the_date_is_locked():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "const canDelete = stories.every((story) => !storyIsLocked(story))" in source
+    assert "const deleteButton = canDelete ?" in source
+    assert "if (entry.stories.some((story) => storyIsLocked(story))) return;" in source
+
+
+def test_batch_reorder_uses_every_story_in_the_group_for_lock_state():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "const batchReorderable = (group.stories || []).every((story) => !storyIsLocked(story))" in source
+    assert "const batchReorderable = batchStories.every" not in source
+
+
+def test_publish_now_only_appears_for_a_fully_approved_pending_day_without_errors():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "const pendingStories = stories.filter((story) => story.estado === 'pendiente')" in source
+    assert "story.estado === 'error' || story.estado === 'publicando'" in source
+    assert "pendingStories.length > 0 && !publishNowBlocked && pendingStories.every((story) => story.aprobado)" in source
+    assert "const publishNowBtn = readyToPublishNow ?" in source
 
 
 def test_portal_frontend_blocks_generation_during_any_rhythm_save():

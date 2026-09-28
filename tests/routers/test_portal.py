@@ -530,9 +530,9 @@ def test_approve_story_not_found(monkeypatch, client):
 def test_update_manual_day_time_updates_group_and_editable_stories(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1"},                # client lookup
               [{"id": "g1"}],                                       # manual group lookup
-              None,                                                 # story_groups update
               [{"id": "s1", "estado": "pendiente"}, {"id": "s2", "estado": "publicado"}],  # stories lookup
-              None])                                                # stories update
+              None,                                                 # stories update
+              None])                                                # story_groups update
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.patch("/portal/clientes/c1/historias/manual/2026-09-25/hora",
         json={"hora_publicacion": "14:30"})
@@ -543,6 +543,23 @@ def test_update_manual_day_time_updates_group_and_editable_stories(monkeypatch, 
     stories_update = next(u for u in db.updates if u[0] == "stories")
     assert stories_update[1] == {"hora_publicacion": "14:30:00"}
     assert stories_update[2] == [("id", ["s1"])]
+    assert [update[0] for update in db.updates] == ["stories", "story_groups"]
+
+
+def test_update_manual_day_time_preserves_already_scheduled_story(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "g1"}],
+             [{"id": "editable", "estado": "pendiente", "agendado": False},
+              {"id": "scheduled", "estado": "pendiente", "agendado": True}],
+             None, None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/historias/manual/2026-09-25/hora",
+                            json={"hora_publicacion": "14:30"})
+
+    assert response.status_code == 200
+    assert db.updates[0] == (
+        "stories", {"hora_publicacion": "14:30:00"}, [("id", ["editable"])]
+    )
 
 
 def test_update_manual_day_time_rejects_bad_format(monkeypatch, client):
@@ -752,6 +769,41 @@ def test_schedule_day_requires_stories_for_that_date(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1"}, []])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.patch("/portal/clientes/c1/dias/2026-09-25/agendar")
+    assert response.status_code == 422
+
+
+def test_publish_day_now_succeeds_when_all_approved(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+             [{"id": "s1", "estado": "pendiente", "aprobado": True}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.content_jobs.publish_now",
+                        lambda db, client_id, fecha: {"publicadas": 1, "fallidas": 0})
+
+    response = client.post("/portal/clientes/c1/dias/2026-09-25/publicar-ahora")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "detail": "Publicación enviada a Instagram", "publicadas": 1, "fallidas": 0,
+    }
+
+
+def test_publish_day_now_rejects_when_not_all_approved(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+             [{"id": "s1", "estado": "pendiente", "aprobado": True},
+              {"id": "s2", "estado": "pendiente", "aprobado": False}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.post("/portal/clientes/c1/dias/2026-09-25/publicar-ahora")
+
+    assert response.status_code == 422
+
+
+def test_publish_day_now_requires_stories_for_that_date(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.post("/portal/clientes/c1/dias/2026-09-25/publicar-ahora")
+
     assert response.status_code == 422
 
 

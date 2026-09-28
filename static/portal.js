@@ -1,6 +1,8 @@
 (() => {
   'use strict';
   const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, teams: [], me: null };
+  const LOCKED_STORY_STATES = new Set(['publicando', 'publicado', 'cancelada']);
+  const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'})[char]);
   function avatarColor(id) { let hash = 0; for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0; return hash % 6; }
@@ -305,7 +307,9 @@
       const shortTitle = title.length > 40 ? title.slice(0, 37) + '…' : title;
       const hora = first.hora_publicacion ? String(first.hora_publicacion).slice(0,5) : '';
       const count = stories.length;
-      return `<div class="plan-chip" data-plan-date="${escapeHtml(iso)}"><span class="grip">⠿</span><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : '🖼'}</span><div class="plan-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}${hora ? ' · ' + hora : ''}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count===1?'':'s'}</div></div><button class="icon-btn plan-chip-delete" data-plan-delete="${escapeHtml(iso)}" aria-label="Eliminar toda la publicación de este día">🗑</button></div>`;
+      const canDelete = stories.every((story) => !storyIsLocked(story));
+      const deleteButton = canDelete ? `<button class="icon-btn plan-chip-delete" data-plan-delete="${escapeHtml(iso)}" aria-label="Eliminar toda la publicación de este día">🗑</button>` : '';
+      return `<div class="plan-chip" data-plan-date="${escapeHtml(iso)}"><span class="grip">⠿</span><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : '🖼'}</span><div class="plan-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}${hora ? ' · ' + hora : ''}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count===1?'':'s'}</div></div>${deleteButton}</div>`;
     }).join('');
   }
   function groupDate(group) {
@@ -348,20 +352,31 @@
       const batchRows = [...batches.values()].map(({group, stories: batchStories}) => {
         batchStories.sort((a,b) => a.order - b.order);
         const label = group.generation_week ? 'Generación IA' : 'Carga manual';
-        const cards = batchStories.map((story,index) => storyCard(story,index,group.id)).join('');
+        // The database rejects reordering a group once any story is locked.
+        // Reflect that constraint in the UI instead of offering a drag that
+        // can only fail.
+        const batchReorderable = (group.stories || []).every((story) => !storyIsLocked(story));
+        const cards = batchStories.map((story,index) => storyCard(story,index,group.id,batchReorderable)).join('');
         return `<div class="story-batch" data-story-group-id="${escapeHtml(group.id)}"><div class="story-batch-label">${label}</div><div class="day-row-cards">${cards}</div></div>`;
       }).join('');
       const manualGroup = manualGroupByDate.get(iso);
       // A day publishes once — AI batch and manual uploads sharing a date are
       // one publication, so "listo para agendar" only needs everything for
       // that date approved, regardless of which group(s) contributed it.
-      const readyToSchedule = stories.length > 0 && stories.every((s) => s.aprobado);
+      const actionableStories = stories.filter((story) => !storyIsLocked(story));
+      const readyToSchedule = actionableStories.length > 0 && actionableStories.every((story) => story.aprobado);
+      const pendingStories = stories.filter((story) => story.estado === 'pendiente');
+      const publishNowBlocked = stories.some((story) => story.estado === 'error' || story.estado === 'publicando');
+      const readyToPublishNow = pendingStories.length > 0 && !publishNowBlocked && pendingStories.every((story) => story.aprobado);
       const scheduleBtn = readyToSchedule ? `<button class="badge schedule-btn" data-schedule-date="${escapeHtml(iso)}">📅 Agendar</button>` : '';
-      const timeValue = stories.length && stories[0].hora_publicacion ? String(stories[0].hora_publicacion).slice(0,5) : '09:00';
-      const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}">`;
-      const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué va este hilo?">` : '';
-      const addRow = `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div></div>`;
-      return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${scheduleBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
+      const publishNowBtn = readyToPublishNow ? `<button class="badge publish-now-btn" data-publish-now-date="${escapeHtml(iso)}">📤 Publicar ahora</button>` : '';
+      const dayLocked = stories.some((story) => storyIsLocked(story));
+      const timeSource = actionableStories[0] || stories[0];
+      const timeValue = timeSource?.hora_publicacion ? String(timeSource.hora_publicacion).slice(0,5) : '09:00';
+      const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}"${dayLocked ? ' disabled title="La publicación de este día ya está en curso o finalizada"' : ''}>`;
+      const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué va este hilo?"${dayLocked ? ' disabled' : ''}>` : '';
+      const addRow = dayLocked ? '' : `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div></div>`;
+      return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
     }).join('');
     $('stories').innerHTML = `<section class="group">${rows}</section>`;
   }
@@ -383,11 +398,14 @@
       ? `<div class="status-card warn"><span>⚠️</span><div><strong>Necesita atención</strong><p>${escapeHtml(state.client.generation_error)}</p></div></div>`
       : `<div class="status-card ok"><span>✓</span><div><strong>Todo en orden</strong><p>No hay errores de generación pendientes.</p></div></div>`;
   }
-  function storyCard(story, index, groupId) {
+  function storyCard(story, index, groupId, batchReorderable = true) {
     const dateBadge = story.fecha_publicacion ? `<span class="story-date">${escapeHtml(dayLabel(story.fecha_publicacion))}</span>` : '';
     const approvedClass = story.aprobado ? ' approved' : '';
     const approvedBadge = story.aprobado ? '<span class="approved-badge" title="Aprobada">✓</span>' : '';
-    return `<article class="story${approvedClass}" draggable="true" data-story-id="${escapeHtml(story.id)}" data-story-group-id="${escapeHtml(groupId)}">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="Historia ${index+1}">` : ''}<span class="story-num">${index+1}</span>${dateBadge}${approvedBadge}<div class="story-actions"><button class="icon-btn" data-action="preview" aria-label="Ver en grande">👁</button><button class="icon-btn" data-action="edit" aria-label="Editar">✎</button><button class="icon-btn" data-action="delete" aria-label="Eliminar">×</button></div><div class="story-overlay"><p class="story-text">${escapeHtml(story.text || 'Sin texto todavía')}</p></div></article>`;
+    const locked = storyIsLocked(story);
+    const reorderable = batchReorderable && !locked;
+    const mutationActions = locked ? '' : '<button class="icon-btn" data-action="edit" aria-label="Editar">✎</button><button class="icon-btn" data-action="delete" aria-label="Eliminar">×</button>';
+    return `<article class="story${approvedClass}${locked ? ' read-only' : ''}" draggable="${reorderable ? 'true' : 'false'}" data-reorderable="${reorderable ? 'true' : 'false'}" data-story-id="${escapeHtml(story.id)}" data-story-group-id="${escapeHtml(groupId)}">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="Historia ${index+1}">` : ''}<span class="story-num">${index+1}</span>${dateBadge}${approvedBadge}<div class="story-actions"><button class="icon-btn" data-action="preview" aria-label="Ver en grande">👁</button>${mutationActions}</div><div class="story-overlay"><p class="story-text">${escapeHtml(story.text || 'Sin texto todavía')}</p></div></article>`;
   }
   async function saveClientField(field, buttonId) {
     const name = field === 'weekly_focus' ? 'focus' : 'description';
@@ -442,7 +460,12 @@
   let calMonthOffset = 0;
   let pendingUploadDate = null; // set right before triggering the hidden file input
   let pendingUploadHora = '09:00'; // read from that day's inline time input at the same moment
-  const dayTimeSaving = new Set(); // one in-flight update per publication date
+  const dayTimeSaving = new Set(); // one serialized save loop per client selection and publication date
+  const pendingDayTimes = new Map(); // latest value wins within that same scoped save loop
+  const publishingDates = new Set(); // block repeated manual publish clicks for the same client selection/date
+  function dayOperationKey(clientId, selectionVersion, iso) {
+    return `${selectionVersion}:${clientId}:${iso}`;
+  }
   let draftDates = new Set(); // ISO dates clicked on the calendar, waiting for an image — shown as empty "+" cards in "Historias generadas"
   function monthBase() { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + calMonthOffset); return d; }
   function isoDate(year, month, day) { return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; }
@@ -673,7 +696,7 @@
   }
   async function toggleApproval(story) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
-    if (!clientId) return;
+    if (!clientId || storyIsLocked(story)) return;
     const previous = story.aprobado, next = !previous;
     story.aprobado = next; // optimistic — feels instant, reverted below on failure
     renderStories(); renderPlan();
@@ -717,37 +740,111 @@
       showMessage('Publicación agendada.');
     } catch(error) { showMessage(error.message, true); }
   }
-  async function updateDayTime(iso, hhmm, input) {
+  async function publishDayNow(iso) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
-    if (!clientId || dayTimeSaving.has(iso) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return;
-    const hasStories = state.groups.some((group) => (group.stories||[]).some((story) => story.fecha_publicacion === iso));
-    if (!hasStories) return; // empty row: the chosen time is just read from the input at upload time
-    dayTimeSaving.add(iso);
-    if (input) input.disabled = true;
+    if (!clientId) return;
+    const operationKey = dayOperationKey(clientId, selectionVersion, iso);
+    if (publishingDates.has(operationKey)) return;
+    const confirmed = await confirmDialog(
+      `Esto publica de verdad en Instagram ahora mismo, sin esperar a la fecha agendada. ¿Confirmás para el ${dayLabel(iso)}?`,
+      {okLabel:'Publicar ahora', danger:true});
+    if (!confirmed) return;
+    if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+    if (publishingDates.has(operationKey)) return; // another confirmation won the race
+    publishingDates.add(operationKey);
+    const button = document.querySelector(`[data-publish-now-date="${CSS.escape(iso)}"]`);
+    const previousLabel = button ? button.textContent : null;
+    if (button) { button.disabled = true; button.textContent = 'Publicando...'; }
+    let result = null;
     try {
-      await api(`/portal/clientes/${encodeURIComponent(clientId)}/dias/${encodeURIComponent(iso)}/hora`, {method:'PATCH', body:JSON.stringify({hora_publicacion:hhmm})});
+      try {
+        result = await api(`/portal/clientes/${encodeURIComponent(clientId)}/dias/${encodeURIComponent(iso)}/publicar-ahora`, {method:'POST'});
+      } catch(error) {
+        if (selectionVersion === state.selectionVersion && clientId === state.client?.id) showMessage(error.message, true);
+        return;
+      }
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
-      const groups = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias`);
+      let groups;
+      try {
+        groups = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias`);
+      } catch(refreshError) {
+        showMessage(`Publicadas: ${result.publicadas}. Fallidas: ${result.fallidas}. La publicación se realizó, pero no se pudo actualizar la pantalla: ${refreshError.message}`, true);
+        return;
+      }
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       state.groups = groups;
       renderStories(); renderPlan(); renderCalendarMonth(); renderActivity();
-      showMessage('Hora actualizada.');
-    } catch(error) {
-      if (selectionVersion === state.selectionVersion && clientId === state.client?.id) {
-        renderStories(); // state still contains the persisted value
-        showMessage(error.message, true);
-      }
+      showMessage(`Publicadas: ${result.publicadas}. Fallidas: ${result.fallidas}.`, result.fallidas > 0);
     } finally {
-      dayTimeSaving.delete(iso);
-      if (selectionVersion === state.selectionVersion && clientId === state.client?.id) {
-        const current = document.querySelector(`.day-time[data-time-for="${CSS.escape(iso)}"]`);
-        if (current) current.disabled = false;
+      publishingDates.delete(operationKey);
+      if (button && previousLabel !== null && button.isConnected) {
+        button.disabled = false; button.textContent = previousLabel;
+      }
+    }
+  }
+  async function updateDayTime(iso, hhmm, input) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return;
+    const operationKey = dayOperationKey(clientId, selectionVersion, iso);
+    const storiesForDay = state.groups.flatMap((group) => (group.stories||[]).filter((story) => story.fecha_publicacion === iso));
+    const hasStories = storiesForDay.length > 0;
+    if (!hasStories) return; // empty row: the chosen time is just read from the input at upload time
+    if (storiesForDay.some((story) => storyIsLocked(story))) return;
+    if (dayTimeSaving.has(operationKey)) {
+      pendingDayTimes.set(operationKey, hhmm);
+      return;
+    }
+    dayTimeSaving.add(operationKey);
+    let nextValue = hhmm;
+    let saveError = null;
+    let groups = null;
+    let retryValue = null;
+    try {
+      while (true) {
+        await api(`/portal/clientes/${encodeURIComponent(clientId)}/dias/${encodeURIComponent(iso)}/hora`, {method:'PATCH', body:JSON.stringify({hora_publicacion:nextValue})});
+        nextValue = pendingDayTimes.get(operationKey) || null;
+        pendingDayTimes.delete(operationKey);
+        if (nextValue) continue;
+        groups = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias`);
+        // A change that arrived while reloading must still be persisted. Check
+        // before rendering; no event can interleave between this check and the
+        // synchronous cleanup below.
+        nextValue = pendingDayTimes.get(operationKey) || null;
+        pendingDayTimes.delete(operationKey);
+        if (!nextValue) break;
+      }
+    } catch(error) {
+      saveError = error;
+      retryValue = pendingDayTimes.get(operationKey) || null;
+      pendingDayTimes.delete(operationKey);
+      // Always reload, including after an error: an earlier queued write may
+      // already have succeeded, so local rollback alone can be stale.
+      try {
+        groups = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias`);
+      } catch(refreshError) {
+        saveError = saveError || refreshError;
+      }
+    }
+    try {
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      if (groups) state.groups = groups;
+      renderStories(); renderPlan(); renderCalendarMonth(); renderActivity();
+      if (saveError) showMessage(saveError.message, true);
+      else showMessage('Hora actualizada.');
+    } finally {
+      dayTimeSaving.delete(operationKey);
+      const queued = pendingDayTimes.get(operationKey) || retryValue;
+      pendingDayTimes.delete(operationKey);
+      if (queued && selectionVersion === state.selectionVersion && clientId === state.client?.id) {
+        updateDayTime(iso, queued, input);
       }
     }
   }
   async function updateDayDescription(iso, descripcion) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
+    const storiesForDay = state.groups.flatMap((group) => (group.stories||[]).filter((story) => story.fecha_publicacion === iso));
+    if (storiesForDay.some((story) => storyIsLocked(story))) return;
     try {
       await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias/manual/${encodeURIComponent(iso)}/descripcion`, {method:'PATCH', body:JSON.stringify({descripcion})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
@@ -768,6 +865,7 @@
   }
   function findStory(storyId) { for (const group of state.groups) { const story=(group.stories||[]).find((item)=>item.id===storyId); if(story) return {group,story}; } return null; }
   function openStory(story, group) {
+    if (storyIsLocked(story)) return;
     state.editingStory=story; $('story-text').value=story.text || '';
     $('story-edit-img').src = story.image_url || '';
     // Only offer AI-generated text for manually-uploaded stories — never for
@@ -783,7 +881,7 @@
   }
   async function saveStoryFont() {
     const select=$('story-font'), story=state.editingStory, clientId=state.client?.id, selectionVersion=state.selectionVersion, fontChoice=select.value || null;
-    if (!story || !clientId || fontChoice === (story.font_choice || null)) return;
+    if (!story || storyIsLocked(story) || !clientId || fontChoice === (story.font_choice || null)) return;
     select.disabled=true;
     try {
       const updated = await api(`/portal/historias/${encodeURIComponent(story.id)}/tipografia`, {method:'PATCH', body:JSON.stringify({font_choice:fontChoice})});
@@ -799,7 +897,7 @@
   }
   async function generateStoryText() {
     const button=$('generate-ai-text'), story=state.editingStory, clientId=state.client?.id, selectionVersion=state.selectionVersion;
-    if (!story || !clientId) return;
+    if (!story || storyIsLocked(story) || !clientId) return;
     const previousLabel = button.textContent;
     button.disabled=true; button.textContent='Generando...';
     try {
@@ -829,6 +927,9 @@
     // The text is already baked into the composed image itself — no
     // separate caption overlay, or it would show up twice.
     $('ig-preview-img').src = story.image_url || '';
+    const locked = storyIsLocked(story);
+    $('ig-preview-edit').classList.toggle('hidden', locked);
+    $('ig-preview-delete').classList.toggle('hidden', locked);
     renderPreviewBars();
   }
   function openPreview(stories) {
@@ -840,7 +941,7 @@
   function previewPrev() { if (previewIndex > 0) { previewIndex--; showPreviewStory(); } }
   async function saveStory() {
     const button=$('save-story'), textoNuevo=$('story-text').value.trim(), story=state.editingStory, clientId=state.client?.id, selectionVersion=state.selectionVersion;
-    if(!textoNuevo || !story || !clientId)return; button.disabled=true;
+    if(!textoNuevo || !story || storyIsLocked(story) || !clientId)return; button.disabled=true;
     try {
       const updated=await api(`/portal/historias/${encodeURIComponent(story.id)}`, {method:'PATCH', body:JSON.stringify({texto_nuevo:textoNuevo})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id || story !== state.editingStory) return;
@@ -851,6 +952,7 @@
   async function reorderStory(group, draggedId, targetId) {
     const clientId=state.client?.id, selectionVersion=state.selectionVersion;
     if (!clientId || draggedId === targetId) return;
+    if ((group.stories || []).some((story) => storyIsLocked(story))) return;
     const stories=[...group.stories].sort((a,b)=>a.order-b.order);
     const fromIndex=stories.findIndex((item)=>item.id===draggedId), toIndex=stories.findIndex((item)=>item.id===targetId);
     if (fromIndex<0 || toIndex<0) return;
@@ -860,7 +962,7 @@
     catch(error) { if (selectionVersion===state.selectionVersion&&!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message,true); }
   }
   async function deleteStory(group, story) {
-    const clientId=state.client?.id, selectionVersion=state.selectionVersion; if(!clientId)return false;
+    const clientId=state.client?.id, selectionVersion=state.selectionVersion; if(!clientId || storyIsLocked(story))return false;
     const confirmed = await confirmDialog('¿Cancelar esta historia? Esta acción no se puede deshacer.', {okLabel:'Sí, cancelar', danger:true});
     if (!confirmed || selectionVersion!==state.selectionVersion || clientId!==state.client?.id) return false;
     try {
@@ -879,6 +981,7 @@
     const clientId=state.client?.id, selectionVersion=state.selectionVersion;
     const entry = planItemsByDate().get(iso);
     if (!clientId || !entry || !entry.stories.length) return;
+    if (entry.stories.some((story) => storyIsLocked(story))) return;
     const count = entry.stories.length;
     const confirmed = await confirmDialog(
       `¿Eliminar ${count === 1 ? 'esta publicación' : `las ${count} historias`} del ${dayLabel(iso)}? Esta acción no se puede deshacer.`,
@@ -898,13 +1001,14 @@
   }
   function editPreviewStory() {
     const story = previewStories[previewIndex];
-    if (!story) return;
+    if (!story || storyIsLocked(story)) return;
     const found = findStory(story.id);
     $('ig-preview-dialog').close();
     openStory(story, found ? found.group : null);
   }
   async function deletePreviewStory() {
     const story = previewStories[previewIndex];
+    if (!story || storyIsLocked(story)) return;
     const found = story && findStory(story.id);
     if (!found) return;
     const deleted = await deleteStory(found.group, story);
@@ -965,6 +1069,8 @@
   $('stories').addEventListener('click',(event)=>{
     const scheduleBtn=event.target.closest('[data-schedule-date]');
     if (scheduleBtn) { scheduleDay(scheduleBtn.dataset.scheduleDate); return; }
+    const publishNowBtn=event.target.closest('[data-publish-now-date]');
+    if (publishNowBtn) { publishDayNow(publishNowBtn.dataset.publishNowDate); return; }
     const addCard=event.target.closest('[data-add-date]');
     if (addCard) {
       pendingUploadDate=addCard.dataset.addDate;
@@ -978,16 +1084,20 @@
     const found=findStory(card.dataset.storyId); if(!found) return;
     if (action) {
       if(action.dataset.action==='preview')openPreview([found.story]);
+      if(storyIsLocked(found.story)) return;
       if(action.dataset.action==='edit')openStory(found.story,found.group);
       if(action.dataset.action==='delete')deleteStory(found.group,found.story);
       return;
     }
+    if (storyIsLocked(found.story)) return;
     toggleApproval(found.story);
   });
   let draggedStoryId = null;
   let draggedStoryGroupId = null;
   $('stories').addEventListener('dragstart',(event)=>{
     const card=event.target.closest('.story[data-story-id]'); if(!card)return;
+    const found=findStory(card.dataset.storyId);
+    if(card.dataset.reorderable!=='true' || !found || storyIsLocked(found.story)) { event.preventDefault(); return; }
     draggedStoryId=card.dataset.storyId;
     draggedStoryGroupId=card.dataset.storyGroupId;
     event.dataTransfer.effectAllowed='move';
@@ -1001,6 +1111,7 @@
   });
   $('stories').addEventListener('dragover',(event)=>{
     const card=event.target.closest('.story[data-story-id]'); if(!card||!draggedStoryId)return;
+    if (card.dataset.reorderable !== 'true') return;
     if (card.dataset.storyGroupId !== draggedStoryGroupId) return;
     event.preventDefault();
     if (card.dataset.storyId!==draggedStoryId) card.classList.add('drag-over');
@@ -1010,10 +1121,11 @@
   });
   $('stories').addEventListener('drop',(event)=>{
     const card=event.target.closest('.story[data-story-id]'); if(!card||!draggedStoryId)return;
+    if (card.dataset.reorderable !== 'true') return;
     if (card.dataset.storyGroupId !== draggedStoryGroupId) return;
     event.preventDefault(); card.classList.remove('drag-over');
     const targetId=card.dataset.storyId; if(targetId===draggedStoryId)return;
-    const found=findStory(draggedStoryId); if(found)reorderStory(found.group,draggedStoryId,targetId);
+    const found=findStory(draggedStoryId); if(found && !storyIsLocked(found.story))reorderStory(found.group,draggedStoryId,targetId);
   });
   $('stories').addEventListener('change',(event)=>{
     const timeInput=event.target.closest('[data-time-for]');

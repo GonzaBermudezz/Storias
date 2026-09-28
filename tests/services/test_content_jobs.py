@@ -467,3 +467,39 @@ def test_unapproved_manual_story_never_publishes(publication):
     jobs.publish_daily(db, date(2026, 9, 21))
     engine.assert_not_called()
     assert db.rows["stories"][0]["estado"] == "pendiente"
+
+
+def test_publish_now_ignores_date_and_hour_gates(publication):
+    engine, _ = publication
+    db = Database(stories=[story(fecha_publicacion="2099-01-01", hora_publicacion="23:59:00")])
+
+    result = jobs.publish_now(db, "good", "2099-01-01")
+
+    engine.assert_called_once()
+    assert db.rows["stories"][0]["estado"] == "publicado"
+    assert result == {"publicadas": 1, "fallidas": 0}
+
+
+def test_publish_now_skips_unapproved_and_other_clients_or_dates(publication):
+    engine, _ = publication
+    db = Database(stories=[
+        story(aprobado=False),
+        story("other-client", client_id="other"),
+        story("other-date", fecha_publicacion="2026-09-22"),
+    ])
+
+    result = jobs.publish_now(db, "good", "2026-09-21")
+
+    engine.assert_not_called()
+    assert result == {"publicadas": 0, "fallidas": 0}
+
+
+def test_publish_now_counts_failures(publication):
+    engine, _ = publication
+    engine.side_effect = MetaPublishError("Meta failed")
+    db = Database(stories=[story()])
+
+    result = jobs.publish_now(db, "good", "2026-09-21")
+
+    assert result == {"publicadas": 0, "fallidas": 1}
+    assert db.rows["stories"][0]["estado"] == "error"

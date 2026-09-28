@@ -245,6 +245,30 @@ def _publish_story(story: dict) -> dict:
     return {"estado": "error", "error": message}
 
 
+def _claim_and_publish(db, stories: list[dict]) -> dict:
+    """Claim stories before publishing so concurrent callers cannot double-post."""
+    published = failed = 0
+    for story in stories:
+        try:
+            claimed = db.table("stories").update({"estado": "publicando"}).eq(
+                "id", story["id"]).eq("estado", "pendiente").execute().data
+            if not claimed:
+                continue
+            outcome = _publish_story(story)
+            db.table("stories").update(outcome).eq("id", story["id"]).eq(
+                "estado", "publicando").execute()
+            if outcome["estado"] == "publicado":
+                published += 1
+            else:
+                failed += 1
+        except Exception:
+            # A write failure after Meta may mean it was published: leave the claim
+            # for manual reconciliation, never blindly retry the external side effect.
+            logger.error("Publication needs reconciliation for story %s", story["id"])
+            failed += 1
+    return {"publicadas": published, "fallidas": failed}
+
+
 def publish_daily(db, today: date | None = None, now: datetime | None = None) -> None:
     """Runs frequently (every 15 min, see scheduler.py) rather than once a day,
     so each story publishes close to its own hora_publicacion instead of all of
@@ -258,16 +282,15 @@ def publish_daily(db, today: date | None = None, now: datetime | None = None) ->
     # those as always due, same as the old once-a-day behavior.
     query = query.or_(f"hora_publicacion.is.null,hora_publicacion.lte.{now.strftime('%H:%M:%S')}")
     stories = _all_rows(query.order("story_group_id").order("order").order("id"))
-    for story in stories:
-        try:
-            claimed = db.table("stories").update({"estado": "publicando"}).eq(
-                "id", story["id"]).eq("estado", "pendiente").execute().data
-            if not claimed:
-                continue
-            outcome = _publish_story(story)
-            db.table("stories").update(outcome).eq("id", story["id"]).eq(
-                "estado", "publicando").execute()
-        except Exception:
-            # A write failure after Meta may mean it was published: leave the claim
-            # for manual reconciliation, never blindly retry the external side effect.
-            logger.error("Publication needs reconciliation for story %s", story["id"])
+    _claim_and_publish(db, stories)
+
+
+def publish_now(db, client_id: str, fecha_publicacion: str) -> dict:
+    """Publish one client's approved pending stories for a date immediately."""
+    query = db.table("stories").select(
+        "*, clients(instagram_account_id, meta_access_token_encrypted, calendly_link)"
+    ).eq("client_id", client_id).eq("fecha_publicacion", fecha_publicacion).eq(
+        "estado", "pendiente"
+    ).eq("aprobado", True)
+    stories = _all_rows(query.order("story_group_id").order("order").order("id"))
+    return _claim_and_publish(db, stories)

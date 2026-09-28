@@ -602,15 +602,19 @@ def update_manual_day_time(client_id: str, fecha_publicacion: str, body: DayTime
     ).is_("generation_week", "null").eq("agendado", False).execute().data
     if not group:
         raise HTTPException(status_code=404, detail="No hay historias manuales para esa fecha")
-    db.table("story_groups").update({"scheduled_time": f"{body.hora_publicacion}:00"}).eq(
-        "id", group[0]["id"]
-    ).execute()
-    stories = db.table("stories").select("id,estado").eq("story_group_id", group[0]["id"]).execute().data or []
-    editable_ids = [row["id"] for row in stories if row.get("estado") not in _LOCKED_STATES]
-    if editable_ids:
-        db.table("stories").update({"hora_publicacion": f"{body.hora_publicacion}:00"}).in_(
-            "id", editable_ids
-        ).execute()
+    stories = db.table("stories").select("id,estado,agendado").eq(
+        "story_group_id", group[0]["id"]
+    ).execute().data or []
+    editable_ids = [
+        row["id"] for row in stories
+        if not row.get("agendado") and row.get("estado") not in _LOCKED_STATES
+    ]
+    if not editable_ids:
+        raise HTTPException(status_code=409, detail="Las historias de esa fecha ya no se pueden editar")
+    value = f"{body.hora_publicacion}:00"
+    db.table("stories").update({"hora_publicacion": value}).in_("id", editable_ids).execute()
+    # The group field is only a summary; update it after the publication rows.
+    db.table("story_groups").update({"scheduled_time": value}).eq("id", group[0]["id"]).execute()
     return {"detail": "Hora actualizada", "updated": len(editable_ids)}
 
 
@@ -673,6 +677,23 @@ def schedule_day(client_id: str, fecha_publicacion: str, employee: EmployeeDep):
         if relevant and all(row.get("agendado") for row in relevant):
             db.table("story_groups").update({"agendado": True}).eq("id", group_id).execute()
     return {"detail": "Publicación agendada"}
+
+
+@router.post("/clientes/{client_id}/dias/{fecha_publicacion}/publicar-ahora")
+def publish_day_now(client_id: str, fecha_publicacion: str, employee: EmployeeDep):
+    """Publish every approved pending story for one client and date immediately."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    stories = db.table("stories").select("id,estado,aprobado").eq(
+        "client_id", client_id
+    ).eq("fecha_publicacion", fecha_publicacion).execute().data or []
+    active = [row for row in stories if row.get("estado") not in _LOCKED_STATES]
+    if not active:
+        raise HTTPException(status_code=422, detail="No hay historias para publicar ese día")
+    if not all(row.get("aprobado") for row in active):
+        raise HTTPException(status_code=422, detail="Todavía hay historias sin aprobar ese día")
+    result = content_jobs.publish_now(db, client_id, fecha_publicacion)
+    return {"detail": "Publicación enviada a Instagram", **result}
 
 
 @router.patch("/historias/reordenar")
