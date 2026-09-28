@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     # ── Google OAuth ───────────────────────────────────────────────────────────
     google_client_id: str
     google_client_secret: str
+    # En desarrollo, este host debe coincidir con el usado para entrar al portal;
+    # /auth/google redirige al host canónico para conservar la cookie de sesión.
     google_redirect_uri: str = "http://localhost:5001/auth/callback"
 
     # ── Claude API ─────────────────────────────────────────────────────────────

@@ -5,9 +5,11 @@ Autenticación — dos flujos:
 2. Clientes finales    → Magic link por email (Supabase Auth)
 """
 from __future__ import annotations
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -19,6 +21,7 @@ from app.db.supabase import get_admin_client
 from app.services.encryption import encrypt
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -27,6 +30,11 @@ def _make_jwt(payload: dict, expires_minutes: int = 60 * 8) -> str:
     s = get_settings()
     exp = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
     return jwt.encode({**payload, "exp": exp}, s.secret_key, algorithm="HS256")
+
+
+def _canonical_authority(s: Settings) -> str:
+    """Return the host and port that must own the OAuth session cookie."""
+    return urlparse(s.google_redirect_uri).netloc
 
 
 def _set_session_cookie(response: Response, token: str, s: Settings) -> None:
@@ -46,6 +54,10 @@ def _set_session_cookie(response: Response, token: str, s: Settings) -> None:
 async def google_login(request: Request):
     """Inicia el flujo OAuth con Google. Redirige al selector de cuenta."""
     s = get_settings()
+    canonical = _canonical_authority(s)
+    if not s.is_production and request.url.netloc != canonical:
+        return RedirectResponse(str(request.url.replace(netloc=canonical)))
+
     state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = state
 
@@ -70,7 +82,16 @@ async def google_callback(request: Request, code: str, state: str):
     s = get_settings()
 
     # Verificar state para prevenir CSRF
-    if state != request.session.get("oauth_state"):
+    oauth_state = request.session.get("oauth_state")
+    if oauth_state is None:
+        logger.warning(
+            "OAuth callback sin oauth_state en sesión — posible mismatch de host "
+            "(revisar GOOGLE_REDIRECT_URI vs host usado)"
+        )
+    elif state != oauth_state:
+        logger.warning("OAuth state mismatch — posible reintento con URL vieja/consumida")
+
+    if state != oauth_state:
         raise HTTPException(status_code=400, detail="State inválido — posible CSRF")
     request.session.pop("oauth_state", None)
 
