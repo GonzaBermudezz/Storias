@@ -188,6 +188,34 @@ def test_patch_client_ritmo_saves_one_to_three_distinct_days(
     assert db.updates == [("clients", {"publish_days": saved_days}, [("id", "c1")])]
 
 
+def test_patch_client_ritmo_updates_publish_together_without_clearing_days(
+        monkeypatch, client):
+    current_days = [{"day": 1, "time": "08:00"}, {"day": 5, "time": "18:00"}]
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "publish_days": current_days},
+        [{"id": "c1", "publish_days": current_days, "publish_together": True}],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/ritmo", json={"publish_together": True})
+
+    assert response.status_code == 200
+    assert response.json()["publish_days"] == current_days
+    assert response.json()["publish_together"] is True
+    assert db.updates == [("clients", {"publish_together": True}, [("id", "c1")])]
+
+
+def test_patch_client_ritmo_rejects_empty_payload(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/ritmo", json={})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Nada para actualizar"}
+    assert db.updates == []
+
+
 def test_patch_client_ritmo_rejects_empty_days(client):
     response = client.patch("/portal/clientes/c1/ritmo", json={"publish_days": []})
     assert response.status_code == 422

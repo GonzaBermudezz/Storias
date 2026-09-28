@@ -88,10 +88,15 @@ def _thread_payload(row: dict, config: ClientContentConfig, result: HiloGenerado
     monday = today - timedelta(days=today.weekday())
     next_monday = monday + timedelta(days=7)
     schedule = publish_schedule(row)
-    # The engine always returns four stories. Expand 1-4 selected weekdays into
-    # four chronological slots, distributing stories as evenly as possible:
-    # 1 => 4, 2 => 2+2, 3 => 2+1+1, 4 => 1 each.
-    story_schedule = [schedule[(i * len(schedule)) // 4] for i in range(4)]
+    if row.get("publish_together"):
+        # Sequence mode uses only the first ordered client slot; any other
+        # selected weekdays are intentionally ignored for this weekly thread.
+        story_schedule = [schedule[0]] * 4
+    else:
+        # The engine always returns four stories. Expand 1-4 selected weekdays
+        # into four chronological slots, distributing stories evenly:
+        # 1 => 4, 2 => 2+2, 3 => 2+1+1, 4 => 1 each.
+        story_schedule = [schedule[(i * len(schedule)) // 4] for i in range(4)]
     publish_dates = [next_monday + timedelta(days=offset) for offset, _ in story_schedule]
     return {
         "p_client_id": config.client_id,

@@ -195,6 +195,35 @@ def test_weekly_uses_clients_custom_publish_schedule(generation):
         "08:00:00", "12:30:00", "18:00:00", "20:15:00"]
 
 
+def test_weekly_publish_together_uses_first_ordered_slot_for_all_four_stories(generation):
+    custom = [{"day": 5, "time": "18:00"}, {"day": 1, "time": "08:30"}]
+    db = Database([client(publish_days=custom, publish_together=True)])
+
+    jobs.generate_weekly(db, date(2026, 9, 18))
+
+    stories = db.saved[0]["p_stories"]
+    assert [story["fecha_publicacion"] for story in stories] == ["2026-09-22"] * 4
+    assert [story["hora_publicacion"] for story in stories] == ["08:30:00"] * 4
+
+
+@pytest.mark.parametrize("publish_together", [False, None])
+def test_weekly_publish_together_disabled_or_missing_preserves_distribution(
+        generation, publish_together):
+    custom = [{"day": 1, "time": "08:00"}, {"day": 5, "time": "18:00"}]
+    overrides = {"publish_days": custom}
+    if publish_together is not None:
+        overrides["publish_together"] = publish_together
+    db = Database([client(**overrides)])
+
+    jobs.generate_weekly(db, date(2026, 9, 18))
+
+    stories = db.saved[0]["p_stories"]
+    assert [story["fecha_publicacion"] for story in stories] == [
+        "2026-09-22", "2026-09-22", "2026-09-26", "2026-09-26"]
+    assert [story["hora_publicacion"] for story in stories] == [
+        "08:00:00", "08:00:00", "18:00:00", "18:00:00"]
+
+
 @pytest.mark.parametrize("custom,expected_dates,expected_times", [
     ([{"day": 2, "time": "10:00"}],
      ["2026-09-23"] * 4, ["10:00:00"] * 4),

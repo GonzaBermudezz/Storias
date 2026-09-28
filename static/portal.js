@@ -61,7 +61,10 @@
     });
   }
   function initials(name) { return String(name || '?').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(); }
-  function setControlsDisabled(disabled) { ['save-description','save-focus','try-prompt','save-story','generate-weekly'].forEach((id) => { $(id).disabled = disabled; }); }
+  function setControlsDisabled(disabled) {
+    ['save-description','save-focus','try-prompt','save-story','generate-weekly'].forEach((id) => { $(id).disabled = disabled; });
+    $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating;
+  }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
   function clearSelection() {
     state.selectionVersion += 1; state.selectedClientId = null; state.client = null; state.groups = []; state.editingStory = null;
@@ -433,6 +436,8 @@
   }
   const CAL_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
   let ritmoDays = []; // [{day, time}], 1–4 days — four stories are distributed across them
+  let ritmoSaving = false;
+  let weeklyGenerating = false;
   let calMonthOffset = 0;
   let pendingUploadDate = null; // set right before triggering the hidden file input
   let pendingUploadHora = '09:00'; // read from that day's inline time input at the same moment
@@ -465,6 +470,17 @@
       `<span class="ritmo-chip${activeDays.has(day)?' active':''}" data-day="${day}">${label}</span>`
     ).join('');
   }
+  function refreshRitmoControls() {
+    const rhythmControlsBlocked = ritmoSaving || weeklyGenerating;
+    $('publish-together-toggle').disabled = rhythmControlsBlocked;
+    $('ritmo-chips').classList.toggle('is-saving', rhythmControlsBlocked);
+    $('ritmo-chips').setAttribute('aria-disabled', String(rhythmControlsBlocked));
+    $('generate-weekly').disabled = rhythmControlsBlocked || !state.client;
+  }
+  function setRitmoSaving(saving) {
+    ritmoSaving = saving;
+    refreshRitmoControls();
+  }
   async function loadCalendar() {
     calMonthOffset = 0;
     draftDates = new Set();
@@ -475,6 +491,7 @@
     renderRitmoChips();
   }
   async function toggleRitmoDay(day) {
+    if (ritmoSaving || weeklyGenerating) return;
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
     const idx = ritmoDays.findIndex((e) => e.day === day);
@@ -484,26 +501,53 @@
       next.splice(idx, 1);
     }
     else { if (next.length >= 4) { showMessage('Ya elegiste 4 días — sacá uno para agregar otro.', true); return; } next.push({day, time:'09:00'}); }
+    setRitmoSaving(true);
     try {
       const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/ritmo`, {method:'PATCH', body:JSON.stringify({publish_days:next})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       state.client.publish_days = updated.publish_days; ritmoDays = updated.publish_days; renderRitmoChips();
       showMessage('Días automáticos actualizados.');
     } catch(error) { showMessage(error.message, true); }
+    finally { setRitmoSaving(false); }
   }
   function openRitmoDialog() {
     const feedback = $('ritmo-generation-message');
+    const publishTogether = Boolean(state.client?.publish_together);
+    $('publish-together-toggle').checked = publishTogether;
+    $('publish-together-hint').classList.toggle('hidden', !publishTogether);
     feedback.textContent = '';
     feedback.classList.add('hidden');
     $('ritmo-dialog').showModal();
   }
+  async function togglePublishTogether(event) {
+    const toggle = event.currentTarget;
+    if (ritmoSaving || weeklyGenerating) return;
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    const nextValue = toggle.checked;
+    setRitmoSaving(true);
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/ritmo`, {method:'PATCH', body:JSON.stringify({publish_together:nextValue})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client = {...state.client, ...updated, publish_together: nextValue};
+      $('publish-together-hint').classList.toggle('hidden', !nextValue);
+      showMessage('Modo de publicación actualizado.');
+    } catch(error) {
+      toggle.checked = Boolean(state.client?.publish_together);
+      $('publish-together-hint').classList.toggle('hidden', !toggle.checked);
+      showMessage(error.message, true);
+    } finally {
+      setRitmoSaving(false);
+    }
+  }
   async function generateWeeklyNow() {
+    if (ritmoSaving || weeklyGenerating) return;
     const button = $('generate-weekly'), feedback = $('ritmo-generation-message');
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
     const previousLabel = button.textContent;
     feedback.textContent = ''; feedback.classList.add('hidden');
-    button.disabled = true; button.textContent = 'Generando...';
+    weeklyGenerating = true; refreshRitmoControls(); button.textContent = 'Generando...';
     try {
       const result = await api(`/portal/clientes/${encodeURIComponent(clientId)}/generar-semana`, {method:'POST'});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
@@ -516,7 +560,7 @@
         feedback.classList.remove('hidden');
       }
     } finally {
-      button.disabled = false; button.textContent = previousLabel;
+      weeklyGenerating = false; refreshRitmoControls(); button.textContent = previousLabel;
     }
   }
   async function uploadManualImage(iso, hora, file) {
@@ -817,6 +861,7 @@
   $('close-ritmo').addEventListener('click',()=>$('ritmo-dialog').close());
   $('close-ritmo-2').addEventListener('click',()=>$('ritmo-dialog').close());
   $('generate-weekly').addEventListener('click',generateWeeklyNow);
+  $('publish-together-toggle').addEventListener('change',togglePublishTogether);
   $('ig-preview-close').addEventListener('click',()=>$('ig-preview-dialog').close());
   $('ig-preview-prev').addEventListener('click',previewPrev);
   $('ig-preview-next').addEventListener('click',previewNext);

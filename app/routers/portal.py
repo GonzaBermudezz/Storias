@@ -30,7 +30,7 @@ _CLIENT_DETAIL = (
     "id,agency_id,name,business_description,weekly_focus,"
     "weekly_focus_expires_at,tone_examples,topics,drive_folder_id,logo_url,"
     "calendly_link,prob_link,generation_error,generation_error_at,team_id,publish_days,"
-    "font_choice"
+    "publish_together,font_choice"
 )
 
 
@@ -68,6 +68,7 @@ class ScheduleEntry(BaseModel):
 
 class ClientRitmoPatch(BaseModel):
     publish_days: list[ScheduleEntry] | None = None
+    publish_together: bool | None = None
 
     @field_validator("publish_days")
     @classmethod
@@ -343,11 +344,17 @@ def patch_client_ritmo(client_id: str, body: ClientRitmoPatch, employee: Employe
     the audited RPC."""
     db = get_admin_client()
     _client_or_error(db, client_id, employee.agency_id)
-    days = [entry.model_dump() for entry in body.publish_days] if body.publish_days else None
-    updated = db.table("clients").update({"publish_days": days}).eq(
+    payload = {}
+    if body.publish_days is not None:
+        payload["publish_days"] = [entry.model_dump() for entry in body.publish_days]
+    if body.publish_together is not None:
+        payload["publish_together"] = body.publish_together
+    if not payload:
+        raise HTTPException(status_code=400, detail="Nada para actualizar")
+    updated = db.table("clients").update(payload).eq(
         "id", client_id
     ).execute().data
-    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, "publish_days": days}
+    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, **payload}
 
 
 @router.get("/ritmo-default")

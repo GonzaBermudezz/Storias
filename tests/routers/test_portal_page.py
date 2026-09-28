@@ -72,6 +72,20 @@ def test_portal_frontend_supports_variable_rhythm_and_keeps_all_pending_groups_a
     assert "draftDates = new Set(); setControlsDisabled(true)" in source
 
 
+def test_portal_frontend_blocks_generation_during_any_rhythm_save():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "let ritmoSaving = false" in source
+    assert "function setRitmoSaving(saving)" in source
+    assert source.count("setRitmoSaving(true)") == 2
+    assert source.count("setRitmoSaving(false)") == 2
+    assert "const rhythmControlsBlocked = ritmoSaving || weeklyGenerating" in source
+    assert "$('publish-together-toggle').disabled = rhythmControlsBlocked" in source
+    assert "$('generate-weekly').disabled = rhythmControlsBlocked" in source
+    assert "classList.toggle('is-saving', rhythmControlsBlocked)" in source
+    assert source.count("if (ritmoSaving || weeklyGenerating) return") == 3
+
+
 def test_portal_frontend_keeps_story_reordering_inside_its_group():
     source = TestClient(app).get("/static/portal.js").text
 

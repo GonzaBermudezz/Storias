@@ -33,7 +33,15 @@ try {
   assert.ok(applied.some((file) => file.endsWith('20260922_a5_fix_database_invariants.sql')));
   assert.ok(applied.some((file) => file.endsWith('20260923_a5_atomic_manual_group_cleanup.sql')));
   assert.ok(applied.some((file) => file.endsWith('20260924_a5_story_schedule_state.sql')));
+  assert.ok(applied.some((file) => file.endsWith('20260928_a6_publish_together.sql')));
   passed.push('all migrations apply in lexical order');
+
+  assert.deepEqual(
+    await query("SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='clients' AND column_name='publish_together'"),
+    [{ column_name: 'publish_together', data_type: 'boolean', is_nullable: 'NO', column_default: 'false' }],
+  );
+  assert.equal(await scalar('SELECT publish_together FROM clients WHERE id=$1', [legacyClient]), false);
+  passed.push('publish_together is opt-in and defaults existing clients to false');
 
   assert.deepEqual(
     await query(
