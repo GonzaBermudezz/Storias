@@ -549,6 +549,48 @@ class DayTimePatch(BaseModel):
         return value
 
 
+@router.patch("/clientes/{client_id}/dias/{fecha_publicacion}/hora")
+def update_day_time(client_id: str, fecha_publicacion: str, body: DayTimePatch, employee: EmployeeDep):
+    """Update every editable story on one date without changing client rhythm."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    stories = db.table("stories").select("id,estado,agendado,story_group_id").eq(
+        "client_id", client_id
+    ).eq("fecha_publicacion", fecha_publicacion).execute().data or []
+    if not stories:
+        raise HTTPException(status_code=404, detail="No hay historias para esa fecha")
+
+    editable = [
+        row for row in stories
+        if not row.get("agendado") and row.get("estado") not in _LOCKED_STATES
+    ]
+    if not editable:
+        raise HTTPException(status_code=409, detail="Las historias de esa fecha ya no se pueden editar")
+
+    value = f"{body.hora_publicacion}:00"
+    editable_ids = [row["id"] for row in editable]
+    db.table("stories").update({"hora_publicacion": value}).in_(
+        "id", editable_ids
+    ).execute()
+    editable_id_set = set(editable_ids)
+    summary_group_ids = list({
+        row["story_group_id"] for row in editable
+        if all(
+            other["id"] in editable_id_set
+            for other in stories
+            if other["story_group_id"] == row["story_group_id"]
+        )
+    })
+    # scheduled_time summarizes the first date of a group. Update it only
+    # after the publication rows succeed, and never rewrite the summary of a
+    # group that already has a confirmed story on this date.
+    if summary_group_ids:
+        db.table("story_groups").update({"scheduled_time": value}).in_(
+            "id", summary_group_ids
+        ).eq("scheduled_date", fecha_publicacion).execute()
+    return {"detail": "Hora actualizada", "updated": len(editable_ids)}
+
+
 @router.patch("/clientes/{client_id}/historias/manual/{fecha_publicacion}/hora")
 def update_manual_day_time(client_id: str, fecha_publicacion: str, body: DayTimePatch, employee: EmployeeDep):
     """Updates the shared publish time for every still-editable manual story on

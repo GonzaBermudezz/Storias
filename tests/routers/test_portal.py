@@ -561,6 +561,71 @@ def test_update_manual_day_time_requires_existing_manual_group(monkeypatch, clie
     assert response.status_code == 404
 
 
+def test_update_generated_day_time_updates_only_editable_stories_on_date(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+             [{"id": "s1", "estado": "pendiente", "agendado": False,
+               "story_group_id": "ai-week"},
+              {"id": "s2", "estado": "publicado", "agendado": True,
+               "story_group_id": "old-week"}],
+             None,
+             None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/dias/2026-09-28/hora",
+                            json={"hora_publicacion": "11:45"})
+
+    assert response.status_code == 200
+    assert response.json() == {"detail": "Hora actualizada", "updated": 1}
+    assert db.updates == [
+        ("stories", {"hora_publicacion": "11:45:00"}, [("id", ["s1"])]),
+        ("story_groups", {"scheduled_time": "11:45:00"},
+         [("id", ["ai-week"]), ("scheduled_date", "2026-09-28")]),
+    ]
+
+
+def test_update_generated_day_time_preserves_confirmed_story_on_same_date(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+             [{"id": "pending", "estado": "pendiente", "agendado": False,
+               "story_group_id": "ai-week"},
+              {"id": "confirmed", "estado": "pendiente", "agendado": True,
+               "story_group_id": "ai-week"}],
+             None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/dias/2026-09-28/hora",
+                            json={"hora_publicacion": "11:45"})
+
+    assert response.status_code == 200
+    assert response.json() == {"detail": "Hora actualizada", "updated": 1}
+    assert db.updates == [
+        ("stories", {"hora_publicacion": "11:45:00"}, [("id", ["pending"])]),
+    ]
+
+
+def test_update_generated_day_time_requires_client_in_employee_agency(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "another-agency"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/dias/2026-09-28/hora",
+                            json={"hora_publicacion": "11:45"})
+
+    assert response.status_code == 403
+    assert db.updates == []
+
+
+def test_update_generated_day_time_rejects_locked_stories(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"},
+             [{"id": "s1", "estado": "publicando", "story_group_id": "ai-week"},
+              {"id": "s2", "estado": "publicado", "story_group_id": "ai-week"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/dias/2026-09-28/hora",
+                            json={"hora_publicacion": "11:45"})
+
+    assert response.status_code == 409
+    assert db.updates == []
+
+
 def test_update_manual_day_description_saves_note(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "g1"}],
               [{"id": "g1", "descripcion": "Proceso creativo"}]])

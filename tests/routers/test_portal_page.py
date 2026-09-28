@@ -76,6 +76,18 @@ def test_portal_frontend_supports_variable_rhythm_and_keeps_all_pending_groups_a
     assert "draftDates = new Set(); setControlsDisabled(true)" in source
 
 
+def test_generated_day_time_is_editable_and_uses_day_endpoint():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert 'class="day-time"' in source
+    assert 'disabled title="Este día usa el horario de Editar ritmo"' not in source
+    assert "/dias/${encodeURIComponent(iso)}/hora" in source
+    assert "dayTimeSaving.has(iso)" in source
+    assert "dayTimeSaving.add(iso)" in source
+    assert "dayTimeSaving.delete(iso)" in source
+    assert "renderStories(); // state still contains the persisted value" in source
+
+
 def test_portal_frontend_blocks_generation_during_any_rhythm_save():
     source = TestClient(app).get("/static/portal.js").text
 

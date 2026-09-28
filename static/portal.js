@@ -357,9 +357,8 @@
       // that date approved, regardless of which group(s) contributed it.
       const readyToSchedule = stories.length > 0 && stories.every((s) => s.aprobado);
       const scheduleBtn = readyToSchedule ? `<button class="badge schedule-btn" data-schedule-date="${escapeHtml(iso)}">📅 Agendar</button>` : '';
-      const timeEditable = !stories.length || manualGroupByDate.has(iso);
       const timeValue = stories.length && stories[0].hora_publicacion ? String(stories[0].hora_publicacion).slice(0,5) : '09:00';
-      const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}" ${timeEditable ? '' : 'disabled title="Este día usa el horario de Editar ritmo"'}>`;
+      const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}">`;
       const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué va este hilo?">` : '';
       const addRow = `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div></div>`;
       return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${scheduleBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
@@ -443,6 +442,7 @@
   let calMonthOffset = 0;
   let pendingUploadDate = null; // set right before triggering the hidden file input
   let pendingUploadHora = '09:00'; // read from that day's inline time input at the same moment
+  const dayTimeSaving = new Set(); // one in-flight update per publication date
   let draftDates = new Set(); // ISO dates clicked on the calendar, waiting for an image — shown as empty "+" cards in "Historias generadas"
   function monthBase() { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + calMonthOffset); return d; }
   function isoDate(year, month, day) { return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; }
@@ -717,20 +717,33 @@
       showMessage('Publicación agendada.');
     } catch(error) { showMessage(error.message, true); }
   }
-  async function updateDayTime(iso, hhmm) {
+  async function updateDayTime(iso, hhmm, input) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
-    if (!clientId || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return;
+    if (!clientId || dayTimeSaving.has(iso) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return;
     const hasStories = state.groups.some((group) => (group.stories||[]).some((story) => story.fecha_publicacion === iso));
     if (!hasStories) return; // empty row: the chosen time is just read from the input at upload time
+    dayTimeSaving.add(iso);
+    if (input) input.disabled = true;
     try {
-      await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias/manual/${encodeURIComponent(iso)}/hora`, {method:'PATCH', body:JSON.stringify({hora_publicacion:hhmm})});
+      await api(`/portal/clientes/${encodeURIComponent(clientId)}/dias/${encodeURIComponent(iso)}/hora`, {method:'PATCH', body:JSON.stringify({hora_publicacion:hhmm})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       const groups = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias`);
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       state.groups = groups;
       renderStories(); renderPlan(); renderCalendarMonth(); renderActivity();
       showMessage('Hora actualizada.');
-    } catch(error) { showMessage(error.message, true); }
+    } catch(error) {
+      if (selectionVersion === state.selectionVersion && clientId === state.client?.id) {
+        renderStories(); // state still contains the persisted value
+        showMessage(error.message, true);
+      }
+    } finally {
+      dayTimeSaving.delete(iso);
+      if (selectionVersion === state.selectionVersion && clientId === state.client?.id) {
+        const current = document.querySelector(`.day-time[data-time-for="${CSS.escape(iso)}"]`);
+        if (current) current.disabled = false;
+      }
+    }
   }
   async function updateDayDescription(iso, descripcion) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
@@ -1004,7 +1017,7 @@
   });
   $('stories').addEventListener('change',(event)=>{
     const timeInput=event.target.closest('[data-time-for]');
-    if (timeInput) { updateDayTime(timeInput.dataset.timeFor, timeInput.value); return; }
+    if (timeInput) { updateDayTime(timeInput.dataset.timeFor, timeInput.value, timeInput); return; }
     const descInput=event.target.closest('[data-desc-for]');
     if (descInput) updateDayDescription(descInput.dataset.descFor, descInput.value.trim());
   });
