@@ -164,15 +164,27 @@ def generate_for_client(db, row: dict, today: date) -> dict:
     """Generate and persist the upcoming weekly thread for one client.
 
     ``created=False`` is an idempotent no-op: content for this generation
-    week already exists. All operational failures propagate so each caller can
-    decide whether to persist, display, or otherwise handle them.
+    week already exists and still has at least one live story. If every
+    story from that week's batch was cancelled, the old group is deleted
+    (cascading to its stories) and a fresh one is generated instead — a
+    fully-cancelled week should be regenerable, not stuck until next Monday.
+    A group with zero stories (shouldn't happen in practice — generation
+    always creates exactly 4 together) is treated conservatively as still
+    blocking, not as regenerable. All operational failures propagate so each
+    caller can decide whether to persist, display, or otherwise handle them.
     """
     week = (today - timedelta(days=today.weekday())).isoformat()
     existing = db.table("story_groups").select("id").eq(
         "client_id", row["id"]
     ).eq("generation_week", week).execute().data
     if existing:
-        return {"created": False, "group_id": existing[0].get("id"), "recycled": False}
+        group_id = existing[0]["id"]
+        stories = db.table("stories").select("estado").eq(
+            "story_group_id", group_id
+        ).execute().data or []
+        if not stories or any(story.get("estado") != "cancelada" for story in stories):
+            return {"created": False, "group_id": group_id, "recycled": False}
+        db.table("story_groups").delete().eq("id", group_id).execute()
 
     config = build_content_config(row)
     available = drive.list_image_metadata(row.get("drive_folder_id"))

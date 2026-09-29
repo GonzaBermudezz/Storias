@@ -13,6 +13,7 @@ from app.services import content_jobs as jobs
 class Query:
     def __init__(self, db, name):
         self.db, self.name, self.filters = db, name, []
+        self.op = None
         self.values = None
         self.sort = []
         self.bounds = None
@@ -29,7 +30,11 @@ class Query:
         self.sort.append(key)
         return self
     def update(self, values):
+        self.op = "update"
         self.values = values
+        return self
+    def delete(self):
+        self.op = "delete"
         return self
     def range(self, start, end):
         self.bounds = (start, end)
@@ -52,7 +57,18 @@ class Query:
             rows.sort(key=lambda r: r[key])
         if self.bounds:
             rows = rows[self.bounds[0]:self.bounds[1] + 1]
-        if self.values is not None:
+        if self.op == "delete":
+            deleted_ids = {id(row) for row in rows}
+            self.db.rows[self.name] = [
+                row for row in self.db.rows[self.name] if id(row) not in deleted_ids
+            ]
+            if self.name == "story_groups":
+                deleted_group_ids = {row.get("id") for row in rows}
+                self.db.rows["stories"] = [
+                    story for story in self.db.rows["stories"]
+                    if story.get("story_group_id") not in deleted_group_ids
+                ]
+        elif self.op == "update":
             for row in rows: row.update(self.values)
         return SimpleNamespace(data=deepcopy(rows))
 
@@ -123,6 +139,43 @@ def test_generate_for_client_returns_existing_group_without_external_work(genera
     drive.assert_not_called()
     engine.assert_not_called()
     assert db.saved == []
+
+
+def test_generate_for_client_blocks_when_existing_batch_still_has_active_stories(generation):
+    drive, engine = generation
+    db = Database([client()])
+    db.rows["story_groups"].append({
+        "id": "existing-group", "client_id": "good", "generation_week": "2026-09-14",
+    })
+    db.rows["stories"].extend([
+        {"id": "s1", "story_group_id": "existing-group", "estado": "cancelada"},
+        {"id": "s2", "story_group_id": "existing-group", "estado": "pendiente"},
+    ])
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result == {"created": False, "group_id": "existing-group", "recycled": False}
+    drive.assert_not_called()
+    engine.assert_not_called()
+    assert any(group["id"] == "existing-group" for group in db.rows["story_groups"])
+
+
+def test_generate_for_client_regenerates_when_existing_batch_is_fully_cancelled(generation):
+    db = Database([client()])
+    db.rows["story_groups"].append({
+        "id": "existing-group", "client_id": "good", "generation_week": "2026-09-14",
+    })
+    db.rows["stories"].extend([
+        {"id": "s1", "story_group_id": "existing-group", "estado": "cancelada"},
+        {"id": "s2", "story_group_id": "existing-group", "estado": "cancelada"},
+    ])
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result == {"created": True, "group_id": "group-id", "recycled": False}
+    assert not any(group["id"] == "existing-group" for group in db.rows["story_groups"])
+    assert not any(story["story_group_id"] == "existing-group" for story in db.rows["stories"])
+    assert len(db.saved) == 1
 
 
 def test_generate_for_client_persists_and_reports_success(generation):
