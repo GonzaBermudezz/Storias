@@ -140,12 +140,12 @@ def test_batch_reorder_uses_every_story_in_the_group_for_lock_state():
     assert "const batchReorderable = batchStories.every" not in source
 
 
-def test_publish_now_only_appears_for_a_fully_approved_pending_day_without_errors():
+def test_publish_now_reappears_to_retry_failed_stories_but_not_mid_claim():
     source = TestClient(app).get("/static/portal.js").text
 
-    assert "const pendingStories = stories.filter((story) => story.estado === 'pendiente')" in source
-    assert "story.estado === 'error' || story.estado === 'publicando'" in source
-    assert "pendingStories.length > 0 && !publishNowBlocked && pendingStories.every((story) => story.aprobado)" in source
+    assert "const retryableStories = stories.filter((story) => story.estado === 'pendiente' || story.estado === 'error')" in source
+    assert "const publishNowBlocked = stories.some((story) => story.estado === 'publicando')" in source
+    assert "retryableStories.length > 0 && !publishNowBlocked && retryableStories.every((story) => story.aprobado)" in source
     assert "const publishNowBtn = readyToPublishNow ?" in source
 
 

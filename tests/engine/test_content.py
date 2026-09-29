@@ -453,3 +453,46 @@ def test_publicar_historia_fallo_http_envuelto_en_metapublisheerror(monkeypatch)
 
     with pytest.raises(MetaPublishError, match="HTTP 400"):
         content.publicar_historia("url", "acct", "tok", False, None)
+
+
+def test_publicar_historia_incluye_el_cuerpo_de_la_respuesta_de_meta_en_el_error(monkeypatch):
+    class FakeMetaResponse:
+        status_code = 400
+        text = '{"error": {"message": "Media type STORIES no soportado para esta cuenta", "code": 100}}'
+
+    class RespError:
+        ok = False
+
+        def raise_for_status(self):
+            http_err = content.requests.exceptions.HTTPError(
+                "400 Client Error: Bad Request for url: https://graph.facebook.com/v21.0/x/media"
+            )
+            http_err.response = FakeMetaResponse()
+            raise http_err
+
+    monkeypatch.setattr(content.requests, "post", lambda *a, **k: RespError())
+
+    with pytest.raises(MetaPublishError, match="Media type STORIES no soportado"):
+        content.publicar_historia("url", "acct", "tok", False, None)
+
+
+def test_publicar_historia_redacta_el_token_antes_de_truncar_el_error_de_meta(monkeypatch):
+    token = "SECRET_ACCESS_TOKEN_12345"
+
+    class FakeMetaResponse:
+        text = ("x" * 495) + token + "tail"
+
+    class RespError:
+        def raise_for_status(self):
+            http_err = content.requests.exceptions.HTTPError("400 Client Error")
+            http_err.response = FakeMetaResponse()
+            raise http_err
+
+    monkeypatch.setattr(content.requests, "post", lambda *a, **k: RespError())
+
+    with pytest.raises(MetaPublishError) as exc_info:
+        content.publicar_historia("url", "acct", token, False, None)
+
+    assert token not in str(exc_info.value)
+    assert token[:5] not in str(exc_info.value)
+    assert "[reda" in str(exc_info.value)

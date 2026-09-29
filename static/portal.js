@@ -365,9 +365,9 @@
       // that date approved, regardless of which group(s) contributed it.
       const actionableStories = stories.filter((story) => !storyIsLocked(story));
       const readyToSchedule = actionableStories.length > 0 && actionableStories.every((story) => story.aprobado);
-      const pendingStories = stories.filter((story) => story.estado === 'pendiente');
-      const publishNowBlocked = stories.some((story) => story.estado === 'error' || story.estado === 'publicando');
-      const readyToPublishNow = pendingStories.length > 0 && !publishNowBlocked && pendingStories.every((story) => story.aprobado);
+      const retryableStories = stories.filter((story) => story.estado === 'pendiente' || story.estado === 'error');
+      const publishNowBlocked = stories.some((story) => story.estado === 'publicando');
+      const readyToPublishNow = retryableStories.length > 0 && !publishNowBlocked && retryableStories.every((story) => story.aprobado);
       const scheduleBtn = readyToSchedule ? `<button class="badge schedule-btn" data-schedule-date="${escapeHtml(iso)}">📅 Agendar</button>` : '';
       const publishNowBtn = readyToPublishNow ? `<button class="badge publish-now-btn" data-publish-now-date="${escapeHtml(iso)}">📤 Publicar ahora</button>` : '';
       const dayLocked = stories.some((story) => storyIsLocked(story));

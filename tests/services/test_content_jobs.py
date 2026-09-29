@@ -13,6 +13,7 @@ from app.services import content_jobs as jobs
 class Query:
     def __init__(self, db, name):
         self.db, self.name, self.filters = db, name, []
+        self.in_filters = []
         self.op = None
         self.values = None
         self.sort = []
@@ -22,6 +23,9 @@ class Query:
     def select(self, *_): return self
     def eq(self, key, value):
         self.filters.append((key, value))
+        return self
+    def in_(self, key, values):
+        self.in_filters.append((key, values))
         return self
     def or_(self, expr):
         self.or_expr = expr
@@ -52,7 +56,9 @@ class Query:
         return False
     def execute(self):
         rows = [r for r in self.db.rows[self.name]
-                if all(r.get(k) == v for k, v in self.filters) and self._matches_or(r)]
+                if all(r.get(k) == v for k, v in self.filters)
+                and all(r.get(k) in values for k, values in self.in_filters)
+                and self._matches_or(r)]
         for key in reversed(self.sort):
             rows.sort(key=lambda r: r[key])
         if self.bounds:
@@ -531,6 +537,31 @@ def test_publish_now_ignores_date_and_hour_gates(publication):
     engine.assert_called_once()
     assert db.rows["stories"][0]["estado"] == "publicado"
     assert result == {"publicadas": 1, "fallidas": 0}
+
+
+def test_publish_now_retries_a_previously_failed_story(publication):
+    engine, _ = publication
+    db = Database(stories=[story(estado="error", error="Meta failed")])
+
+    result = jobs.publish_now(db, "good", "2026-09-21")
+
+    engine.assert_called_once()
+    assert db.rows["stories"][0]["estado"] == "publicado"
+    assert result == {"publicadas": 1, "fallidas": 0}
+
+
+def test_publish_now_does_not_retry_published_cancelled_or_in_flight_stories(publication):
+    engine, _ = publication
+    db = Database(stories=[
+        story("done", estado="publicado"),
+        story("cancelled", estado="cancelada"),
+        story("mid", estado="publicando"),
+    ])
+
+    result = jobs.publish_now(db, "good", "2026-09-21")
+
+    engine.assert_not_called()
+    assert result == {"publicadas": 0, "fallidas": 0}
 
 
 def test_publish_now_skips_unapproved_and_other_clients_or_dates(publication):

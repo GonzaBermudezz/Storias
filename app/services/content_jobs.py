@@ -263,7 +263,7 @@ def _claim_and_publish(db, stories: list[dict]) -> dict:
     for story in stories:
         try:
             claimed = db.table("stories").update({"estado": "publicando"}).eq(
-                "id", story["id"]).eq("estado", "pendiente").execute().data
+                "id", story["id"]).eq("estado", story["estado"]).execute().data
             if not claimed:
                 continue
             outcome = _publish_story(story)
@@ -298,11 +298,11 @@ def publish_daily(db, today: date | None = None, now: datetime | None = None) ->
 
 
 def publish_now(db, client_id: str, fecha_publicacion: str) -> dict:
-    """Publish one client's approved pending stories for a date immediately."""
+    """Publish one client's approved pending or failed stories immediately."""
     query = db.table("stories").select(
         "*, clients(instagram_account_id, meta_access_token_encrypted, calendly_link)"
-    ).eq("client_id", client_id).eq("fecha_publicacion", fecha_publicacion).eq(
-        "estado", "pendiente"
+    ).eq("client_id", client_id).eq("fecha_publicacion", fecha_publicacion).in_(
+        "estado", ["pendiente", "error"]
     ).eq("aprobado", True)
     stories = _all_rows(query.order("story_group_id").order("order").order("id"))
     return _claim_and_publish(db, stories)

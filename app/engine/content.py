@@ -522,6 +522,14 @@ def publicar_historia(
         r2.raise_for_status()
         post_id = r2.json()["id"]
     except Exception as e:
-        raise MetaPublishError(f"Error publicando en Instagram: {e}") from e
+        message = f"Error publicando en Instagram: {e}"
+        detail = getattr(getattr(e, "response", None), "text", None)
+        if detail:
+            safe_detail = (
+                detail.replace(meta_access_token, "[redacted]")
+                if meta_access_token else detail
+            )
+            message += f" — respuesta de Meta: {safe_detail[:500]}"
+        raise MetaPublishError(message) from e
 
     return ResultadoPublicacion(ok=True, ig_media_id=post_id)
