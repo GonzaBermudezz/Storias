@@ -393,6 +393,20 @@ def _fake_requests_post(monkeypatch, respuestas):
     monkeypatch.setattr(content.requests, "post", fake_post)
 
 
+def _fake_requests_get_finished(monkeypatch):
+    """Default GET mock: container is ready on the first poll — existing
+    tests that don't care about polling don't need to think about it."""
+    def fake_get(url, params=None, **_kw):
+        return SimpleNamespace(
+            ok=True,
+            raise_for_status=lambda: None,
+            json=lambda: {"status_code": "FINISHED"},
+        )
+
+    monkeypatch.setattr(content.requests, "get", fake_get)
+    monkeypatch.setattr(content.time, "sleep", lambda *_a, **_kw: None)
+
+
 def test_publicar_historia_ok_devuelve_resultado_publicacion(monkeypatch):
     class RespOk:
         ok = True
@@ -408,6 +422,7 @@ def test_publicar_historia_ok_devuelve_resultado_publicacion(monkeypatch):
     pub_resp = RespOk()
 
     _fake_requests_post(monkeypatch, [media_resp, pub_resp])
+    _fake_requests_get_finished(monkeypatch)
 
     resultado = content.publicar_historia(
         image_url="https://res.cloudinary.com/x.jpg",
@@ -434,6 +449,7 @@ def test_publicar_historia_ok_manda_story_cta_solo_con_link(monkeypatch):
         )
 
     monkeypatch.setattr(content.requests, "post", fake_post)
+    _fake_requests_get_finished(monkeypatch)
 
     content.publicar_historia("url", "acct", "tok", agregar_cta=True, calendly_link="https://cal.com/x")
     assert "story_cta" in payloads[0]
@@ -450,6 +466,7 @@ def test_publicar_historia_fallo_http_envuelto_en_metapublisheerror(monkeypatch)
             raise RuntimeError("HTTP 400 desde Meta")
 
     monkeypatch.setattr(content.requests, "post", lambda *a, **k: RespError())
+    _fake_requests_get_finished(monkeypatch)
 
     with pytest.raises(MetaPublishError, match="HTTP 400"):
         content.publicar_historia("url", "acct", "tok", False, None)
@@ -471,6 +488,7 @@ def test_publicar_historia_incluye_el_cuerpo_de_la_respuesta_de_meta_en_el_error
             raise http_err
 
     monkeypatch.setattr(content.requests, "post", lambda *a, **k: RespError())
+    _fake_requests_get_finished(monkeypatch)
 
     with pytest.raises(MetaPublishError, match="Media type STORIES no soportado"):
         content.publicar_historia("url", "acct", "tok", False, None)
@@ -489,6 +507,7 @@ def test_publicar_historia_redacta_el_token_antes_de_truncar_el_error_de_meta(mo
             raise http_err
 
     monkeypatch.setattr(content.requests, "post", lambda *a, **k: RespError())
+    _fake_requests_get_finished(monkeypatch)
 
     with pytest.raises(MetaPublishError) as exc_info:
         content.publicar_historia("url", "acct", token, False, None)
@@ -496,3 +515,118 @@ def test_publicar_historia_redacta_el_token_antes_de_truncar_el_error_de_meta(mo
     assert token not in str(exc_info.value)
     assert token[:5] not in str(exc_info.value)
     assert "[reda" in str(exc_info.value)
+
+
+def test_publicar_historia_espera_varios_intentos_antes_de_finished(monkeypatch):
+    estados = iter(["IN_PROGRESS", "IN_PROGRESS", "FINISHED"])
+    get_calls = []
+
+    def fake_get(url, params=None, **_kw):
+        get_calls.append(params)
+        return SimpleNamespace(
+            ok=True,
+            raise_for_status=lambda: None,
+            json=lambda: {"status_code": next(estados)},
+        )
+
+    monkeypatch.setattr(content.requests, "get", fake_get)
+    sleeps = []
+    monkeypatch.setattr(content.time, "sleep", lambda seconds: sleeps.append(seconds))
+    _fake_requests_post(monkeypatch, [
+        SimpleNamespace(
+            ok=True,
+            raise_for_status=lambda: None,
+            json=lambda: {"id": "MEDIA_123"},
+        ),
+        SimpleNamespace(
+            ok=True,
+            raise_for_status=lambda: None,
+            json=lambda: {"id": "POST_456"},
+        ),
+    ])
+
+    resultado = content.publicar_historia("url", "acct", "tok", False, None)
+
+    assert resultado.ok is True
+    assert len(get_calls) == 3
+    assert sleeps == [content.STATUS_POLL_INTERVAL_SECONDS] * 2
+
+
+def test_publicar_historia_container_en_error_no_publica(monkeypatch):
+    monkeypatch.setattr(content.requests, "get", lambda *a, **k: SimpleNamespace(
+        ok=True,
+        raise_for_status=lambda: None,
+        json=lambda: {"status_code": "ERROR"},
+    ))
+    monkeypatch.setattr(content.time, "sleep", lambda *_a, **_kw: None)
+    post_calls = []
+    monkeypatch.setattr(content.requests, "post", lambda url, data=None, **_kw: (
+        post_calls.append(url),
+        SimpleNamespace(
+            ok=True,
+            raise_for_status=lambda: None,
+            json=lambda: {"id": "MEDIA_123"},
+        ),
+    )[1])
+
+    with pytest.raises(MetaPublishError, match="ERROR"):
+        content.publicar_historia("url", "acct", "tok", False, None)
+
+    assert len(post_calls) == 1
+
+
+def test_publicar_historia_container_expirado_no_publica(monkeypatch):
+    monkeypatch.setattr(content.requests, "get", lambda *a, **k: SimpleNamespace(
+        ok=True,
+        raise_for_status=lambda: None,
+        json=lambda: {"status_code": "EXPIRED"},
+    ))
+    monkeypatch.setattr(content.time, "sleep", lambda *_a, **_kw: None)
+    monkeypatch.setattr(content.requests, "post", lambda url, data=None, **_kw: SimpleNamespace(
+        ok=True,
+        raise_for_status=lambda: None,
+        json=lambda: {"id": "MEDIA_123"},
+    ))
+
+    with pytest.raises(MetaPublishError, match="EXPIRED"):
+        content.publicar_historia("url", "acct", "tok", False, None)
+
+
+def test_publicar_historia_timeout_de_polling_tira_metapublisheerror(monkeypatch):
+    monkeypatch.setattr(content.requests, "get", lambda *a, **k: SimpleNamespace(
+        ok=True,
+        raise_for_status=lambda: None,
+        json=lambda: {"status_code": "IN_PROGRESS"},
+    ))
+    sleeps = []
+    monkeypatch.setattr(content.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(content.requests, "post", lambda url, data=None, **_kw: SimpleNamespace(
+        ok=True,
+        raise_for_status=lambda: None,
+        json=lambda: {"id": "MEDIA_123"},
+    ))
+
+    with pytest.raises(MetaPublishError, match="no terminó de procesarse"):
+        content.publicar_historia("url", "acct", "tok", False, None)
+
+    assert len(sleeps) == content.STATUS_POLL_MAX_ATTEMPTS
+
+
+def test_publicar_historia_redacta_el_token_en_error_de_polling(monkeypatch):
+    token = "SECRET_ACCESS_TOKEN_12345"
+
+    def fake_get(url, params=None, **_kw):
+        raise RuntimeError(f"fallo consultando {url}?access_token={token}")
+
+    monkeypatch.setattr(content.requests, "get", fake_get)
+    monkeypatch.setattr(content.time, "sleep", lambda *_a, **_kw: None)
+    monkeypatch.setattr(content.requests, "post", lambda url, data=None, **_kw: SimpleNamespace(
+        ok=True,
+        raise_for_status=lambda: None,
+        json=lambda: {"id": "MEDIA_123"},
+    ))
+
+    with pytest.raises(MetaPublishError) as exc_info:
+        content.publicar_historia("url", "acct", token, False, None)
+
+    assert token not in str(exc_info.value)

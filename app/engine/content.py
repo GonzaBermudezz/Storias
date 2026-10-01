@@ -72,6 +72,12 @@ TEMA_FALLBACK = (
 
 GRAPH_API_BASE = "https://graph.facebook.com/v21.0"
 
+# Cuánto esperar a que Meta termine de procesar un container antes de darnos
+# por vencidos. 15 intentos x 2s = hasta 30s — de sobra para una imagen de
+# Stories en la práctica, visto en los tiempos reales de procesamiento.
+STATUS_POLL_INTERVAL_SECONDS = 2
+STATUS_POLL_MAX_ATTEMPTS = 15
+
 # Prefijo de los public_id de Cloudinary. Por cliente se agrega
 # "/{client_id}/{timestamp}".
 CLOUDINARY_FOLDER = "storias"
@@ -485,6 +491,43 @@ def generar_texto_de_prueba(config: ClientContentConfig, imagen: ImagenCandidata
     return _llamar_claude(config, imagen.image_bytes)
 
 
+def _esperar_container_listo(media_id: str, access_token: str, base: str) -> None:
+    """Poll the container's status_code until Meta finishes processing it.
+
+    media_publish called before this finishes is what produced "Contenido
+    multimedia no encontrado" (code 24 / subcode 2207006) on a real publish —
+    the container existed but Meta hadn't finished validating/downloading the
+    image yet. Raises MetaPublishError on ERROR/EXPIRED or on timeout; never
+    returns without the container being FINISHED.
+    """
+    for _ in range(STATUS_POLL_MAX_ATTEMPTS):
+        try:
+            r = requests.get(f"{base}/{media_id}", params={
+                "fields": "status_code",
+                "access_token": access_token,
+            })
+            r.raise_for_status()
+            status = r.json().get("status_code")
+        except Exception as e:
+            message = f"Error consultando el estado del container en Meta: {e}"
+            if access_token:
+                message = message.replace(access_token, "[redacted]")
+            raise MetaPublishError(message) from e
+
+        if status == "FINISHED":
+            return
+        if status in ("ERROR", "EXPIRED"):
+            raise MetaPublishError(
+                f"El container de Meta terminó en estado {status} antes de poder publicarse"
+            )
+        time.sleep(STATUS_POLL_INTERVAL_SECONDS)
+
+    raise MetaPublishError(
+        f"El container de Meta no terminó de procesarse después de "
+        f"{STATUS_POLL_MAX_ATTEMPTS * STATUS_POLL_INTERVAL_SECONDS}s"
+    )
+
+
 def publicar_historia(
     image_url: str,
     instagram_account_id: str,
@@ -514,6 +557,8 @@ def publicar_historia(
         r = requests.post(f"{base}/media", data=payload)
         r.raise_for_status()
         media_id = r.json()["id"]
+
+        _esperar_container_listo(media_id, meta_access_token, base)
 
         r2 = requests.post(f"{base}/media_publish", data={
             "creation_id": media_id,
