@@ -18,12 +18,13 @@ def _make_celery(settings=None) -> Celery:
             "schedule": crontab(minute=0, hour=18, day_of_week="fri"),
         },
         "publish-daily-stories": {
-            # Every 15 min, not once a day: clients can set their own per-day
-            # publish time (content_jobs.publish_schedule), so this has to
-            # check frequently enough to catch each one close to its own time
-            # instead of firing all of today's stories together once daily.
+            # Every 1 min, not every 15: clients can set their own per-day
+            # publish time (content_jobs.publish_schedule) down to the
+            # minute, so this has to check as close to continuously as
+            # practical to publish close to that exact minute instead of
+            # waiting for the next 15-min tick (previously up to ~14 min late).
             "task": "app.services.scheduler.publicar_historias_pendientes",
-            "schedule": crontab(minute="*/15"),
+            "schedule": crontab(minute="*"),
         },
     }
     return app

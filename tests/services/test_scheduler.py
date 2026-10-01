@@ -19,10 +19,11 @@ def test_beat_has_weekly_friday_and_configured_daily_schedule():
     assert weekly["schedule"].hour == {18} and weekly["schedule"].minute == {0}
     daily = schedules["publish-daily-stories"]
     assert daily["task"] == "app.services.scheduler.publicar_historias_pendientes"
-    # Every 15 min (all 24 hours), not tied to publication_hour/minute anymore —
-    # each client can have its own per-day publish time (content_jobs.publish_schedule),
-    # so this has to check frequently rather than fire once at one fixed daily time.
-    assert daily["schedule"].minute == {0, 15, 30, 45}
+    # Every 1 min (all 24 hours), not every 15 — each client can have its own
+    # per-day publish time (content_jobs.publish_schedule) down to the exact
+    # minute, so this has to check as close to continuously as practical
+    # instead of waiting up to ~14 min for the next fixed 15-min tick.
+    assert daily["schedule"].minute == set(range(60))
     assert daily["schedule"].hour == set(range(24))
 
 
