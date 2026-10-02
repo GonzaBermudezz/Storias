@@ -1172,11 +1172,8 @@
   $('business-description').addEventListener('input',()=>{$('desc-count').textContent=String($('business-description').value.length);});
   $('weekly-focus').addEventListener('input',()=>{$('focus-count').textContent=String($('weekly-focus').value.length);});
   $('client-topics').addEventListener('input',()=>{$('topics-count').textContent=String($('client-topics').value.split(/\r?\n/).map((topic) => topic.trim()).filter(Boolean).length);});
-  $('edit-description').addEventListener('click',()=>enterFieldEdit('description','business-description'));
   $('cancel-description').addEventListener('click',()=>{$('business-description').value=state.client?.business_description || ''; $('desc-count').textContent=String($('business-description').value.length); exitFieldEdit('description');});
-  $('edit-focus').addEventListener('click',()=>enterFieldEdit('focus','weekly-focus'));
   $('cancel-focus').addEventListener('click',()=>{$('weekly-focus').value=state.client?.weekly_focus || ''; $('focus-count').textContent=String($('weekly-focus').value.length); exitFieldEdit('focus');});
-  $('edit-topics').addEventListener('click',()=>enterFieldEdit('topics','client-topics'));
   bindFieldViewEdit('description-view', 'description', 'business-description');
   bindFieldViewEdit('focus-view', 'focus', 'weekly-focus');
   bindFieldViewEdit('topics-view', 'topics', 'client-topics');
