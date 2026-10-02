@@ -90,6 +90,7 @@
     .team-table tr:not(:last-child) td{border-bottom:1px solid var(--border)}
     .idle-list{display:flex;flex-wrap:wrap;gap:8px}
     .idle-chip{font-size:12px;padding:5px 10px;border-radius:99px;background:var(--danger-soft);color:var(--danger)}
+    .idle-chip.success{background:var(--success-soft);color:var(--success)}
     .idle-chip.clickable{cursor:pointer;border:0;font:inherit}
     .idle-chip.clickable:hover{background:var(--danger);color:#fff}
     .health-block{margin-bottom:14px}
@@ -283,7 +284,7 @@
       <span class="nav-item disabled" title="Próximamente"><span class="icon">⚙️</span>Ajustes</span>
     </nav>
     <div class="nav-divider"></div>
-    <div class="section-label-row"><span class="section-label">Clientes</span><button id="add-team" class="btn-add" title="Crear equipo" aria-label="Crear equipo">+ Equipo</button></div>
+    <div class="section-label-row"><span class="section-label">Clientes</span><button id="add-clients-bulk" class="btn-add hidden" title="Alta masiva de clientes" aria-label="Alta masiva de clientes">+ Clientes</button><button id="add-team" class="btn-add" title="Crear equipo" aria-label="Crear equipo">+ Equipo</button></div>
     <input id="client-search" class="client-search" type="search" placeholder="Buscar cliente..." aria-label="Buscar cliente">
     <div id="client-list" class="client-list" aria-live="polite">Cargando...</div>
     <label class="sidebar-filter"><input id="only-mine" type="checkbox"> Mostrar solo mis clientes</label>
@@ -417,6 +418,16 @@
   </dialog>
   <dialog id="history-dialog" class="wide"><div class="modal-head"><strong>Historial de cambios</strong><button id="close-history" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body" id="history-list"></div><div class="modal-foot"><button id="close-history-2" class="btn">Cerrar</button></div></dialog>
   <dialog id="ritmo-dialog"><div class="modal-head"><strong>Editar ritmo de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días y definí cuántas de las 4 historias se publican cada día.</p><div id="ritmo-chips" class="ritmo-chips"></div><div id="ritmo-days-detail" class="ritmo-days-detail"></div><p id="ritmo-count-total" class="hint"></p><p id="ritmo-detail-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p><button id="save-ritmo-detail" class="btn">Guardar horarios y reparto</button><p id="ritmo-generation-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button><button id="generate-weekly" class="btn primary">🚀 Generar historias para la semana que viene</button></div></dialog>
+  <dialog id="bulk-clients-dialog" class="wide">
+    <div class="modal-head"><strong>Alta masiva de clientes</strong><button id="close-bulk-clients" class="icon-btn" aria-label="Cerrar">×</button></div>
+    <div class="modal-body">
+      <p class="hint">Una línea por cliente. Columnas separadas por coma: <code>nombre, carpeta de Drive (ID o link), descripción del negocio (opcional), equipo (opcional, nombre exacto)</code>. Si la descripción necesita llevar una coma, dejala en blanco acá y cargala después editando el cliente.</p>
+      <textarea id="bulk-clients-input" rows="8" placeholder="CUAN, https://drive.google.com/drive/folders/1s06Hii0qBM8Rs7rK5O0w_DMtj1P3F7st, Estudio de cocinas a medida, Equipo Felix"></textarea>
+      <p id="bulk-clients-feedback" class="modal-feedback hidden" role="alert" aria-live="polite"></p>
+      <div id="bulk-clients-results"></div>
+    </div>
+    <div class="modal-foot"><button id="close-bulk-clients-2" class="btn">Cerrar</button><button id="submit-bulk-clients" class="btn primary">Crear clientes</button></div>
+  </dialog>
   <dialog id="confirm-dialog"><div class="modal-head"><strong>Confirmar</strong><button id="confirm-close" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p id="confirm-text"></p></div><div class="modal-foot"><button id="confirm-cancel" class="btn">Volver</button><button id="confirm-ok" class="btn primary">Confirmar</button></div></dialog>
   <dialog id="ig-preview-dialog" class="ig-preview">
     <div class="ig-preview-frame">

@@ -145,6 +145,7 @@
       $('story-font').innerHTML = '<option value="">Default del cliente</option>' + fontOptions;
       $('me-avatar').textContent = initials(me.name || me.email); $('me-name').textContent = me.name || me.email;
       $('me-role').textContent = me.role === 'admin' ? 'Administrador' : 'Empleado'; $('me-card').classList.remove('hidden');
+      $('add-clients-bulk').classList.toggle('hidden', me.role !== 'admin');
     } catch (error) { /* non-fatal: the sidebar just falls back to a flat, ungrouped list */ }
   }
   function teamName(teamId) { const team = state.teams.find((item) => item.id === teamId); return team ? team.name : 'Sin equipo'; }
@@ -157,6 +158,69 @@
       $('client-team').innerHTML = '<option value="">Sin equipo</option>' + state.teams.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
       renderClients(); showMessage('Equipo creado.');
     } catch(error) { showMessage(error.message, true); }
+  }
+
+  function parseBulkClientsInput(text) {
+    return text.split('\n').map((line) => line.trim()).filter(Boolean).map((line, idx) => {
+      const [name, drive, businessDescription, teamName] = line.split(',').map((part) => (part || '').trim());
+      return {fila: idx + 1, name: name || '', drive: drive || '', businessDescription: businessDescription || '', teamName: teamName || ''};
+    });
+  }
+  function resolveTeamId(teamName) {
+    if (!teamName) return {teamId: null, error: null};
+    const match = state.teams.find((team) => team.name.toLocaleLowerCase('es') === teamName.toLocaleLowerCase('es'));
+    return match ? {teamId: match.id, error: null} : {teamId: null, error: `Equipo no encontrado: "${teamName}"`};
+  }
+  function renderBulkClientsResults(rows) {
+    if (!rows.length) { $('bulk-clients-results').innerHTML = ''; return; }
+    $('bulk-clients-results').innerHTML = `<div class="idle-list">${rows.map((row) =>
+      `<span class="idle-chip${row.status === 'creado' ? ' success' : ''}">Fila ${row.fila} — ${escapeHtml(row.name || '(sin nombre)')}: ${row.status === 'creado' ? 'creado' : escapeHtml(row.motivo)}</span>`
+    ).join('')}</div>`;
+  }
+  async function submitBulkClients() {
+    const rows = parseBulkClientsInput($('bulk-clients-input').value);
+    if (!rows.length) {
+      $('bulk-clients-feedback').textContent = 'Pegá al menos un cliente.';
+      $('bulk-clients-feedback').classList.remove('hidden');
+      return;
+    }
+    $('bulk-clients-feedback').classList.add('hidden');
+    const localErrors = [];
+    const payload = [];
+    const payloadRowNumbers = [];
+    for (const row of rows) {
+      if (!row.name || !row.drive) {
+        localErrors.push({fila: row.fila, name: row.name, status: 'error', motivo: 'Faltan columnas obligatorias (nombre y carpeta de Drive).'});
+        continue;
+      }
+      const {teamId, error} = resolveTeamId(row.teamName);
+      if (error) {
+        localErrors.push({fila: row.fila, name: row.name, status: 'error', motivo: error});
+        continue;
+      }
+      payload.push({name: row.name, drive_folder_id: row.drive, business_description: row.businessDescription || null, team_id: teamId});
+      payloadRowNumbers.push(row.fila);
+    }
+    $('submit-bulk-clients').disabled = true;
+    try {
+      let serverResults = [];
+      if (payload.length) {
+        const response = await api('/portal/clientes/alta-masiva', {method: 'POST', body: JSON.stringify({clientes: payload})});
+        serverResults = response.resultados.map((result, i) => ({...result, fila: payloadRowNumbers[i]}));
+      }
+      const allResults = [...localErrors, ...serverResults].sort((a, b) => a.fila - b.fila);
+      renderBulkClientsResults(allResults);
+      const createdCount = serverResults.filter((row) => row.status === 'creado').length;
+      if (createdCount) {
+        showMessage(`${createdCount} cliente${createdCount === 1 ? '' : 's'} creado${createdCount === 1 ? '' : 's'}.`);
+        loadClients();
+      }
+    } catch (error) {
+      $('bulk-clients-feedback').textContent = error.message;
+      $('bulk-clients-feedback').classList.remove('hidden');
+    } finally {
+      $('submit-bulk-clients').disabled = false;
+    }
   }
 
   async function loadClients() {
@@ -1061,6 +1125,13 @@
   $('client-team').addEventListener('change',saveClientTeam);
   $('client-font').addEventListener('change',saveClientFont);
   $('add-team').addEventListener('click',createTeam);
+  $('add-clients-bulk').addEventListener('click', () => {
+    $('bulk-clients-input').value = ''; $('bulk-clients-feedback').classList.add('hidden'); $('bulk-clients-results').innerHTML = '';
+    $('bulk-clients-dialog').showModal();
+  });
+  $('close-bulk-clients').addEventListener('click', () => $('bulk-clients-dialog').close());
+  $('close-bulk-clients-2').addEventListener('click', () => $('bulk-clients-dialog').close());
+  $('submit-bulk-clients').addEventListener('click', submitBulkClients);
   $('business-description').addEventListener('input',()=>{$('desc-count').textContent=String($('business-description').value.length);});
   $('weekly-focus').addEventListener('input',()=>{$('focus-count').textContent=String($('weekly-focus').value.length);});
   $('edit-description').addEventListener('click',()=>{setFieldMode('description',true); $('business-description').focus();});

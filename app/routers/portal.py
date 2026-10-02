@@ -3,15 +3,16 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 import logging
+import re
 
 import requests
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.config import get_settings
 from app.db.supabase import get_admin_client
-from app.deps import EmployeeDep
+from app.deps import AdminDep, EmployeeDep
 from app.engine import content
 from app.engine.exceptions import ClaudeGenerationError
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
@@ -92,6 +93,38 @@ class TeamCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
+_DRIVE_FOLDER_URL_RE = re.compile(r"/folders/([a-zA-Z0-9_-]+)")
+
+
+class BulkClientEntry(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    drive_folder_id: str = Field(min_length=1)
+    business_description: str | None = None
+    team_id: str | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("drive_folder_id", mode="before")
+    @classmethod
+    def extract_folder_id(cls, value):
+        """Accept a Drive folder ID or the complete folder URL."""
+        if not isinstance(value, str):
+            return value
+        value = value.strip()
+        match = _DRIVE_FOLDER_URL_RE.search(value)
+        return match.group(1) if match else value
+
+
+class BulkClientsRequest(BaseModel):
+    # Validate the batch envelope here and each row in the endpoint.  That
+    # lets a malformed row return its own result instead of rejecting every
+    # otherwise valid client in the upload.
+    clientes: list[object] = Field(min_length=1, max_length=300)
+
+
 class StoryPatch(BaseModel):
     texto_nuevo: str = Field(min_length=1)
 
@@ -141,6 +174,75 @@ def create_team(body: TeamCreate, employee: EmployeeDep):
     except APIError:
         raise HTTPException(status_code=409, detail="Ya existe un equipo con ese nombre")
     return created[0] if isinstance(created, list) and created else {"name": name}
+
+
+@router.post("/clientes/alta-masiva")
+def create_clients_bulk(body: BulkClientsRequest, employee: AdminDep):
+    """Create each supplied client independently, reporting one result per row."""
+    db = get_admin_client()
+    team_ids = {
+        row["id"]
+        for row in db.table("teams").select("id").eq(
+            "agency_id", employee.agency_id
+        ).execute().data or []
+    }
+    existing_names = {
+        row["name"].strip().lower()
+        for row in db.table("clients").select("name").eq(
+            "agency_id", employee.agency_id
+        ).execute().data or []
+    }
+
+    resultados = []
+    seen_in_batch: set[str] = set()
+    for i, raw_entry in enumerate(body.clientes, start=1):
+        try:
+            entry = BulkClientEntry.model_validate(raw_entry)
+        except ValidationError:
+            name = raw_entry.get("name", "") if isinstance(raw_entry, dict) else ""
+            resultados.append({
+                "fila": i,
+                "name": name.strip() if isinstance(name, str) else "",
+                "status": "error",
+                "motivo": "Datos inválidos: revisá nombre y carpeta de Drive.",
+            })
+            continue
+        key = entry.name.lower()
+        if entry.team_id and entry.team_id not in team_ids:
+            resultados.append({
+                "fila": i, "name": entry.name, "status": "error",
+                "motivo": "El equipo indicado no existe en esta agencia.",
+            })
+            continue
+        if key in existing_names or key in seen_in_batch:
+            resultados.append({
+                "fila": i, "name": entry.name, "status": "error",
+                "motivo": "Ya existe un cliente con ese nombre.",
+            })
+            continue
+        payload = {
+            "agency_id": employee.agency_id,
+            "name": entry.name,
+            "drive_folder_id": entry.drive_folder_id,
+            "business_description": entry.business_description or "",
+            "team_id": entry.team_id,
+            "active": True,
+        }
+        try:
+            created = db.table("clients").insert(payload).execute().data
+        except APIError as exc:
+            logger.error("Bulk client insert failed for %r: %s", entry.name, exc)
+            resultados.append({
+                "fila": i, "name": entry.name, "status": "error",
+                "motivo": "No se pudo crear: error de base de datos.",
+            })
+            continue
+        seen_in_batch.add(key)
+        resultados.append({
+            "fila": i, "name": entry.name, "status": "creado",
+            "client_id": created[0]["id"],
+        })
+    return {"resultados": resultados}
 
 
 @router.get("/clientes")

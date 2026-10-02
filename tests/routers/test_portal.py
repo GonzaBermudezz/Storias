@@ -9,9 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
 
-from app.deps import require_employee
+from app.deps import require_admin, require_employee
 from app.main import app
 from app.models.user import Employee
+from app.routers import portal
 
 
 @dataclass
@@ -71,6 +72,18 @@ def client(employee):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture
+def admin():
+    return Employee(id="adm-1", email="admin@example.com", name="Admin", agency_id="agency-1", role="admin")
+
+
+@pytest.fixture
+def admin_client(admin):
+    app.dependency_overrides[require_admin] = lambda: admin
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
 def test_me_reports_current_employee_including_team(monkeypatch, client):
     response = client.get("/portal/me")
     assert response.status_code == 200
@@ -119,6 +132,72 @@ def test_create_team_rejects_duplicate_name(monkeypatch, client):
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: ConflictingDB())
     response = client.post("/portal/equipos", json={"name": "Equipo Repetido"})
     assert response.status_code == 409
+
+
+def test_bulk_client_entry_extracts_drive_folder_id_from_url():
+    entry = portal.BulkClientEntry(
+        name="X", drive_folder_id="https://drive.google.com/drive/u/0/folders/XYZ123?usp=sharing"
+    )
+    assert entry.drive_folder_id == "XYZ123"
+
+
+def test_bulk_client_entry_keeps_bare_folder_id_untouched():
+    entry = portal.BulkClientEntry(name="X", drive_folder_id="XYZ123")
+    assert entry.drive_folder_id == "XYZ123"
+
+
+def test_bulk_create_clients_requires_admin(client):
+    response = client.post(
+        "/portal/clientes/alta-masiva",
+        json={"clientes": [{"name": "Nuevo", "drive_folder_id": "abc"}]},
+    )
+    assert response.status_code == 403
+
+
+def test_bulk_create_clients_isolates_invalid_rows_and_preserves_original_row_numbers(monkeypatch, admin_client):
+    db = DB([
+        [{"id": "t1"}],
+        [{"name": "Ya Existe"}],
+        [{"id": "new-1"}],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = admin_client.post("/portal/clientes/alta-masiva", json={"clientes": [
+        {"name": "Cliente Nuevo", "team_id": "t1", "drive_folder_id": "https://drive.google.com/drive/folders/XYZ123?usp=sharing"},
+        {"name": "Ya Existe", "drive_folder_id": "abc"},
+        {"name": "Equipo Mal", "drive_folder_id": "abc", "team_id": "no-existe"},
+        {"name": "cliente nuevo", "drive_folder_id": "def"},
+    ]})
+    assert response.status_code == 200
+    resultados = response.json()["resultados"]
+    assert resultados[0] == {"fila": 1, "name": "Cliente Nuevo", "status": "creado", "client_id": "new-1"}
+    assert resultados[1]["fila"] == 2 and "nombre" in resultados[1]["motivo"].lower()
+    assert resultados[2]["fila"] == 3 and "equipo" in resultados[2]["motivo"].lower()
+    assert resultados[3]["fila"] == 4 and "nombre" in resultados[3]["motivo"].lower()
+    assert db.inserts == [("clients", {
+        "agency_id": "agency-1", "name": "Cliente Nuevo", "drive_folder_id": "XYZ123",
+        "business_description": "", "team_id": "t1", "active": True,
+    })]
+    source = admin_client.get("/static/portal.js").text
+    assert "payloadRowNumbers.push(row.fila);" in source
+    assert "fila: payloadRowNumbers[i]" in source
+    assert "const allResults = [...localErrors, ...serverResults].sort((a, b) => a.fila - b.fila);" in source
+
+
+def test_bulk_create_clients_reports_malformed_row_without_rejecting_the_batch(monkeypatch, admin_client):
+    db = DB([[{"id": "t1"}], [], [{"id": "new-1"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = admin_client.post("/portal/clientes/alta-masiva", json={"clientes": [
+        {"name": "Cliente Válido", "drive_folder_id": "abc"},
+        {"name": "x" * 121, "drive_folder_id": "def"},
+    ]})
+
+    assert response.status_code == 200
+    assert response.json()["resultados"] == [
+        {"fila": 1, "name": "Cliente Válido", "status": "creado", "client_id": "new-1"},
+        {"fila": 2, "name": "x" * 121, "status": "error",
+         "motivo": "Datos inválidos: revisá nombre y carpeta de Drive."},
+    ]
+    assert len(db.inserts) == 1
 
 
 def test_summary_reports_zero_state_with_no_clients(monkeypatch, client):
