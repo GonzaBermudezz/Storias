@@ -448,6 +448,8 @@
       const retryableStories = stories.filter((story) => story.estado === 'pendiente' || story.estado === 'error');
       const publishNowBlocked = stories.some((story) => story.estado === 'publicando');
       const readyToPublishNow = retryableStories.length > 0 && !publishNowBlocked && retryableStories.every((story) => story.aprobado);
+      const unapprovedActionable = actionableStories.filter((story) => !story.aprobado);
+      const approveAllBtn = unapprovedActionable.length > 1 ? `<button class="badge approve-all-btn" data-approve-all-date="${escapeHtml(iso)}">✓ Aprobar todas (${unapprovedActionable.length})</button>` : '';
       const scheduleBtn = readyToSchedule ? `<button class="badge schedule-btn" data-schedule-date="${escapeHtml(iso)}">📅 Agendar</button>` : '';
       const publishNowBtn = readyToPublishNow ? `<button class="badge publish-now-btn" data-publish-now-date="${escapeHtml(iso)}">📤 Publicar ahora</button>` : '';
       const dayLocked = stories.some((story) => storyIsLocked(story));
@@ -456,7 +458,7 @@
       const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}"${dayLocked ? ' disabled title="La publicación de este día ya está en curso o finalizada"' : ''}>`;
       const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué van estas historias?"${dayLocked ? ' disabled' : ''}>` : '';
       const addRow = dayLocked ? '' : `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div><div class="story add-placeholder add-placeholder-ai" data-generate-date="${escapeHtml(iso)}"><span class="add-icon">IA</span><span class="add-label">Generar</span></div></div>`;
-      return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
+      return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${approveAllBtn}${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
     }).join('');
     $('stories').innerHTML = `<section class="group">${rows}</section>`;
   }
@@ -551,6 +553,9 @@
   const publishingDates = new Set(); // block repeated manual publish clicks for the same client selection/date
   const generatingDates = new Set(); // block repeated "generar con IA" clicks for the same client selection/date
   const approvingStoryIds = new Set(); // block a second confirm dialog for the same card while one is already open/in flight
+  const approvingDayDates = new Set(); // block a second "aprobar todas" confirm for the same day while one is in flight
+  const schedulingPromptDates = new Set(); // only one schedule confirmation per client selection and day at a time
+  const schedulingDates = new Set(); // block duplicate scheduling requests for the same client selection and day
   function dayOperationKey(clientId, selectionVersion, iso) {
     return `${selectionVersion}:${clientId}:${iso}`;
   }
@@ -819,6 +824,7 @@
   async function toggleApproval(story) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     let previous;
+    let approvedForScheduling = false;
     if (!clientId || storyIsLocked(story)) return;
     if (approvingStoryIds.has(story.id)) return;
     approvingStoryIds.add(story.id);
@@ -838,7 +844,7 @@
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       Object.assign(story, updated);
       renderStories(); renderPlan();
-      if (next && story.fecha_publicacion) maybePromptSchedule(story.fecha_publicacion);
+      approvedForScheduling = next && story.fecha_publicacion;
     } catch(error) {
       if (previous !== undefined) story.aprobado = previous;
       if (selectionVersion === state.selectionVersion) {
@@ -847,26 +853,85 @@
       }
     } finally {
       approvingStoryIds.delete(story.id);
+      // Release this card before checking the whole day: the last approval
+      // to settle is the one allowed to open the scheduling confirmation.
+      if (approvedForScheduling) maybePromptSchedule(approvedForScheduling);
+    }
+  }
+  async function approveAllForDay(iso) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    const operationKey = dayOperationKey(clientId, selectionVersion, iso);
+    if (approvingDayDates.has(operationKey)) return;
+    approvingDayDates.add(operationKey);
+    const stories = [];
+    const batchStories = [];
+    let approvedForScheduling = false;
+    try {
+      for (const group of state.groups) {
+        for (const story of (group.stories || [])) {
+          if (story.fecha_publicacion === iso && !storyIsScheduled(story, group) && !storyIsLocked(story) && !story.aprobado && !approvingStoryIds.has(story.id)) stories.push(story);
+        }
+      }
+      if (stories.length < 2) return;
+      const confirmed = await confirmDialog(`¿Aprobar las ${stories.length} historias del ${dayLabel(iso)}?`, {okLabel:'Aprobar todas'});
+      if (!confirmed || selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      batchStories.push(...stories.filter((story) => !approvingStoryIds.has(story.id)));
+      if (!batchStories.length) return;
+      for (const story of batchStories) approvingStoryIds.add(story.id); // block individual card clicks on these while the batch is in flight
+      const results = await Promise.allSettled(batchStories.map((story) =>
+        api(`/portal/historias/${encodeURIComponent(story.id)}/aprobar`, {method:'PATCH', body:JSON.stringify({aprobado: true})})
+      ));
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      let failed = 0;
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') Object.assign(batchStories[index], result.value);
+        else failed++;
+      });
+      renderStories(); renderPlan();
+      if (failed) showMessage(`Se aprobaron ${batchStories.length - failed} de ${batchStories.length}. ${failed} fallaron, probá de nuevo.`, true);
+      else showMessage('Historias aprobadas.');
+      approvedForScheduling = batchStories.length - failed > 0;
+    } finally {
+      approvingDayDates.delete(operationKey);
+      for (const story of batchStories) approvingStoryIds.delete(story.id);
+      // Like individual approval, only prompt after this batch has released
+      // its own locks; another finishing approval will do the same check.
+      if (approvedForScheduling) maybePromptSchedule(iso);
     }
   }
   async function maybePromptSchedule(iso) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
+    const operationKey = dayOperationKey(clientId, selectionVersion, iso);
+    if (schedulingPromptDates.has(operationKey)) return;
     // A day publishes once — every story dated iso (AI batch, manual upload,
     // or both) counts toward "ready", from any group not already agendado.
     const dayStories = [];
     for (const group of state.groups) {
       for (const story of (group.stories || [])) {
-        if (!storyIsScheduled(story, group) && story.fecha_publicacion === iso) dayStories.push(story);
+        if (!storyIsScheduled(story, group) && story.fecha_publicacion === iso) {
+          if (storyIsLocked(story)) continue;
+          if (approvingStoryIds.has(story.id)) return;
+          dayStories.push(story);
+        }
       }
     }
     if (!dayStories.length || !dayStories.every((s) => s.aprobado)) return;
-    const confirmed = await confirmDialog(`Se aprobaron todas las historias del ${dayLabel(iso)}. ¿Agendar la publicación para ese día?`, {okLabel:'Agendar'});
-    if (confirmed && selectionVersion === state.selectionVersion && clientId === state.client?.id) scheduleDay(iso);
+    schedulingPromptDates.add(operationKey);
+    try {
+      const confirmed = await confirmDialog(`Se aprobaron todas las historias del ${dayLabel(iso)}. ¿Agendar la publicación para ese día?`, {okLabel:'Agendar'});
+      if (confirmed && selectionVersion === state.selectionVersion && clientId === state.client?.id) scheduleDay(iso);
+    } finally {
+      schedulingPromptDates.delete(operationKey);
+    }
   }
   async function scheduleDay(iso) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
+    const operationKey = dayOperationKey(clientId, selectionVersion, iso);
+    if (schedulingDates.has(operationKey)) return;
+    schedulingDates.add(operationKey);
     try {
       await api(`/portal/clientes/${encodeURIComponent(clientId)}/dias/${encodeURIComponent(iso)}/agendar`, {method:'PATCH'});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
@@ -876,6 +941,7 @@
       renderStories(); renderPlan(); renderCalendarMonth(); renderActivity();
       showMessage('Publicación agendada.');
     } catch(error) { showMessage(error.message, true); }
+    finally { schedulingDates.delete(operationKey); }
   }
   async function publishDayNow(iso) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
@@ -1221,6 +1287,8 @@
   $('stories').addEventListener('click',(event)=>{
     const emptyCta=event.target.closest('[data-empty-cta]');
     if (emptyCta) { openRitmoDialog(); return; }
+    const approveAllBtn=event.target.closest('[data-approve-all-date]');
+    if (approveAllBtn) { approveAllForDay(approveAllBtn.dataset.approveAllDate); return; }
     const scheduleBtn=event.target.closest('[data-schedule-date]');
     if (scheduleBtn) { scheduleDay(scheduleBtn.dataset.scheduleDate); return; }
     const publishNowBtn=event.target.closest('[data-publish-now-date]');
