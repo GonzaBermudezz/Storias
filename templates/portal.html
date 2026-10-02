@@ -61,6 +61,7 @@
     .gen-dot{width:7px;height:7px;border-radius:50%;background:var(--success)}
     .gen-dot.warn{background:var(--danger)}
     .tag{font-size:10px;padding:2px 8px;border-radius:99px;background:var(--surface-2);color:var(--muted);border:1px solid var(--border)}
+    .tags-view{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}
     .topbar-right{display:flex;align-items:center;gap:10px}
     .bell{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:var(--muted);font-size:15px;cursor:default}
     .logout{font-size:12px;color:var(--muted);text-decoration:none;border:1px solid var(--border);padding:6px 12px;border-radius:8px;transition:border-color .12s,color .12s}
@@ -390,6 +391,16 @@
                 </div>
                 <div class="actions" id="focus-view-actions"><button id="edit-focus" class="btn">✎ Editar</button></div>
                 <div class="actions hidden" id="focus-edit-actions"><button id="save-focus" class="btn primary">Guardar</button><button id="cancel-focus" class="btn">Cancelar</button></div>
+              </div>
+              <div class="field" id="topics-field">
+                <div class="field-head"><label for="client-topics">Temas</label><span class="info" title="Un tema por línea. La IA usa esta lista como punto de partida para elegir el enfoque de las historias.">ⓘ</span></div>
+                <div class="field-view" id="topics-view"><div class="tags-view" id="topics-text"></div></div>
+                <div class="field-edit hidden" id="topics-edit">
+                  <textarea id="client-topics" placeholder="Un tema por línea\nEj.: Cocinas a medida\nMateriales durables"></textarea>
+                  <div class="char-count"><span id="topics-count">0</span> temas</div>
+                </div>
+                <div class="actions" id="topics-view-actions"><button id="edit-topics" class="btn">✎ Editar</button></div>
+                <div class="actions hidden" id="topics-edit-actions"><button id="save-topics" class="btn primary">Guardar</button><button id="cancel-topics" class="btn">Cancelar</button></div>
               </div>
             </div>
             <div class="team-field"><label for="client-team">Equipo</label><select id="client-team"><option value="">Sin equipo</option></select></div>

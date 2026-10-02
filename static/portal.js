@@ -64,7 +64,7 @@
   }
   function initials(name) { return String(name || '?').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(); }
   function setControlsDisabled(disabled) {
-    ['save-description','save-focus','try-prompt','save-story','generate-weekly'].forEach((id) => { $(id).disabled = disabled; });
+    ['save-description','save-focus','save-topics','try-prompt','save-story','generate-weekly'].forEach((id) => { $(id).disabled = disabled; });
     $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating;
     $('edit-ritmo').disabled = disabled || ritmoLoading;
   }
@@ -310,17 +310,25 @@
     $(`${name}-text`).textContent = value || emptyPlaceholder;
     $(`${name}-view`).classList.toggle('empty', !value);
   }
+  function renderTopicsView(topics) {
+    const values = Array.isArray(topics) ? topics : [];
+    $('topics-text').innerHTML = values.length
+      ? values.map((topic) => `<span class="tag">${escapeHtml(topic)}</span>`).join('')
+      : '<p class="field-text">Todavía no hay temas. Hacé click en Editar para agregarlos.</p>';
+    $('topics-view').classList.toggle('empty', !values.length);
+  }
   function renderClient() {
     $('client-name').textContent = state.client.name; $('client-avatar').textContent = initials(state.client.name);
     $('client-workspace-title').textContent = `${state.client.name} · contenido de la próxima semana`;
     $('client-workspace-subtitle').textContent = state.client.weekly_focus
       ? 'La dirección semanal está cargada. Revisá las historias y dejalas listas para publicar.'
       : 'Definí una dirección, revisá las historias y dejalas listas para publicar.';
-    $('business-description').value = state.client.business_description || ''; $('weekly-focus').value = state.client.weekly_focus || '';
-    $('desc-count').textContent = String($('business-description').value.length); $('focus-count').textContent = String($('weekly-focus').value.length);
+    $('business-description').value = state.client.business_description || ''; $('weekly-focus').value = state.client.weekly_focus || ''; $('client-topics').value = (state.client.topics || []).join('\n');
+    $('desc-count').textContent = String($('business-description').value.length); $('focus-count').textContent = String($('weekly-focus').value.length); $('topics-count').textContent = String((state.client.topics || []).length);
     updateFieldView('description', state.client.business_description, 'Todavía no hay descripción. Hacé click en Editar para agregarla.');
     updateFieldView('focus', state.client.weekly_focus, 'Sin enfoque puntual para esta semana.');
-    setFieldMode('description', false); setFieldMode('focus', false);
+    renderTopicsView(state.client.topics);
+    setFieldMode('description', false); setFieldMode('focus', false); setFieldMode('topics', false);
     $('client-team').value = state.client.team_id || '';
     $('client-font').value = state.client.font_choice || '';
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
@@ -504,17 +512,23 @@
     return `<article class="story${approvedClass}${locked ? ' read-only' : ''}" draggable="${reorderable ? 'true' : 'false'}" data-reorderable="${reorderable ? 'true' : 'false'}" data-story-id="${escapeHtml(story.id)}" data-story-group-id="${escapeHtml(groupId)}">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="Historia ${index+1}">` : ''}<span class="story-num">${index+1}</span>${dateBadge}${approvedBadge}<div class="story-actions"><button class="icon-btn" data-action="preview" aria-label="Ver en grande">👁</button>${mutationActions}</div><div class="story-overlay"><p class="story-text">${escapeHtml(story.text || 'Sin texto todavía')}</p></div></article>`;
   }
   async function saveClientField(field, buttonId) {
-    const name = field === 'weekly_focus' ? 'focus' : 'description';
-    const button=$(buttonId), input=$(field==='business_description'?'business-description':'weekly-focus'), value=input.value.trim(), clientId=state.client?.id, selectionVersion=state.selectionVersion;
+    const name = field === 'weekly_focus' ? 'focus' : field === 'topics' ? 'topics' : 'description';
+    const button=$(buttonId), input=$(field==='business_description'?'business-description':field==='weekly_focus'?'weekly-focus':'client-topics'), value=field === 'topics' ? input.value.split(/\r?\n/).map((topic) => topic.trim()).filter(Boolean) : input.value.trim(), clientId=state.client?.id, selectionVersion=state.selectionVersion;
     if (!clientId) return; button.disabled=true;
     try {
-      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}`, {method:'PATCH', body:JSON.stringify({[field]:value || null})});
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}`, {method:'PATCH', body:JSON.stringify({[field]:field === 'topics' ? value : value || null})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       state.client = updated;
-      updateFieldView(name, field==='weekly_focus'?updated.weekly_focus:updated.business_description,
-        field==='weekly_focus'?'Sin enfoque puntual para esta semana.':'Todavía no hay descripción. Hacé click en Editar para agregarla.');
+      if (field === 'topics') {
+        $('client-topics').value = (updated.topics || []).join('\n');
+        $('topics-count').textContent = String((updated.topics || []).length);
+        renderTopicsView(updated.topics);
+      } else {
+        updateFieldView(name, field==='weekly_focus'?updated.weekly_focus:updated.business_description,
+          field==='weekly_focus'?'Sin enfoque puntual para esta semana.':'Todavía no hay descripción. Hacé click en Editar para agregarla.');
+      }
       setFieldMode(name, false);
-      showMessage(field==='weekly_focus'?'Enfoque semanal guardado.':'Descripción guardada.');
+      showMessage(field==='weekly_focus'?'Enfoque semanal guardado.':field==='topics'?'Temas guardados.':'Descripción guardada.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message,true); }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled=false; }
   }
@@ -1125,6 +1139,7 @@
   $('client-search').addEventListener('input',()=>{state.clientSearch=$('client-search').value;renderClients();});
   $('save-description').addEventListener('click',()=>saveClientField('business_description','save-description'));
   $('save-focus').addEventListener('click',()=>saveClientField('weekly_focus','save-focus'));
+  $('save-topics').addEventListener('click',()=>saveClientField('topics','save-topics'));
   $('try-prompt').addEventListener('click',tryPrompt);
   $('client-team').addEventListener('change',saveClientTeam);
   $('client-font').addEventListener('change',saveClientFont);
@@ -1138,10 +1153,13 @@
   $('submit-bulk-clients').addEventListener('click', submitBulkClients);
   $('business-description').addEventListener('input',()=>{$('desc-count').textContent=String($('business-description').value.length);});
   $('weekly-focus').addEventListener('input',()=>{$('focus-count').textContent=String($('weekly-focus').value.length);});
+  $('client-topics').addEventListener('input',()=>{$('topics-count').textContent=String($('client-topics').value.split(/\r?\n/).map((topic) => topic.trim()).filter(Boolean).length);});
   $('edit-description').addEventListener('click',()=>{setFieldMode('description',true); $('business-description').focus();});
   $('cancel-description').addEventListener('click',()=>{$('business-description').value=state.client?.business_description || ''; $('desc-count').textContent=String($('business-description').value.length); setFieldMode('description',false);});
   $('edit-focus').addEventListener('click',()=>{setFieldMode('focus',true); $('weekly-focus').focus();});
   $('cancel-focus').addEventListener('click',()=>{$('weekly-focus').value=state.client?.weekly_focus || ''; $('focus-count').textContent=String($('weekly-focus').value.length); setFieldMode('focus',false);});
+  $('edit-topics').addEventListener('click',()=>{setFieldMode('topics',true); $('client-topics').focus();});
+  $('cancel-topics').addEventListener('click',()=>{$('client-topics').value=(state.client?.topics || []).join('\n'); $('topics-count').textContent=String((state.client?.topics || []).length); setFieldMode('topics',false);});
   $('content-panel-toggle').addEventListener('click',()=>$('content-panel').classList.toggle('collapsed'));
   $('qa-history').addEventListener('click',openHistory);
   $('close-history').addEventListener('click',()=>$('history-dialog').close());
