@@ -103,7 +103,7 @@
         ? `<table class="team-table"><thead><tr><th>Equipo</th><th>Clientes</th><th>En edición</th><th>Agendadas</th><th>% aprobación</th></tr></thead><tbody>${summary.por_equipo.map((team) => `<tr><td>${escapeHtml(team.team_name)}</td><td>${team.clientes}</td><td>${team.historias_en_edicion}</td><td>${team.historias_agendadas}</td><td>${team.aprobacion_pct === null ? '—' : team.aprobacion_pct + '%'}</td></tr>`).join('')}</tbody></table>`
         : '<div class="empty">Todavía no hay clientes.</div>';
       $('home-idle').innerHTML = summary.clientes_sin_actividad.length
-        ? `<div class="idle-list">${summary.clientes_sin_actividad.map((c) => `<span class="idle-chip">${escapeHtml(c.name)}</span>`).join('')}</div>`
+        ? `<div class="idle-list">${summary.clientes_sin_actividad.map((c) => `<span class="idle-chip neutral">${escapeHtml(c.name)}</span>`).join('')}</div>`
         : '<div class="empty">Todos los clientes tienen historias agendadas. 🎉</div>';
     } else {
       $('home-teams').textContent = ''; $('home-idle').textContent = '';
@@ -466,7 +466,7 @@
       const timeSource = actionableStories[0] || stories[0];
       const timeValue = timeSource?.hora_publicacion ? String(timeSource.hora_publicacion).slice(0,5) : '09:00';
       const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}"${dayLocked ? ' disabled title="La publicación de este día ya está en curso o finalizada"' : ''}>`;
-      const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué va este hilo?"${dayLocked ? ' disabled' : ''}>` : '';
+      const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué van estas historias?"${dayLocked ? ' disabled' : ''}>` : '';
       const addRow = dayLocked ? '' : `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div></div>`;
       return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
     }).join('');
@@ -726,7 +726,7 @@
       state.client = {...state.client, ...updated};
       ritmoDays = normalizeRitmoDays(updated.publish_days);
       renderRitmoChips(); renderRitmoDaysDetail();
-      showRitmoDetailMessage('Horarios y reparto guardados.');
+      showRitmoDetailMessage('Días y horarios guardados.');
     } catch(error) {
       showRitmoDetailMessage(error.message, true);
     } finally {
