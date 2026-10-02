@@ -312,6 +312,10 @@
   }
   function renderClient() {
     $('client-name').textContent = state.client.name; $('client-avatar').textContent = initials(state.client.name);
+    $('client-workspace-title').textContent = `${state.client.name} · contenido de la próxima semana`;
+    $('client-workspace-subtitle').textContent = state.client.weekly_focus
+      ? 'La dirección semanal está cargada. Revisá las historias y dejalas listas para publicar.'
+      : 'Definí una dirección, revisá las historias y dejalas listas para publicar.';
     $('business-description').value = state.client.business_description || ''; $('weekly-focus').value = state.client.weekly_focus || '';
     $('desc-count').textContent = String($('business-description').value.length); $('focus-count').textContent = String($('weekly-focus').value.length);
     updateFieldView('description', state.client.business_description, 'Todavía no hay descripción. Hacé click en Editar para agregarla.');
@@ -1157,6 +1161,7 @@
     if (file && iso) uploadManualImage(iso, hora, file);
   });
   $('edit-ritmo').addEventListener('click',openRitmoDialog);
+  $('open-ritmo-hero').addEventListener('click',openRitmoDialog);
   $('close-ritmo').addEventListener('click',()=>$('ritmo-dialog').close());
   $('close-ritmo-2').addEventListener('click',()=>$('ritmo-dialog').close());
   $('generate-weekly').addEventListener('click',generateWeeklyNow);
