@@ -201,7 +201,6 @@ def test_portal_frontend_blocks_generation_during_any_rhythm_save():
     assert "const renderedTimes = new Map(ritmoDetailEntries().map" in source
     assert source.index("const renderedTimes = new Map") < source.index("const next = ritmoDays.map")
     assert "ritmoDays = [];" in source
-    assert "$('edit-ritmo').disabled = rhythmControlsBlocked || !state.client" in source
     assert "if (ritmoLoading || !state.client) return;" in source
 
 

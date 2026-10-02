@@ -66,7 +66,6 @@
   function setControlsDisabled(disabled) {
     ['save-description','save-focus','save-topics','try-prompt','save-story','generate-weekly','client-pm'].forEach((id) => { $(id).disabled = disabled; });
     $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating;
-    $('edit-ritmo').disabled = disabled || ritmoLoading;
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
   function clearSelection() {
@@ -637,7 +636,6 @@
     document.querySelectorAll('#ritmo-days-detail input').forEach((input) => { input.disabled = rhythmControlsBlocked; });
     refreshRitmoDetailTotal();
     $('generate-weekly').disabled = rhythmControlsBlocked || !state.client;
-    $('edit-ritmo').disabled = rhythmControlsBlocked || !state.client;
   }
   function setRitmoSaving(saving) {
     ritmoSaving = saving;
@@ -959,7 +957,7 @@
     // an AI-thread story, whose text is already carefully written per-slot.
     const isManual = !!group && !group.generation_week;
     $('generate-ai-text').classList.toggle('hidden', !isManual);
-    $('generate-ai-text').textContent = story.text ? '🔄 Generar otra vez' : '✨ Generar con IA';
+    $('generate-ai-text').textContent = story.text ? '🔄 Generar otra vez' : 'Generar con IA';
     // Changing the font recomposes the existing text onto the image, so it
     // only makes sense once the story actually has text saved.
     $('story-font').value = story.font_choice || '';
@@ -1154,7 +1152,6 @@
     pendingUploadDate = null; event.target.value = '';
     if (file && iso) uploadManualImage(iso, hora, file);
   });
-  $('edit-ritmo').addEventListener('click',openRitmoDialog);
   $('open-ritmo-hero').addEventListener('click',openRitmoDialog);
   $('close-ritmo').addEventListener('click',()=>$('ritmo-dialog').close());
   $('close-ritmo-2').addEventListener('click',()=>$('ritmo-dialog').close());

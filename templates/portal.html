@@ -362,7 +362,7 @@
             <h2 id="client-workspace-title">Prepará la próxima semana</h2>
             <p id="client-workspace-subtitle">Definí la dirección, revisá las historias y dejalas listas para publicar.</p>
           </div>
-          <button id="open-ritmo-hero" class="btn primary">✨ Generar historias</button>
+          <button id="open-ritmo-hero" class="btn primary">Generar historias</button>
         </div>
         <div class="panel" id="content-panel">
           <div class="panel-head" id="content-panel-toggle"><div><p class="eyebrow">Prompt del cliente</p><h2>Dirección de contenido</h2></div><span class="chev">▾</span></div>
@@ -375,7 +375,7 @@
                   <textarea id="business-description" maxlength="500" placeholder="Tono, propuesta de valor y público..."></textarea>
                   <div class="char-count"><span id="desc-count">0</span>/500</div>
                 </div>
-                <div class="actions" id="description-view-actions"><button id="try-prompt" class="btn">✨ Probar con IA</button></div>
+                <div class="actions" id="description-view-actions"><button id="try-prompt" class="btn">Probar con IA</button></div>
                 <div class="actions hidden" id="description-edit-actions"><button id="save-description" class="btn primary">Guardar</button><button id="cancel-description" class="btn">Cancelar</button></div>
                 <div id="prompt-preview" class="preview hidden"></div>
               </div>
@@ -405,7 +405,7 @@
           </div>
         </div>
         <div id="plan-panel" class="plan-panel hidden">
-          <div class="plan-head"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div><button id="edit-ritmo" class="btn">Editar días y horarios</button></div>
+          <div class="plan-head"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div></div>
           <div id="plan-days" class="plan-days"></div>
         </div>
         <div class="workspace">
@@ -423,7 +423,7 @@
               <input type="file" id="manual-upload-input" accept="image/*" hidden>
             </aside>
             <aside class="activity">
-              <h3>✨ Actividad de IA</h3>
+              <h3>Actividad de IA</h3>
               <div id="activity-list" class="activity-list"></div>
               <div id="activity-summary"></div>
             </aside>
@@ -447,13 +447,13 @@
       <div class="story-edit-panel">
         <textarea id="story-text"></textarea>
         <div class="team-field"><label for="story-font">Tipografía de esta historia</label><select id="story-font"><option value="">Default del cliente</option></select></div>
-        <button id="generate-ai-text" class="btn hidden">✨ Generar con IA</button>
+        <button id="generate-ai-text" class="btn hidden">Generar con IA</button>
       </div>
     </div>
     <div class="modal-foot"><button id="cancel-story-edit" class="btn">Cancelar</button><button id="save-story" class="btn primary">Guardar historia</button></div>
   </dialog>
   <dialog id="history-dialog" class="wide"><div class="modal-head"><strong>Historial de cambios</strong><button id="close-history" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body" id="history-list"></div><div class="modal-foot"><button id="close-history-2" class="btn">Cerrar</button></div></dialog>
-  <dialog id="ritmo-dialog"><div class="modal-head"><strong>Días y horarios de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días y definí cuántas de las 4 historias se publican cada día.</p><div id="ritmo-chips" class="ritmo-chips"></div><div id="ritmo-days-detail" class="ritmo-days-detail"></div><p id="ritmo-count-total" class="hint"></p><p id="ritmo-detail-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p><button id="save-ritmo-detail" class="btn">Guardar días y horarios</button><p id="ritmo-generation-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button><button id="generate-weekly" class="btn primary">🚀 Generar historias para la semana que viene</button></div></dialog>
+  <dialog id="ritmo-dialog"><div class="modal-head"><strong>Días y horarios de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días y definí cuántas de las 4 historias se publican cada día.</p><div id="ritmo-chips" class="ritmo-chips"></div><div id="ritmo-days-detail" class="ritmo-days-detail"></div><p id="ritmo-count-total" class="hint"></p><p id="ritmo-detail-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p><button id="save-ritmo-detail" class="btn">Guardar días y horarios</button><p id="ritmo-generation-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button><button id="generate-weekly" class="btn primary">Generar historias para la semana que viene</button></div></dialog>
   <dialog id="bulk-clients-dialog" class="wide">
     <div class="modal-head"><strong>Alta masiva de clientes</strong><button id="close-bulk-clients" class="icon-btn" aria-label="Cerrar">×</button></div>
     <div class="modal-body">
