@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, teams: [], me: null };
+  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, teams: [], me: null, clientSearch: '' };
   const LOCKED_STORY_STATES = new Set(['publicando', 'publicado', 'cancelada']);
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
@@ -159,8 +159,11 @@
   }
   function renderClients() {
     if (!state.clients.length) { $('client-list').textContent = 'No hay clientes disponibles.'; return; }
+    const query = (state.clientSearch || '').trim().toLocaleLowerCase('es');
+    const visibleClients = query ? state.clients.filter((client) => client.name.toLocaleLowerCase('es').includes(query)) : state.clients;
+    if (!visibleClients.length) { $('client-list').textContent = 'Ningún cliente coincide con la búsqueda.'; return; }
     const byTeam = new Map();
-    for (const client of state.clients) {
+    for (const client of visibleClients) {
       const key = client.team_id || '';
       if (!byTeam.has(key)) byTeam.set(key, []);
       byTeam.get(key).push(client);
@@ -307,9 +310,13 @@
       const shortTitle = title.length > 40 ? title.slice(0, 37) + '…' : title;
       const hora = first.hora_publicacion ? String(first.hora_publicacion).slice(0,5) : '';
       const count = stories.length;
+      const hasFailedStory = stories.some((story) => story.estado === 'error');
+      const retryBlocked = stories.some((story) => story.estado === 'publicando');
+      const canRetry = hasFailedStory && !retryBlocked;
+      const retryButton = canRetry ? `<button class="icon-btn plan-chip-retry" data-plan-retry="${escapeHtml(iso)}" aria-label="Reintentar publicación fallida" title="Reintentar la publicación fallida de este día">🔁</button>` : '';
       const canDelete = stories.every((story) => !storyIsLocked(story));
       const deleteButton = canDelete ? `<button class="icon-btn plan-chip-delete" data-plan-delete="${escapeHtml(iso)}" aria-label="Eliminar toda la publicación de este día">🗑</button>` : '';
-      return `<div class="plan-chip" data-plan-date="${escapeHtml(iso)}"><span class="grip">⠿</span><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : '🖼'}</span><div class="plan-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}${hora ? ' · ' + hora : ''}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count===1?'':'s'}</div></div>${deleteButton}</div>`;
+      return `<div class="plan-chip" data-plan-date="${escapeHtml(iso)}"><span class="grip">⠿</span><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : '🖼'}</span><div class="plan-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}${hora ? ' · ' + hora : ''}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count===1?'':'s'}</div></div>${retryButton}${deleteButton}</div>`;
     }).join('');
   }
   function groupDate(group) {
@@ -752,7 +759,7 @@
     if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
     if (publishingDates.has(operationKey)) return; // another confirmation won the race
     publishingDates.add(operationKey);
-    const button = document.querySelector(`[data-publish-now-date="${CSS.escape(iso)}"]`);
+    const button = document.querySelector(`[data-publish-now-date="${CSS.escape(iso)}"], [data-plan-retry="${CSS.escape(iso)}"]`);
     const previousLabel = button ? button.textContent : null;
     if (button) { button.disabled = true; button.textContent = 'Publicando...'; }
     let result = null;
@@ -1022,6 +1029,7 @@
   $('nav-clients').addEventListener('click',showClients);
   $('client-list').addEventListener('click',(event)=>{const item=event.target.closest('[data-client-id]');if(item)selectClient(item.dataset.clientId);});
   $('only-mine').addEventListener('change',loadClients);
+  $('client-search').addEventListener('input',()=>{state.clientSearch=$('client-search').value;renderClients();});
   $('save-description').addEventListener('click',()=>saveClientField('business_description','save-description'));
   $('save-focus').addEventListener('click',()=>saveClientField('weekly_focus','save-focus'));
   $('try-prompt').addEventListener('click',tryPrompt);
@@ -1134,6 +1142,8 @@
     if (descInput) updateDayDescription(descInput.dataset.descFor, descInput.value.trim());
   });
   $('plan-days').addEventListener('click',(event)=>{
+    const retryBtn = event.target.closest('[data-plan-retry]');
+    if (retryBtn) { event.stopPropagation(); publishDayNow(retryBtn.dataset.planRetry); return; }
     const deleteBtn = event.target.closest('[data-plan-delete]');
     if (deleteBtn) { event.stopPropagation(); deletePlanDay(deleteBtn.dataset.planDelete); return; }
     const chip = event.target.closest('[data-plan-date]'); if (!chip) return;

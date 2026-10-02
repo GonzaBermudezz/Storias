@@ -22,6 +22,7 @@ def test_portal_page_renders_authenticated_employee_shell():
 
     assert response.status_code == 200
     assert 'id="client-list"' in response.text
+    assert 'id="client-search"' in response.text
     assert 'id="business-description"' in response.text
     assert 'id="weekly-focus"' in response.text
     assert "Enfoque semanal" in response.text
@@ -46,6 +47,11 @@ def test_portal_frontend_uses_real_api_without_prototype_data():
     assert "selectionVersion" in source
     assert "clientId !== state.client?.id" in source
     assert "state.client = null" in source
+    assert "clientSearch: ''" in source
+    assert "toLocaleLowerCase('es')" in source
+    assert "Ningún cliente coincide con la búsqueda." in source
+    assert "for (const client of visibleClients)" in source
+    assert "$('client-search').addEventListener('input'" in source
     assert "CUAN Arquitectura" not in source
     assert "Panadería Dora" not in source
     assert "images.unsplash.com" not in source
@@ -147,6 +153,12 @@ def test_publish_now_reappears_to_retry_failed_stories_but_not_mid_claim():
     assert "const publishNowBlocked = stories.some((story) => story.estado === 'publicando')" in source
     assert "retryableStories.length > 0 && !publishNowBlocked && retryableStories.every((story) => story.aprobado)" in source
     assert "const publishNowBtn = readyToPublishNow ?" in source
+    assert "const hasFailedStory = stories.some((story) => story.estado === 'error')" in source
+    assert "const retryBlocked = stories.some((story) => story.estado === 'publicando')" in source
+    assert "const retryButton = canRetry ?" in source
+    assert 'data-plan-retry="${escapeHtml(iso)}"' in source
+    assert "publishDayNow(retryBtn.dataset.planRetry)" in source
+    assert '[data-plan-retry="${CSS.escape(iso)}"]' in source
 
 
 def test_portal_frontend_blocks_generation_during_any_rhythm_save():

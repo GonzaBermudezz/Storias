@@ -27,6 +27,8 @@
     .section-label-row{padding:12px 14px 6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
     .btn-add{border:1px solid var(--border);background:var(--surface);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:4px 9px;border-radius:99px;transition:background .12s,border-color .12s}
     .btn-add:hover{background:var(--accent-soft);border-color:var(--accent)}
+    .client-search{margin:0 10px 8px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;background:var(--bg);color:var(--fg);width:calc(100% - 20px)}
+    .client-search:focus{outline:none;border-color:var(--accent)}
     .client-list{padding:0 8px 12px}
     .team-group{margin-bottom:14px}
     .team-label{padding:10px 8px 5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);display:flex;align-items:center;gap:6px}
@@ -137,7 +139,8 @@
     .plan-chip-body .date{font-size:11.5px;font-weight:650;text-transform:capitalize}
     .plan-chip-body .title{font-size:11px;color:var(--fg);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .plan-chip-body .type{font-size:10px;color:var(--muted);margin-top:2px}
-    .plan-chip-delete{flex-shrink:0;width:24px;height:24px;font-size:11px}
+    .plan-chip-delete,.plan-chip-retry{flex-shrink:0;width:24px;height:24px;font-size:11px}
+    .plan-chip-retry{color:var(--danger, #d14343)}
     .plan-head{gap:10px;flex-wrap:wrap}
     .cal-nav{display:flex;align-items:center;justify-content:space-between;margin:2px 0 8px}
     .cal-nav span{font-size:11.5px;font-weight:650}
@@ -276,6 +279,7 @@
     </nav>
     <div class="nav-divider"></div>
     <div class="section-label-row"><span class="section-label">Clientes</span><button id="add-team" class="btn-add" title="Crear equipo" aria-label="Crear equipo">+ Equipo</button></div>
+    <input id="client-search" class="client-search" type="search" placeholder="Buscar cliente..." aria-label="Buscar cliente">
     <div id="client-list" class="client-list" aria-live="polite">Cargando...</div>
     <label class="sidebar-filter"><input id="only-mine" type="checkbox"> Mostrar solo mis clientes</label>
     <div id="me-card" class="me-card hidden"><span class="avatar" id="me-avatar"></span><div><strong id="me-name"></strong><span id="me-role" class="me-role"></span></div><span class="chev">›</span></div>
