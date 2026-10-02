@@ -73,6 +73,12 @@ begin
 end;
 $$;
 
+-- a32 (addendum): finalize_reserved_generated_story needs this unique index
+-- for the client_images upsert below. Earlier code used a SELECT + branch
+-- and therefore did not require a conflict target in the database.
+create unique index if not exists client_images_client_drive_key
+  on public.client_images (client_id, drive_file_id);
+
 create or replace function public.finalize_reserved_generated_story(
   p_story_id uuid,
   p_story jsonb,
