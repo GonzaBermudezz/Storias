@@ -550,6 +550,7 @@
   const pendingDayTimes = new Map(); // latest value wins within that same scoped save loop
   const publishingDates = new Set(); // block repeated manual publish clicks for the same client selection/date
   const generatingDates = new Set(); // block repeated "generar con IA" clicks for the same client selection/date
+  const approvingStoryIds = new Set(); // block a second confirm dialog for the same card while one is already open/in flight
   function dayOperationKey(clientId, selectionVersion, iso) {
     return `${selectionVersion}:${clientId}:${iso}`;
   }
@@ -817,25 +818,40 @@
   }
   async function toggleApproval(story) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    let previous;
     if (!clientId || storyIsLocked(story)) return;
-    const previous = story.aprobado, next = !previous;
-    story.aprobado = next; // optimistic — feels instant, reverted below on failure
-    renderStories(); renderPlan();
+    if (approvingStoryIds.has(story.id)) return;
+    approvingStoryIds.add(story.id);
     try {
+      const next = !story.aprobado;
+      const confirmed = await confirmDialog(
+        next
+          ? '¿Aprobar esta historia? Quedará lista para agendar su publicación.'
+          : '¿Quitar la aprobación de esta historia? Volverá a quedar pendiente de revisión.',
+        {okLabel: next ? 'Aprobar' : 'Quitar aprobación'}
+      );
+      if (!confirmed || selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      previous = story.aprobado;
+      story.aprobado = next; // optimistic — feels instant, reverted below on failure
+      renderStories(); renderPlan();
       const updated = await api(`/portal/historias/${encodeURIComponent(story.id)}/aprobar`, {method:'PATCH', body:JSON.stringify({aprobado: next})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       Object.assign(story, updated);
       renderStories(); renderPlan();
       if (next && story.fecha_publicacion) maybePromptSchedule(story.fecha_publicacion);
     } catch(error) {
-      story.aprobado = previous;
+      if (previous !== undefined) story.aprobado = previous;
       if (selectionVersion === state.selectionVersion) {
-        renderStories(); renderPlan();
+        if (previous !== undefined) { renderStories(); renderPlan(); }
         if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
       }
+    } finally {
+      approvingStoryIds.delete(story.id);
     }
   }
   async function maybePromptSchedule(iso) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
     // A day publishes once — every story dated iso (AI batch, manual upload,
     // or both) counts toward "ready", from any group not already agendado.
     const dayStories = [];
@@ -846,7 +862,7 @@
     }
     if (!dayStories.length || !dayStories.every((s) => s.aprobado)) return;
     const confirmed = await confirmDialog(`Se aprobaron todas las historias del ${dayLabel(iso)}. ¿Agendar la publicación para ese día?`, {okLabel:'Agendar'});
-    if (confirmed) scheduleDay(iso);
+    if (confirmed && selectionVersion === state.selectionVersion && clientId === state.client?.id) scheduleDay(iso);
   }
   async function scheduleDay(iso) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
