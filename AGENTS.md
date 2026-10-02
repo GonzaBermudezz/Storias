@@ -82,6 +82,10 @@ class ImagenCandidata(BaseModel):
     drive_file_name: str
     image_bytes: bytes                  # el portal ya la bajó de Drive
 
+class ImagenEditada(BaseModel):
+    url: str                            # URL nueva de Cloudinary de la imagen compuesta
+    public_id: str                      # public_id del asset para limpieza ante una falla posterior
+
 class HiloGenerado(BaseModel):
     historias: list[str]                # 4 textos, en orden
     imagenes_originales_url: list[str]  # Cloudinary, SIN texto (para re-editar después)
@@ -108,10 +112,11 @@ def generar_hilo(config: ClientContentConfig, imagenes: list[ImagenCandidata]) -
     """
 
 def editar_historia(config: ClientContentConfig, imagen_original_bytes: bytes,
-                     texto_nuevo: str, num_historia: int) -> str:
+                     texto_nuevo: str, num_historia: int) -> ImagenEditada:
     """
     Re-edita UNA historia a partir de su imagen SIN texto (nunca de la ya editada).
-    Devuelve la URL nueva de Cloudinary. Mismo truco que ya usa panel/app.py hoy.
+    Devuelve un ImagenEditada(url, public_id); el public_id permite borrar el
+    asset de Cloudinary si un paso posterior falla.
     """
 
 def generar_texto_de_prueba(config: ClientContentConfig, imagen: ImagenCandidata) -> list[str]:

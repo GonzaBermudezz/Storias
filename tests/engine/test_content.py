@@ -273,13 +273,23 @@ def test_prompt_generalizado_no_menciona_cocinas_por_defecto():
 # editar_historia y generar_texto_de_prueba
 # ---------------------------------------------------------------------------
 
-def test_editar_historia_devuelve_url_de_cloudinary(mock_servicios):
+def test_editar_historia_devuelve_asset_de_cloudinary(mock_servicios):
     config = config_cuan()
 
-    url = content.editar_historia(config, imagen_falsa(), "Texto nuevo", num_historia=3)
+    imagen_editada = content.editar_historia(config, imagen_falsa(), "Texto nuevo", num_historia=3)
 
-    assert url.startswith("https://")
-    assert "re_edit_3" in url
+    assert imagen_editada.url.startswith("https://")
+    assert "re_edit_3" in imagen_editada.url
+    assert "re_edit_3" in imagen_editada.public_id
+
+
+def test_editar_historia_uses_distinct_cloudinary_public_ids(mock_servicios):
+    config = config_cuan()
+
+    first = content.editar_historia(config, imagen_falsa(), "Uno", num_historia=1)
+    second = content.editar_historia(config, imagen_falsa(), "Dos", num_historia=1)
+
+    assert first.public_id != second.public_id
 
 
 def test_editar_historia_usa_el_font_choice_pasado_por_parametro(mock_servicios, monkeypatch):

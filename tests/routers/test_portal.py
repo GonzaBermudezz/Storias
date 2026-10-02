@@ -676,6 +676,278 @@ def test_create_manual_story_cleans_reserved_group_when_story_insert_fails(monke
     assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
 
 
+
+def test_generate_story_for_day_creates_story_from_drive_pick(monkeypatch, client):
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [],
+        {"id": "s1", "order": 1, "text": "Un texto generado", "image_url": "https://cdn/compuesta.jpg"},
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Un texto generado")
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
+                        SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/s1"))
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag:
+                        SimpleNamespace(url="https://cdn/original.jpg", public_id="ia/one"))
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "s1", "order": 1, "text": "Un texto generado", "image_url": "https://cdn/compuesta.jpg"}
+    reserve_call = next(payload for table, payload in db.inserts if table == "rpc:reserve_generated_story")
+    assert reserve_call == {
+        "p_group_id": "g1", "p_client_id": "c1", "p_agency_id": "agency-1",
+        "p_fecha_publicacion": "2026-09-25", "p_hora_publicacion": "10:00:00",
+    }
+    finalize_call = next(payload for table, payload in db.inserts if table == "rpc:finalize_reserved_generated_story")
+    assert finalize_call["p_story_id"] == "reserved-1"
+    assert finalize_call["p_story"]["text"] == "Un texto generado"
+    assert finalize_call["p_story"]["image_url"] == "https://cdn/compuesta.jpg"
+    assert finalize_call["p_story"]["image_original_url"] == "https://cdn/original.jpg"
+    assert finalize_call["p_image"] == {"drive_file_id": "f1", "drive_file_name": "foto.jpg"}
+
+
+def test_generate_story_for_day_rejects_when_drive_pool_is_empty(monkeypatch, client):
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [], None, None,
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [])
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 422
+    assert "no tiene imágenes disponibles" in response.json()["detail"]
+    assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
+
+
+def test_generate_story_for_day_surfaces_claude_errors(monkeypatch, client):
+    from app.engine.exceptions import ClaudeGenerationError
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [], None, None,
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    def boom(config, image_bytes):
+        raise ClaudeGenerationError("Claude no pudo generar el texto.")
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", boom)
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Claude no pudo generar el texto."
+    assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
+
+
+def test_generate_story_for_day_releases_reservation_on_image_composition_error(monkeypatch, client):
+    from app.engine.exceptions import ImageProcessingError
+
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [], None, None,
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Texto")
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *args, **kwargs:
+                        (_ for _ in ()).throw(ImageProcessingError("No se pudo componer")))
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "No se pudo componer"
+    assert ("rpc:release_reserved_generated_story", {"p_story_id": "reserved-1"}) in db.inserts
+    assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
+
+
+def test_generate_story_for_day_reserves_before_spending_generation_resources(monkeypatch, client):
+    events = []
+
+    class OrderedDB(DB):
+        def rpc(self, name, payload):
+            events.append(name)
+            return super().rpc(name, payload)
+
+    db = OrderedDB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [{"id": "g1", "agendado": False}], {"id": "reserved-4", "order": 4}, [],
+        {"id": "s4", "order": 4},
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes:
+                        events.append("generate_text") or "Texto")
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *args, **kwargs:
+                        events.append(("compose", args[3])) or SimpleNamespace(url="https://cdn/edited.jpg", public_id="edit/s4"))
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda *args:
+                        events.append("upload_original") or SimpleNamespace(url="https://cdn/original.jpg", public_id="ia/s4"))
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 200
+    assert events == [
+        "reserve_generated_story", "generate_text", ("compose", 4),
+        "upload_original", "finalize_reserved_generated_story",
+    ]
+
+
+def test_generate_story_for_day_cleans_up_composed_image_when_original_upload_fails(monkeypatch, client):
+    from app.services import uploads
+
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [], None, None,
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Un texto generado")
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
+                        SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/orphan"))
+    def boom(data, client_id, tag):
+        raise uploads.UploadError("Cloudinary no respondió.")
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", boom)
+    destroyed = []
+    monkeypatch.setattr("app.routers.portal.uploads.delete_image", destroyed.append)
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 422
+    assert destroyed == ["edit/orphan"]
+    assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
+    assert ("rpc:release_reserved_generated_story", {"p_story_id": "reserved-1"}) in db.inserts
+    assert not any(table == "rpc:finalize_reserved_generated_story" for table, _ in db.inserts)
+
+
+def test_generate_story_for_day_cleans_up_both_assets_when_group_is_scheduled_during_generation(monkeypatch, client):
+    class RpcFailureQuery(Query):
+        def execute(self):
+            if self.table == "rpc:finalize_reserved_generated_story":
+                raise APIError({"message": "Reserved story group is no longer available", "code": "P0001", "details": None, "hint": None})
+            return super().execute()
+
+    class RpcFailureDB(DB):
+        def table(self, name):
+            return RpcFailureQuery(self, name)
+
+        def rpc(self, name, payload):
+            self.inserts.append((f"rpc:{name}", payload))
+            return RpcFailureQuery(self, f"rpc:{name}")
+
+    db = RpcFailureDB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [],
+        {"id": "reserved-1", "estado": "generando", "image_url": None, "image_original_url": None},
+        None, None,
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Un texto generado")
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
+                        SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/orphan"))
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag:
+                        SimpleNamespace(url="https://cdn/original.jpg", public_id="ia/orphan"))
+    destroyed = []
+    monkeypatch.setattr("app.routers.portal.uploads.delete_image", destroyed.append)
+
+    with pytest.raises(APIError):
+        client.post("/portal/clientes/c1/historias/generar",
+            json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert set(destroyed) == {"ia/orphan", "edit/orphan"}
+    assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
+
+
+def test_generate_story_for_day_keeps_assets_when_finalize_transport_fails_after_commit(monkeypatch, client):
+    class TransportFailureQuery(Query):
+        def execute(self):
+            if self.table == "rpc:finalize_reserved_generated_story":
+                raise APIError({"message": "connection reset", "code": "08006", "details": None, "hint": None})
+            return super().execute()
+
+    class TransportFailureDB(DB):
+        def rpc(self, name, payload):
+            self.inserts.append((f"rpc:{name}", payload))
+            return TransportFailureQuery(self, f"rpc:{name}")
+
+    db = TransportFailureDB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [{"id": "g1", "agendado": False}], {"id": "reserved-1", "order": 1}, [],
+        {"id": "reserved-1", "estado": "pendiente", "image_url": "https://cdn/compuesta.jpg",
+         "image_original_url": "https://cdn/original.jpg"},
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Texto")
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *args, **kwargs:
+                        SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/kept"))
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda *args:
+                        SimpleNamespace(url="https://cdn/original.jpg", public_id="ia/kept"))
+    destroyed = []
+    monkeypatch.setattr("app.routers.portal.uploads.delete_image", destroyed.append)
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "reserved-1"
+    assert destroyed == []
+    assert not any(table == "rpc:release_reserved_generated_story" for table, _ in db.inserts)
+
+
+def test_generate_story_for_day_adds_to_existing_manual_group(monkeypatch, client):
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [{"id": "g1", "agendado": False}], {"id": "reserved-3", "order": 3},
+        [{"drive_file_id": "f1", "last_used_at": "2026-01-01T00:00:00Z"}],
+        {"id": "s2", "order": 3},
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Otro texto")
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
+                        SimpleNamespace(url="https://cdn/compuesta2.jpg", public_id="edit/s2"))
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag:
+                        SimpleNamespace(url="https://cdn/original2.jpg", public_id="ia/two"))
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 200
+    reserve_call = next(payload for table, payload in db.inserts if table == "rpc:reserve_generated_story")
+    assert reserve_call["p_group_id"] == "g1"
+    finalize_call = next(payload for table, payload in db.inserts if table == "rpc:finalize_reserved_generated_story")
+    assert finalize_call["p_story"]["text"] == "Otro texto"
+    assert not any(table == "story_groups" for table, _ in db.inserts)
+    assert not any(entry[0] == "client_images" for entry in db.updates)
+
+
+def test_generate_story_for_day_rejects_invalid_date(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.post("/portal/clientes/c1/historias/generar",
+        json={"fecha_publicacion": "no-es-una-fecha", "hora_publicacion": "10:00"})
+
+    assert response.status_code == 422
+    assert db.inserts == []
+
 def test_approve_story_toggles_flag(monkeypatch, client):
     db = DB([{"id": "s1", "client_id": "c1", "estado": "pendiente"},
               {"id": "c1", "agency_id": "agency-1"}, [{"id": "s1", "aprobado": True}]])
@@ -1125,6 +1397,20 @@ def test_calendar_keeps_legacy_null_state_and_excludes_cancelled(monkeypatch, cl
     assert [story["id"] for story in response.json()[0]["stories"]] == ["legacy", "pending"]
 
 
+def test_list_stories_hides_transient_generation_reservations(monkeypatch, client):
+    groups = [{"id": "g1", "stories": [
+        {"id": "reserved", "estado": "generando"},
+        {"id": "ready", "estado": "pendiente"},
+    ]}]
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, groups])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes/c1/historias")
+
+    assert response.status_code == 200
+    assert [story["id"] for story in response.json()[0]["stories"]] == ["ready"]
+
+
 def test_edit_story_uses_original_image_and_updates_edited_url(monkeypatch, client):
     story = {"id": "s1", "client_id": "c1", "order": 2, "image_url": "https://edited",
              "image_original_url": "https://original"}
@@ -1135,7 +1421,9 @@ def test_edit_story_uses_original_image_and_updates_edited_url(monkeypatch, clie
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     monkeypatch.setattr("app.routers.portal.requests.get", lambda url, timeout: SimpleNamespace(content=b"original", raise_for_status=lambda: None))
     called = {}
-    def edit(cfg, image, text, number, font_choice=None): called.update(image=image, text=text, number=number); return "https://new"
+    def edit(cfg, image, text, number, font_choice=None):
+        called.update(image=image, text=text, number=number)
+        return SimpleNamespace(url="https://new", public_id="edit/s1")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", edit)
     response = client.patch("/portal/historias/s1", json={"texto_nuevo": "updated"})
     assert response.status_code == 200
@@ -1155,7 +1443,9 @@ def test_generate_story_text_analyzes_image_and_composes_result(monkeypatch, cli
     generate_called = {}
     def generate(cfg, image): generate_called.update(image=image); return "Texto generado por la IA"
     edit_called = {}
-    def edit(cfg, image, text, number, font_choice=None): edit_called.update(image=image, text=text, number=number); return "https://new"
+    def edit(cfg, image, text, number, font_choice=None):
+        edit_called.update(image=image, text=text, number=number)
+        return SimpleNamespace(url="https://new", public_id="edit/s1")
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", generate)
     monkeypatch.setattr("app.routers.portal.content.editar_historia", edit)
     response = client.post("/portal/historias/s1/generar-texto")
@@ -1202,7 +1492,9 @@ def test_patch_story_font_recomposes_image_with_chosen_font(monkeypatch, client)
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     monkeypatch.setattr("app.routers.portal.requests.get", lambda url, timeout: SimpleNamespace(content=b"original", raise_for_status=lambda: None))
     called = {}
-    def edit(cfg, image, text, number, font_choice=None): called.update(image=image, text=text, number=number, font_choice=font_choice); return "https://new"
+    def edit(cfg, image, text, number, font_choice=None):
+        called.update(image=image, text=text, number=number, font_choice=font_choice)
+        return SimpleNamespace(url="https://new", public_id="edit/s1")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", edit)
     response = client.patch("/portal/historias/s1/tipografia", json={"font_choice": "poppins"})
     assert response.status_code == 200
@@ -1219,7 +1511,8 @@ def test_patch_story_font_allows_clearing_back_to_client_default(monkeypatch, cl
     db = DB([story, config, [{"id": "s1", "font_choice": None}]])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     monkeypatch.setattr("app.routers.portal.requests.get", lambda url, timeout: SimpleNamespace(content=b"original", raise_for_status=lambda: None))
-    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k: "https://new")
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
+                        SimpleNamespace(url="https://new", public_id="edit/s1"))
     response = client.patch("/portal/historias/s1/tipografia", json={"font_choice": None})
     assert response.status_code == 200
     assert db.updates == [("stories", {"font_choice": None, "image_url": "https://new"}, [("id", "s1")])]

@@ -26,6 +26,11 @@ class ImagenCandidata(BaseModel):
     image_bytes: bytes                  # el portal ya la bajo de Drive
 
 
+class ImagenEditada(BaseModel):
+    url: str                            # URL nueva de Cloudinary de la imagen compuesta
+    public_id: str                      # public_id de ese asset, para limpieza ante fallas posteriores
+
+
 class HiloGenerado(BaseModel):
     historias: list[str]                # 4 textos, en orden
     imagenes_originales_url: list[str]  # Cloudinary, SIN texto (para re-editar despues)

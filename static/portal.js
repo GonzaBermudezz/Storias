@@ -455,7 +455,7 @@
       const timeValue = timeSource?.hora_publicacion ? String(timeSource.hora_publicacion).slice(0,5) : '09:00';
       const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}"${dayLocked ? ' disabled title="La publicación de este día ya está en curso o finalizada"' : ''}>`;
       const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué van estas historias?"${dayLocked ? ' disabled' : ''}>` : '';
-      const addRow = dayLocked ? '' : `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div></div>`;
+      const addRow = dayLocked ? '' : `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div><div class="story add-placeholder add-placeholder-ai" data-generate-date="${escapeHtml(iso)}"><span class="add-icon">IA</span><span class="add-label">Generar</span></div></div>`;
       return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
     }).join('');
     $('stories').innerHTML = `<section class="group">${rows}</section>`;
@@ -549,6 +549,7 @@
   const dayTimeSaving = new Set(); // one serialized save loop per client selection and publication date
   const pendingDayTimes = new Map(); // latest value wins within that same scoped save loop
   const publishingDates = new Set(); // block repeated manual publish clicks for the same client selection/date
+  const generatingDates = new Set(); // block repeated "generar con IA" clicks for the same client selection/date
   function dayOperationKey(clientId, selectionVersion, iso) {
     return `${selectionVersion}:${clientId}:${iso}`;
   }
@@ -778,6 +779,41 @@
       renderStories(); renderPlan(); renderCalendarMonth(); renderActivity();
       showMessage('Imagen agregada.');
     } catch(error) { showMessage(error.message, true); }
+  }
+  async function generateStoryForDay(iso) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    const operationKey = dayOperationKey(clientId, selectionVersion, iso);
+    if (generatingDates.has(operationKey)) return;
+    generatingDates.add(operationKey);
+    const timeInput = document.querySelector(`.day-time[data-time-for="${CSS.escape(iso)}"]`);
+    const hora = timeInput ? timeInput.value : '09:00';
+    const tile = document.querySelector(`[data-generate-date="${CSS.escape(iso)}"]`);
+    if (tile) { tile.classList.add('loading'); const label = tile.querySelector('.add-label'); if (label) label.textContent = 'Generando...'; }
+    try {
+      const story = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias/generar`, {method:'POST', body:JSON.stringify({fecha_publicacion:iso, hora_publicacion:hora})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      let group = state.groups.find((g) => g.id === story.story_group_id);
+      if (!group) {
+        group = {id: story.story_group_id, client_id: clientId, scheduled_date: iso,
+          scheduled_time: `${hora}:00`, generation_week: null, agendado: false,
+          descripcion: null, stories: []};
+        state.groups.push(group);
+        state.groups.sort((a,b) => String(a.scheduled_date||'').localeCompare(String(b.scheduled_date||'')));
+      }
+      group.stories = [...(group.stories || []), story];
+      draftDates.add(iso);
+      renderStories(); renderPlan(); renderCalendarMonth(); renderActivity();
+      showMessage('Historia generada con IA.');
+    } catch(error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    } finally {
+      generatingDates.delete(operationKey);
+      if (selectionVersion === state.selectionVersion) {
+        const currentTile = document.querySelector(`[data-generate-date="${CSS.escape(iso)}"]`);
+        if (currentTile) { currentTile.classList.remove('loading'); const label = currentTile.querySelector('.add-label'); if (label) label.textContent = 'Generar'; }
+      }
+    }
   }
   async function toggleApproval(story) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
@@ -1181,6 +1217,8 @@
       $('manual-upload-input').click();
       return;
     }
+    const generateCard=event.target.closest('[data-generate-date]');
+    if (generateCard) { generateStoryForDay(generateCard.dataset.generateDate); return; }
     const action=event.target.closest('[data-action]'),card=event.target.closest('[data-story-id]');
     if (!card) return;
     const found=findStory(card.dataset.storyId); if(!found) return;

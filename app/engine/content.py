@@ -34,6 +34,7 @@ import os
 import random
 import re
 import time
+from uuid import uuid4
 
 import anthropic
 import cloudinary
@@ -52,6 +53,7 @@ from .schemas import (
     ClientContentConfig,
     HiloGenerado,
     ImagenCandidata,
+    ImagenEditada,
     ResultadoPublicacion,
 )
 
@@ -450,10 +452,11 @@ def editar_historia(
     texto_nuevo: str,
     num_historia: int,
     font_choice: str | None = None,
-) -> str:
+) -> ImagenEditada:
     """
     Re-edita UNA historia a partir de su imagen SIN texto (nunca de la ya
-    editada). Devuelve la URL nueva de Cloudinary.
+    editada). Devuelve la URL y el public_id del mismo asset de Cloudinary,
+    para que el llamador pueda borrarlo si un paso posterior falla.
 
     ``font_choice`` es un override puntual de la historia (por ejemplo, el
     empleado elige otra tipografia solo para esta Story desde el editor);
@@ -479,8 +482,9 @@ def editar_historia(
         ) from e
 
     base = f"{CLOUDINARY_FOLDER}/{_sanitizar_id(config.client_id)}"
-    public_id = f"{base}/re_edit_{num_historia}_{int(time.time())}"
-    return _subir_cloudinary(editada, public_id)
+    public_id = f"{base}/re_edit_{num_historia}_{uuid4().hex}"
+    url = _subir_cloudinary(editada, public_id)
+    return ImagenEditada(url=url, public_id=public_id)
 
 
 def generar_texto_de_prueba(config: ClientContentConfig, imagen: ImagenCandidata) -> list[str]:

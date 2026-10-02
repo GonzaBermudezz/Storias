@@ -14,7 +14,7 @@ from app.config import get_settings
 from app.db.supabase import get_admin_client
 from app.deps import AdminDep, EmployeeDep
 from app.engine import content
-from app.engine.exceptions import ClaudeGenerationError
+from app.engine.exceptions import ClaudeGenerationError, EngineError
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
 from app.services import content_jobs, drive, uploads
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Stories in these states already happened (or are mid-flight) on Instagram:
 # editing or cancelling them would silently diverge the DB from what's live.
-_LOCKED_STATES = {"publicando", "publicado", "cancelada"}
+_LOCKED_STATES = {"generando", "publicando", "publicado", "cancelada"}
 
 _CLIENT_DETAIL = (
     "id,agency_id,name,business_description,weekly_focus,"
@@ -122,6 +122,11 @@ class BulkClientsRequest(BaseModel):
 
 class StoryPatch(BaseModel):
     texto_nuevo: str = Field(min_length=1)
+
+
+class GenerateStoryRequest(BaseModel):
+    fecha_publicacion: str
+    hora_publicacion: str
 
 
 class StoryOrder(BaseModel):
@@ -223,6 +228,8 @@ def list_clients(employee: EmployeeDep, solo_mios: bool = False):
         ids = [c["id"] for c in clients]
         rows = db.table("stories").select("client_id").in_("client_id", ids).neq(
             "estado", "cancelada"
+        ).neq(
+            "estado", "generando"
         ).gte("fecha_publicacion", date.today().isoformat()).execute().data or []
         counts: dict[str, int] = {}
         for row in rows:
@@ -258,7 +265,7 @@ def get_summary(employee: EmployeeDep):
     ).execute().data or []
     upcoming = db.table("stories").select("client_id,aprobado").in_(
         "client_id", client_ids
-    ).neq("estado", "cancelada").gte(
+    ).neq("estado", "cancelada").neq("estado", "generando").gte(
         "fecha_publicacion", date.today().isoformat()
     ).execute().data or []
 
@@ -543,7 +550,7 @@ def list_stories(client_id: str, employee: EmployeeDep):
     for group in groups:
         group["stories"] = [
             story for story in group.get("stories") or []
-            if story.get("estado") != "cancelada"
+            if story.get("estado") not in {"cancelada", "generando"}
         ]
     return groups
 
@@ -641,6 +648,192 @@ def _delete_manual_group_if_empty(db, group_id: str) -> None:
         # Cleanup must not hide the original upload/database failure.
         pass
 
+
+@router.post("/clientes/{client_id}/historias/generar")
+def generate_story_for_day(client_id: str, body: GenerateStoryRequest, employee: EmployeeDep):
+    """Generate one scheduled Story from the client's Drive pool.
+
+    A short database reservation claims the next position before calling Claude
+    or Cloudinary. The reservation is a transient ``generando`` story, so
+    concurrent requests cannot spend resources for the same slot.
+    """
+    db = get_admin_client()
+    client = _client_or_error(db, client_id, employee.agency_id)
+    try:
+        parsed_date = date.fromisoformat(body.fecha_publicacion)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Fecha inválida")
+    if not _valid_hhmm(body.hora_publicacion):
+        raise HTTPException(status_code=422, detail="Hora inválida (formato HH:MM)")
+
+    group = db.table("story_groups").select("id,agendado").eq("client_id", client_id).eq(
+        "scheduled_date", body.fecha_publicacion
+    ).is_("generation_week", "null").is_("manual_duplicate_of", "null").execute().data
+    created_group = False
+    if group:
+        group_id = group[0]["id"]
+    else:
+        try:
+            created = db.table("story_groups").insert({
+                "client_id": client_id,
+                "agency_id": employee.agency_id,
+                "scheduled_date": body.fecha_publicacion,
+                "scheduled_time": f"{body.hora_publicacion}:00",
+                "status": "pending",
+            }).execute().data
+            group_id = created[0]["id"]
+            created_group = True
+        except APIError as exc:
+            if exc.code != "23505":
+                raise
+            # Another request created this day's group between our read and
+            # insert. Reuse it; the reservation RPC validates it under lock.
+            raced_group = db.table("story_groups").select("id").eq(
+                "client_id", client_id
+            ).eq("scheduled_date", body.fecha_publicacion).is_(
+                "generation_week", "null"
+            ).is_("manual_duplicate_of", "null").execute().data or []
+            if not raced_group:
+                raise
+            group_id = raced_group[0]["id"]
+
+    try:
+        reservation = db.rpc("reserve_generated_story", {
+            "p_group_id": group_id,
+            "p_client_id": client_id,
+            "p_agency_id": employee.agency_id,
+            "p_fecha_publicacion": body.fecha_publicacion,
+            "p_hora_publicacion": f"{body.hora_publicacion}:00",
+        }).execute().data
+        if not reservation:
+            raise RuntimeError("No se pudo reservar una posición para la historia")
+    except Exception as exc:
+        if created_group:
+            _delete_manual_group_if_empty(db, group_id)
+        if isinstance(exc, APIError):
+            raise HTTPException(
+                status_code=409,
+                detail="No se puede generar una historia para este día. Recargá y probá de nuevo.",
+            ) from exc
+        raise
+
+    reservation_id = reservation["id"]
+    next_order = reservation["order"]
+
+    def release_reservation() -> None:
+        try:
+            db.rpc("release_reserved_generated_story", {
+                "p_story_id": reservation_id,
+            }).execute()
+        except Exception:
+            logger.exception("No se pudo liberar la reserva de historia %s", reservation_id)
+        if created_group:
+            _delete_manual_group_if_empty(db, group_id)
+
+    try:
+        history = db.table("client_images").select("drive_file_id,last_used_at").eq(
+            "client_id", client_id
+        ).execute().data or []
+        available = drive.list_image_metadata(client.get("drive_folder_id"))
+        if not available:
+            raise HTTPException(status_code=422, detail="El cliente no tiene imágenes disponibles en Drive")
+        now = datetime.now(timezone.utc)
+        ranked, _ = content_jobs.seleccionar_imagenes(available, history, now, limite=None)
+        downloaded = drive.download_images(ranked, limit=1)
+        if not downloaded:
+            raise HTTPException(status_code=422, detail="No se pudo descargar ninguna imagen legible de Drive")
+        image_id, image_name, image_bytes = downloaded[0]
+
+        config = build_content_config(client)
+        text = content.generar_texto_para_imagen(config, image_bytes)
+        imagen_editada = content.editar_historia(
+            config, image_bytes, text, next_order, font_choice=client.get("font_choice"),
+        )
+    except Exception as exc:
+        release_reservation()
+        if isinstance(exc, EngineError):
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise
+
+    try:
+        uploaded = uploads.upload_image(
+            image_bytes, client_id,
+            f"{body.fecha_publicacion}-{parsed_date.toordinal()}-"
+            f"{body.hora_publicacion.replace(':', '')}-ia",
+        )
+    except Exception as exc:
+        try:
+            uploads.delete_image(imagen_editada.public_id)
+        except Exception:
+            logger.exception("No se pudo borrar el compuesto huérfano %s", imagen_editada.public_id)
+        release_reservation()
+        if isinstance(exc, uploads.UploadError):
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise
+
+    try:
+        story = db.rpc("finalize_reserved_generated_story", {
+            "p_story_id": reservation_id,
+            "p_story": {
+                "client_id": client_id,
+                "text": text,
+                "image_url": imagen_editada.url,
+                "image_original_url": uploaded.url,
+                "fecha_publicacion": body.fecha_publicacion,
+                "hora_publicacion": f"{body.hora_publicacion}:00",
+                "estado": "pendiente",
+                "agregar_cta": False,
+                "aprobado": False,
+            },
+            "p_image": {
+                "drive_file_id": image_id,
+                "drive_file_name": image_name,
+            },
+        }).execute().data
+        if not story:
+            raise RuntimeError("No se pudo guardar la historia generada")
+    except Exception:
+        # A transport failure can happen after PostgREST has committed the
+        # RPC. Reconcile before compensating: deleting assets in that case
+        # would leave a successfully saved Story with broken URLs.
+        try:
+            result = db.table("stories").select(
+                "id,estado,image_url,image_original_url"
+            ).eq("id", reservation_id).maybe_single().execute()
+            persisted = result.data if result else None
+        except Exception:
+            logger.exception(
+                "No se pudo reconciliar la reserva %s tras fallar la finalización; "
+                "se conservan assets y reserva para revisión manual",
+                reservation_id,
+            )
+            raise
+
+        if persisted and persisted.get("estado") == "pendiente" \
+                and persisted.get("image_url") == imagen_editada.url \
+                and persisted.get("image_original_url") == uploaded.url:
+            return persisted
+
+        if persisted and persisted.get("estado") == "generando":
+            try:
+                uploads.delete_image(uploaded.public_id)
+            except Exception:
+                logger.exception("No se pudo borrar el original huérfano %s", uploaded.public_id)
+            try:
+                uploads.delete_image(imagen_editada.public_id)
+            except Exception:
+                logger.exception("No se pudo borrar el compuesto huérfano %s", imagen_editada.public_id)
+            release_reservation()
+        else:
+            logger.error(
+                "Estado indeterminado al finalizar la reserva %s: %r; "
+                "se conservan assets y reserva para revisión manual",
+                reservation_id,
+                persisted,
+            )
+        raise
+
+    return story
 
 class StoryApproval(BaseModel):
     aprobado: bool
@@ -868,15 +1061,15 @@ def patch_story(story_id: str, body: StoryPatch, employee: EmployeeDep):
         raise HTTPException(status_code=422, detail="La historia no tiene imagen original")
     response = requests.get(story["image_original_url"], timeout=30)
     response.raise_for_status()
-    image_url = content.editar_historia(
+    imagen_editada = content.editar_historia(
         build_content_config(client), response.content, body.texto_nuevo, story["order"],
         font_choice=story.get("font_choice"),
     )
     updated = db.table("stories").update({
-        "text": body.texto_nuevo, "image_url": image_url,
+        "text": body.texto_nuevo, "image_url": imagen_editada.url,
     }).eq("id", story_id).execute().data
     return updated[0] if isinstance(updated, list) and updated else {
-        **story, "text": body.texto_nuevo, "image_url": image_url,
+        **story, "text": body.texto_nuevo, "image_url": imagen_editada.url,
     }
 
 
@@ -907,14 +1100,14 @@ def generate_story_text(story_id: str, employee: EmployeeDep):
         texto_nuevo = content.generar_texto_para_imagen(config, response.content)
     except ClaudeGenerationError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    image_url = content.editar_historia(
+    imagen_editada = content.editar_historia(
         config, response.content, texto_nuevo, story["order"], font_choice=story.get("font_choice"),
     )
     updated = db.table("stories").update({
-        "text": texto_nuevo, "image_url": image_url,
+        "text": texto_nuevo, "image_url": imagen_editada.url,
     }).eq("id", story_id).execute().data
     return updated[0] if isinstance(updated, list) and updated else {
-        **story, "text": texto_nuevo, "image_url": image_url,
+        **story, "text": texto_nuevo, "image_url": imagen_editada.url,
     }
 
 
@@ -951,15 +1144,15 @@ def patch_story_font(story_id: str, body: StoryFontPatch, employee: EmployeeDep)
         raise HTTPException(status_code=422, detail="La historia todavía no tiene texto para componer")
     response = requests.get(story["image_original_url"], timeout=30)
     response.raise_for_status()
-    image_url = content.editar_historia(
+    imagen_editada = content.editar_historia(
         build_content_config(client), response.content, story["text"], story["order"],
         font_choice=body.font_choice,
     )
     updated = db.table("stories").update({
-        "font_choice": body.font_choice, "image_url": image_url,
+        "font_choice": body.font_choice, "image_url": imagen_editada.url,
     }).eq("id", story_id).execute().data
     return updated[0] if isinstance(updated, list) and updated else {
-        **story, "font_choice": body.font_choice, "image_url": image_url,
+        **story, "font_choice": body.font_choice, "image_url": imagen_editada.url,
     }
 
 
