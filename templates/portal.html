@@ -106,6 +106,8 @@
     .panel-head h2{font-size:13px;font-weight:650}
     .panel-head .chev{color:var(--muted);transition:transform .15s}
     .panel.collapsed .chev{transform:rotate(-90deg)}
+    #content-panel-toggle .chev{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--surface);flex-shrink:0;transition:transform .15s,background .12s,border-color .12s,color .12s}
+    #content-panel-toggle:hover .chev{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
     .panel.collapsed .panel-body{display:none}
     .panel-body{padding:0 16px 16px}
     .editor-grid{display:flex;align-items:stretch;gap:14px;margin-bottom:0}
