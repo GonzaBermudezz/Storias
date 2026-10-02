@@ -426,7 +426,7 @@
     for (const iso of active) if (!byDate.has(iso)) byDate.set(iso, []);
     const dates = [...byDate.keys()].sort();
     if (!dates.length) {
-      $('stories').innerHTML = '<div class="empty">No hay historias próximas para este cliente. Clickeá un día del calendario para agregar una.</div>';
+      $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">🖼</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Clickeá un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>🚀 Generar historias para este cliente</button></div>';
       $('week-badge').classList.add('hidden');
       return;
     }
@@ -1171,6 +1171,8 @@
   });
   $('qa-focus').addEventListener('click',()=>{$('content-panel').classList.remove('collapsed'); setFieldMode('description',true); $('business-description').scrollIntoView({behavior:'smooth',block:'center'}); $('business-description').focus();});
   $('stories').addEventListener('click',(event)=>{
+    const emptyCta=event.target.closest('[data-empty-cta]');
+    if (emptyCta) { openRitmoDialog(); return; }
     const scheduleBtn=event.target.closest('[data-schedule-date]');
     if (scheduleBtn) { scheduleDay(scheduleBtn.dataset.scheduleDate); return; }
     const publishNowBtn=event.target.closest('[data-publish-now-date]');

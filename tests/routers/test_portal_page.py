@@ -100,6 +100,9 @@ def test_portal_frontend_supports_variable_rhythm_and_keeps_all_pending_groups_a
     assert "if (storyIsScheduled(story, group)) continue;" in source
     assert "for (const g of state.groups)" in source
     assert "draftDates = new Set(); setControlsDisabled(true)" in source
+    assert 'class="empty-state"' in source
+    assert "data-empty-cta" in source
+    assert "if (emptyCta) { openRitmoDialog(); return; }" in source
 
 
 def test_generated_day_time_is_editable_and_uses_day_endpoint():
