@@ -112,8 +112,13 @@
     .field{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
     .field-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
     .field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
-    .field-head .info{color:var(--muted);cursor:help;font-size:11px}
-    .field-view{min-height:90px;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);font-size:13px;line-height:1.55;flex:1}
+    .field-head .info{position:relative;color:var(--muted);cursor:help;font-size:11px}
+    .field-head .info[data-tooltip]::after{content:attr(data-tooltip);position:absolute;z-index:10;bottom:calc(100% + 9px);left:50%;width:max-content;max-width:220px;padding:8px 10px;border-radius:7px;background:var(--fg);color:#fff;font-size:11px;font-weight:400;line-height:1.4;text-align:center;box-shadow:0 7px 18px rgba(0,0,0,.18);opacity:0;pointer-events:none;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
+    .field-head .info[data-tooltip]::before{content:"";position:absolute;z-index:11;bottom:calc(100% + 4px);left:50%;border:5px solid transparent;border-top-color:var(--fg);opacity:0;pointer-events:none;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
+    .field-head .info[data-tooltip]:hover::after,.field-head .info[data-tooltip]:hover::before,.field-head .info[data-tooltip]:focus-visible::after,.field-head .info[data-tooltip]:focus-visible::before{opacity:1;transform:translate(-50%,0)}
+    .field-view{min-height:90px;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);font-size:13px;line-height:1.55;flex:1;cursor:pointer;transition:border-color .16s ease}
+    .field-view:hover,.field-view:focus-visible{border-color:var(--accent)}
+    .field-view:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 35%,transparent);outline-offset:2px}
     .field-view .field-text{color:var(--fg);white-space:pre-wrap}
     .field-view.empty .field-text{color:var(--muted);font-style:italic}
     .field-edit{display:flex;flex-direction:column;flex:1}
@@ -373,7 +378,7 @@
             <div class="editor-grid">
               <div class="field" id="description-field">
                 <div class="field-head"><label for="business-description">Voz de marca</label></div>
-                <div class="field-view" id="description-view"><p class="field-text" id="description-text"></p></div>
+                <div class="field-view" id="description-view" role="button" tabindex="0" aria-label="Editar voz de marca"><p class="field-text" id="description-text"></p></div>
                 <div class="field-edit hidden" id="description-edit">
                   <textarea id="business-description" maxlength="500" placeholder="Tono, propuesta de valor y público..."></textarea>
                   <div class="char-count"><span id="desc-count">0</span>/500</div>
@@ -383,8 +388,8 @@
                 <div id="prompt-preview" class="preview hidden"></div>
               </div>
               <div class="field" id="focus-field">
-                <div class="field-head"><label for="weekly-focus">Enfoque semanal</label><span class="info" title="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual.">ⓘ</span></div>
-                <div class="field-view" id="focus-view"><p class="field-text" id="focus-text"></p></div>
+                <div class="field-head"><label for="weekly-focus">Enfoque semanal</label><span class="info" tabindex="0" aria-label="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual." data-tooltip="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual.">ⓘ</span></div>
+                <div class="field-view" id="focus-view" role="button" tabindex="0" aria-label="Editar enfoque semanal"><p class="field-text" id="focus-text"></p></div>
                 <div class="field-edit hidden" id="focus-edit">
                   <textarea id="weekly-focus" maxlength="300" placeholder="Ej.: destacar la venta cerrada esta semana"></textarea>
                   <div class="char-count"><span id="focus-count">0</span>/300</div>
@@ -393,8 +398,8 @@
                 <div class="actions hidden" id="focus-edit-actions"><button id="save-focus" class="btn primary">Guardar</button><button id="cancel-focus" class="btn">Cancelar</button></div>
               </div>
               <div class="field" id="topics-field">
-                <div class="field-head"><label for="client-topics">Temas</label><span class="info" title="Un tema por línea. La IA usa esta lista como punto de partida para elegir el enfoque de las historias.">ⓘ</span></div>
-                <div class="field-view" id="topics-view"><div class="tags-view" id="topics-text"></div></div>
+                <div class="field-head"><label for="client-topics">Temas</label><span class="info" tabindex="0" aria-label="Un tema por línea. La IA usa esta lista como punto de partida para elegir el enfoque de las historias." data-tooltip="Un tema por línea. La IA usa esta lista como punto de partida para elegir el enfoque de las historias.">ⓘ</span></div>
+                <div class="field-view" id="topics-view" role="button" tabindex="0" aria-label="Editar temas"><div class="tags-view" id="topics-text"></div></div>
                 <div class="field-edit hidden" id="topics-edit">
                   <textarea id="client-topics" placeholder="Un tema por línea\nEj.: Cocinas a medida\nMateriales durables"></textarea>
                   <div class="char-count"><span id="topics-count">0</span> temas</div>

@@ -306,6 +306,24 @@
     $(`${name}-view-actions`).classList.toggle('hidden', editing);
     $(`${name}-edit-actions`).classList.toggle('hidden', !editing);
   }
+  function enterFieldEdit(name, inputId) {
+    setFieldMode(name, true);
+    $(inputId).focus();
+  }
+  function exitFieldEdit(name) {
+    setFieldMode(name, false);
+    $(`${name}-view`).focus();
+  }
+  function bindFieldViewEdit(viewId, name, inputId) {
+    const view = $(viewId);
+    const enterEdit = () => enterFieldEdit(name, inputId);
+    view.addEventListener('click', enterEdit);
+    view.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      enterEdit();
+    });
+  }
   function updateFieldView(name, value, emptyPlaceholder) {
     $(`${name}-text`).textContent = value || emptyPlaceholder;
     $(`${name}-view`).classList.toggle('empty', !value);
@@ -314,7 +332,7 @@
     const values = Array.isArray(topics) ? topics : [];
     $('topics-text').innerHTML = values.length
       ? values.map((topic) => `<span class="tag">${escapeHtml(topic)}</span>`).join('')
-      : '<p class="field-text">Todavía no hay temas. Hacé click en Editar para agregarlos.</p>';
+      : '<p class="field-text">Todavía no hay temas. Hacé click acá para agregarlos.</p>';
     $('topics-view').classList.toggle('empty', !values.length);
   }
   function renderClient() {
@@ -325,7 +343,7 @@
       : 'Definí una dirección, revisá las historias y dejalas listas para publicar.';
     $('business-description').value = state.client.business_description || ''; $('weekly-focus').value = state.client.weekly_focus || ''; $('client-topics').value = (state.client.topics || []).join('\n');
     $('desc-count').textContent = String($('business-description').value.length); $('focus-count').textContent = String($('weekly-focus').value.length); $('topics-count').textContent = String((state.client.topics || []).length);
-    updateFieldView('description', state.client.business_description, 'Todavía no hay descripción. Hacé click en Editar para agregarla.');
+    updateFieldView('description', state.client.business_description, 'Todavía no hay descripción. Hacé click acá para agregarla.');
     updateFieldView('focus', state.client.weekly_focus, 'Sin enfoque puntual para esta semana.');
     renderTopicsView(state.client.topics);
     setFieldMode('description', false); setFieldMode('focus', false); setFieldMode('topics', false);
@@ -525,9 +543,9 @@
         renderTopicsView(updated.topics);
       } else {
         updateFieldView(name, field==='weekly_focus'?updated.weekly_focus:updated.business_description,
-          field==='weekly_focus'?'Sin enfoque puntual para esta semana.':'Todavía no hay descripción. Hacé click en Editar para agregarla.');
+          field==='weekly_focus'?'Sin enfoque puntual para esta semana.':'Todavía no hay descripción. Hacé click acá para agregarla.');
       }
-      setFieldMode(name, false);
+      exitFieldEdit(name);
       showMessage(field==='weekly_focus'?'Enfoque semanal guardado.':field==='topics'?'Temas guardados.':'Descripción guardada.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message,true); }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled=false; }
@@ -1154,12 +1172,15 @@
   $('business-description').addEventListener('input',()=>{$('desc-count').textContent=String($('business-description').value.length);});
   $('weekly-focus').addEventListener('input',()=>{$('focus-count').textContent=String($('weekly-focus').value.length);});
   $('client-topics').addEventListener('input',()=>{$('topics-count').textContent=String($('client-topics').value.split(/\r?\n/).map((topic) => topic.trim()).filter(Boolean).length);});
-  $('edit-description').addEventListener('click',()=>{setFieldMode('description',true); $('business-description').focus();});
-  $('cancel-description').addEventListener('click',()=>{$('business-description').value=state.client?.business_description || ''; $('desc-count').textContent=String($('business-description').value.length); setFieldMode('description',false);});
-  $('edit-focus').addEventListener('click',()=>{setFieldMode('focus',true); $('weekly-focus').focus();});
-  $('cancel-focus').addEventListener('click',()=>{$('weekly-focus').value=state.client?.weekly_focus || ''; $('focus-count').textContent=String($('weekly-focus').value.length); setFieldMode('focus',false);});
-  $('edit-topics').addEventListener('click',()=>{setFieldMode('topics',true); $('client-topics').focus();});
-  $('cancel-topics').addEventListener('click',()=>{$('client-topics').value=(state.client?.topics || []).join('\n'); $('topics-count').textContent=String((state.client?.topics || []).length); setFieldMode('topics',false);});
+  $('edit-description').addEventListener('click',()=>enterFieldEdit('description','business-description'));
+  $('cancel-description').addEventListener('click',()=>{$('business-description').value=state.client?.business_description || ''; $('desc-count').textContent=String($('business-description').value.length); exitFieldEdit('description');});
+  $('edit-focus').addEventListener('click',()=>enterFieldEdit('focus','weekly-focus'));
+  $('cancel-focus').addEventListener('click',()=>{$('weekly-focus').value=state.client?.weekly_focus || ''; $('focus-count').textContent=String($('weekly-focus').value.length); exitFieldEdit('focus');});
+  $('edit-topics').addEventListener('click',()=>enterFieldEdit('topics','client-topics'));
+  bindFieldViewEdit('description-view', 'description', 'business-description');
+  bindFieldViewEdit('focus-view', 'focus', 'weekly-focus');
+  bindFieldViewEdit('topics-view', 'topics', 'client-topics');
+  $('cancel-topics').addEventListener('click',()=>{$('client-topics').value=(state.client?.topics || []).join('\n'); $('topics-count').textContent=String((state.client?.topics || []).length); exitFieldEdit('topics');});
   $('content-panel-toggle').addEventListener('click',()=>$('content-panel').classList.toggle('collapsed'));
   $('qa-history').addEventListener('click',openHistory);
   $('close-history').addEventListener('click',()=>$('history-dialog').close());
