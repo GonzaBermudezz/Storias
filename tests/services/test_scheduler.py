@@ -1,4 +1,5 @@
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -27,10 +28,7 @@ def test_beat_has_weekly_friday_and_configured_daily_schedule():
     assert daily["schedule"].hour == set(range(24))
 
 
-@pytest.mark.parametrize("task_name,worker", [
-    ("generar_hilos_semanales", "generate_weekly"),
-    ("publicar_historias_pendientes", "publish_daily"),
-])
+@pytest.mark.parametrize("task_name,worker", [("publicar_historias_pendientes", "publish_daily")])
 def test_task_dispatches_to_portal_with_admin_database(monkeypatch, task_name, worker):
     from app.db import supabase
     from app.services import content_jobs
@@ -40,6 +38,61 @@ def test_task_dispatches_to_portal_with_admin_database(monkeypatch, task_name, w
     monkeypatch.setattr(content_jobs, worker, runner)
     getattr(scheduler, task_name).run()
     runner.assert_called_once_with(db)
+
+
+def test_generar_hilos_semanales_dispatches_one_task_per_active_client(monkeypatch):
+    from app.db import supabase
+
+    class FakeDb:
+        def table(self, name):
+            assert name == "clients"
+            return self
+
+        def select(self, *_): return self
+        def eq(self, *_): return self
+        def execute(self):
+            return SimpleNamespace(data=[{"id": "a"}, {"id": "b"}, {"id": "c"}])
+
+    monkeypatch.setattr(supabase, "get_admin_client", lambda: FakeDb())
+    dispatched = Mock()
+    monkeypatch.setattr(scheduler.generar_hilo_cliente, "delay", dispatched)
+
+    scheduler.generar_hilos_semanales.run()
+
+    assert dispatched.call_count == 3
+    assert {call.args[0] for call in dispatched.call_args_list} == {"a", "b", "c"}
+
+
+def test_generar_hilos_semanales_dispatches_nothing_with_no_active_clients(monkeypatch):
+    from app.db import supabase
+
+    class FakeDb:
+        def table(self, _): return self
+        def select(self, *_): return self
+        def eq(self, *_): return self
+        def execute(self): return SimpleNamespace(data=[])
+
+    monkeypatch.setattr(supabase, "get_admin_client", lambda: FakeDb())
+    dispatched = Mock()
+    monkeypatch.setattr(scheduler.generar_hilo_cliente, "delay", dispatched)
+
+    scheduler.generar_hilos_semanales.run()
+
+    dispatched.assert_not_called()
+
+
+def test_generar_hilo_cliente_dispatches_single_client_to_portal(monkeypatch):
+    from app.db import supabase
+    from app.services import content_jobs
+
+    db = object()
+    monkeypatch.setattr(supabase, "get_admin_client", lambda: db)
+    runner = Mock()
+    monkeypatch.setattr(content_jobs, "generate_for_client_by_id", runner)
+
+    scheduler.generar_hilo_cliente.run("client-123")
+
+    runner.assert_called_once_with(db, "client-123")
 
 
 @pytest.mark.parametrize("setting,value", [("publication_hour", 24), ("publication_minute", -1)])

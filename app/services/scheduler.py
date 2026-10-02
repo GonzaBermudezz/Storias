@@ -34,9 +34,21 @@ celery_app = _make_celery()
 
 @celery_app.task(name="app.services.scheduler.generar_hilos_semanales")
 def generar_hilos_semanales() -> None:
+    """Enqueue one generation task per active client for worker concurrency."""
     from app.db.supabase import get_admin_client
-    from app.services.content_jobs import generate_weekly
-    generate_weekly(get_admin_client())
+    db = get_admin_client()
+    client_ids = [row["id"] for row in db.table("clients").select("id").eq(
+        "active", True
+    ).execute().data or []]
+    for client_id in client_ids:
+        generar_hilo_cliente.delay(client_id)
+
+
+@celery_app.task(name="app.services.scheduler.generar_hilo_cliente")
+def generar_hilo_cliente(client_id: str) -> None:
+    from app.db.supabase import get_admin_client
+    from app.services.content_jobs import generate_for_client_by_id
+    generate_for_client_by_id(get_admin_client(), client_id)
 
 
 @celery_app.task(name="app.services.scheduler.publicar_historias_pendientes")

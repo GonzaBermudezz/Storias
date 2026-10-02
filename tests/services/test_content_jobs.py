@@ -258,6 +258,23 @@ def test_generate_for_client_propagates_operational_errors(generation):
     assert "generation_error" not in db.rows["clients"][0]
 
 
+def test_generate_for_client_by_id_fetches_fresh_row_and_generates(generation):
+    db = Database([client()])
+
+    jobs.generate_for_client_by_id(db, "good", date(2026, 9, 18))
+
+    assert len(db.saved) == 1
+
+
+def test_generate_for_client_by_id_skips_inactive_or_missing_client(generation):
+    db = Database([client(active=False)])
+
+    jobs.generate_for_client_by_id(db, "good", date(2026, 9, 18))
+
+    assert db.saved == []
+    jobs.generate_for_client_by_id(Database([]), "nope", date(2026, 9, 18))
+
+
 def test_weekly_does_not_crash_for_client_with_no_business_description_yet(generation):
     _, engine = generation
     db = Database([client("onboarding", business_description=None, tone_examples=None), client()])

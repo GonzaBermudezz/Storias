@@ -229,19 +229,42 @@ def generate_for_client(db, row: dict, today: date) -> dict:
     return {"created": True, "group_id": group_id, "recycled": recycled}
 
 
+def _generate_for_client_safe(db, row: dict, today: date) -> None:
+    """Isolate one client's failure without stopping the remaining clients."""
+    try:
+        generate_for_client(db, row, today)
+    except Exception as exc:
+        logger.error("Weekly generation failed for client %s: %s", row["id"], type(exc).__name__)
+        try:
+            db.table("clients").update({"generation_error": str(exc),
+                "generation_error_at": datetime.now(timezone.utc).isoformat()}).eq("id", row["id"]).execute()
+        except Exception:
+            logger.error("Could not persist generation error for client %s", row["id"])
+
+
 def generate_weekly(db, today: date | None = None) -> None:
+    """Generate every active client synchronously for manual use and tests.
+
+    The Friday Celery task instead fans out one task per client, letting the
+    worker process multiple generations concurrently.
+    """
     today = today or local_today()
     clients = _all_rows(db.table("clients").select("*").eq("active", True).order("id"))
     for row in clients:
-        try:
-            generate_for_client(db, row, today)
-        except Exception as exc:
-            logger.error("Weekly generation failed for client %s: %s", row["id"], type(exc).__name__)
-            try:
-                db.table("clients").update({"generation_error": str(exc),
-                    "generation_error_at": datetime.now(timezone.utc).isoformat()}).eq("id", row["id"]).execute()
-            except Exception:
-                logger.error("Could not persist generation error for client %s", row["id"])
+        _generate_for_client_safe(db, row, today)
+
+
+def generate_for_client_by_id(db, client_id: str, today: date | None = None) -> None:
+    """Generate one active client from a row fetched when this task executes."""
+    today = today or local_today()
+    rows = db.table("clients").select("*").eq("id", client_id).eq("active", True).execute().data or []
+    if not rows:
+        logger.warning(
+            "Client %s is no longer active or was not found; skipping fanned-out generation",
+            client_id,
+        )
+        return
+    _generate_for_client_safe(db, rows[0], today)
 
 
 def _publish_story(story: dict) -> dict:
