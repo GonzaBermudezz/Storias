@@ -84,19 +84,12 @@ def admin_client(admin):
     app.dependency_overrides.clear()
 
 
-def test_me_reports_current_employee_including_team(monkeypatch, client):
+def test_me_reports_current_employee(monkeypatch, client):
     response = client.get("/portal/me")
     assert response.status_code == 200
     assert response.json() == {"id": "emp-1", "name": "PM", "email": "pm@example.com",
-                                "role": "employee", "agency_id": "agency-1", "team_id": None}
+                                "role": "employee", "agency_id": "agency-1"}
 
-
-def test_list_teams_scopes_to_employee_agency(monkeypatch, client):
-    db = DB([[{"id": "t1", "name": "Equipo A"}, {"id": "t2", "name": "Equipo B"}]])
-    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    response = client.get("/portal/equipos")
-    assert response.status_code == 200
-    assert response.json() == [{"id": "t1", "name": "Equipo A"}, {"id": "t2", "name": "Equipo B"}]
 
 
 def test_history_flattens_employee_name_and_requires_agency_match(monkeypatch, client):
@@ -110,28 +103,6 @@ def test_history_flattens_employee_name_and_requires_agency_match(monkeypatch, c
     assert response.json() == [{"id": "h1", "field": "business_description", "old_value": "a",
         "new_value": "b", "changed_at": "2026-01-01T00:00:00Z", "changed_by": "emp-1", "changed_by_name": "PM"}]
 
-
-def test_create_team_inserts_scoped_to_agency(monkeypatch, client):
-    db = DB([[{"id": "t1", "agency_id": "agency-1", "name": "Equipo Nuevo"}]])
-    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    response = client.post("/portal/equipos", json={"name": "Equipo Nuevo"})
-    assert response.status_code == 200
-    assert response.json()["name"] == "Equipo Nuevo"
-    assert db.inserts == [("teams", {"agency_id": "agency-1", "name": "Equipo Nuevo"})]
-
-
-def test_create_team_rejects_duplicate_name(monkeypatch, client):
-    class ConflictingDB:
-        def table(self, name):
-            class Q:
-                def insert(self, payload):
-                    def execute():
-                        raise APIError({"message": "duplicate", "code": "23505", "details": None, "hint": None})
-                    return SimpleNamespace(execute=execute)
-            return Q()
-    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: ConflictingDB())
-    response = client.post("/portal/equipos", json={"name": "Equipo Repetido"})
-    assert response.status_code == 409
 
 
 def test_bulk_client_entry_extracts_drive_folder_id_from_url():
@@ -156,26 +127,23 @@ def test_bulk_create_clients_requires_admin(client):
 
 def test_bulk_create_clients_isolates_invalid_rows_and_preserves_original_row_numbers(monkeypatch, admin_client):
     db = DB([
-        [{"id": "t1"}],
         [{"name": "Ya Existe"}],
         [{"id": "new-1"}],
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = admin_client.post("/portal/clientes/alta-masiva", json={"clientes": [
-        {"name": "Cliente Nuevo", "team_id": "t1", "drive_folder_id": "https://drive.google.com/drive/folders/XYZ123?usp=sharing"},
+        {"name": "Cliente Nuevo", "drive_folder_id": "https://drive.google.com/drive/folders/XYZ123?usp=sharing"},
         {"name": "Ya Existe", "drive_folder_id": "abc"},
-        {"name": "Equipo Mal", "drive_folder_id": "abc", "team_id": "no-existe"},
         {"name": "cliente nuevo", "drive_folder_id": "def"},
     ]})
     assert response.status_code == 200
     resultados = response.json()["resultados"]
     assert resultados[0] == {"fila": 1, "name": "Cliente Nuevo", "status": "creado", "client_id": "new-1"}
     assert resultados[1]["fila"] == 2 and "nombre" in resultados[1]["motivo"].lower()
-    assert resultados[2]["fila"] == 3 and "equipo" in resultados[2]["motivo"].lower()
-    assert resultados[3]["fila"] == 4 and "nombre" in resultados[3]["motivo"].lower()
+    assert resultados[2]["fila"] == 3 and "nombre" in resultados[2]["motivo"].lower()
     assert db.inserts == [("clients", {
         "agency_id": "agency-1", "name": "Cliente Nuevo", "drive_folder_id": "XYZ123",
-        "business_description": "", "team_id": "t1", "active": True,
+        "business_description": "", "active": True,
     })]
     source = admin_client.get("/static/portal.js").text
     assert "payloadRowNumbers.push(row.fila);" in source
@@ -184,7 +152,7 @@ def test_bulk_create_clients_isolates_invalid_rows_and_preserves_original_row_nu
 
 
 def test_bulk_create_clients_reports_malformed_row_without_rejecting_the_batch(monkeypatch, admin_client):
-    db = DB([[{"id": "t1"}], [], [{"id": "new-1"}]])
+    db = DB([[], [{"id": "new-1"}]])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = admin_client.post("/portal/clientes/alta-masiva", json={"clientes": [
         {"name": "Cliente Válido", "drive_folder_id": "abc"},
@@ -208,19 +176,18 @@ def test_summary_reports_zero_state_with_no_clients(monkeypatch, client):
     assert response.json() == {
         "historias_publicadas": 0, "historias_en_edicion": 0, "historias_agendadas": 0,
         "clientes_count": 0, "promedio_por_cliente": 0, "aprobacion_pct": None,
-        "clientes_sin_actividad": [], "por_equipo": [],
+        "clientes_sin_actividad": [],
     }
 
 
-def test_summary_aggregates_published_upcoming_and_team_breakdown(monkeypatch, client):
-    clients = [{"id": "c1", "name": "Cliente Uno", "team_id": "t1"},
-               {"id": "c2", "name": "Cliente Dos", "team_id": "t1"},
-               {"id": "c3", "name": "Cliente Tres", "team_id": None}]
+def test_summary_aggregates_published_and_upcoming_totals(monkeypatch, client):
+    clients = [{"id": "c1", "name": "Cliente Uno"},
+               {"id": "c2", "name": "Cliente Dos"},
+               {"id": "c3", "name": "Cliente Tres"}]
     published = [{"id": "s1"}, {"id": "s2"}]
     upcoming = [{"client_id": "c1", "aprobado": True}, {"client_id": "c1", "aprobado": False},
                 {"client_id": "c2", "aprobado": True}]
-    teams = [{"id": "t1", "name": "Equipo A"}]
-    db = DB([clients, published, upcoming, teams])
+    db = DB([clients, published, upcoming])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.get("/portal/resumen")
     assert response.status_code == 200
@@ -232,10 +199,6 @@ def test_summary_aggregates_published_upcoming_and_team_breakdown(monkeypatch, c
     assert body["promedio_por_cliente"] == 1.0
     assert body["aprobacion_pct"] == 66.7
     assert body["clientes_sin_actividad"] == [{"id": "c3", "name": "Cliente Tres"}]
-    assert body["por_equipo"] == [
-        {"team_id": None, "team_name": "Sin equipo", "clientes": 1, "historias_en_edicion": 0, "historias_agendadas": 0, "aprobacion_pct": None},
-        {"team_id": "t1", "team_name": "Equipo A", "clientes": 2, "historias_en_edicion": 1, "historias_agendadas": 2, "aprobacion_pct": 66.7},
-    ]
 
 
 def test_health_reports_empty_lists_when_agency_clients_have_no_problems(monkeypatch, client):
@@ -936,30 +899,6 @@ def test_publish_day_now_requires_stories_for_that_date(monkeypatch, client):
 
     assert response.status_code == 422
 
-
-def test_patch_client_team_validates_team_belongs_to_agency(monkeypatch, client):
-    db = DB([{"id": "c1", "agency_id": "agency-1"}, {"id": "t1"}, [{"id": "c1", "team_id": "t1"}]])
-    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    response = client.patch("/portal/clientes/c1/equipo", json={"team_id": "t1"})
-    assert response.status_code == 200
-    assert response.json()["team_id"] == "t1"
-    assert db.updates == [("clients", {"team_id": "t1"}, [("id", "c1")])]
-
-
-def test_patch_client_team_rejects_team_from_another_agency(monkeypatch, client):
-    db = DB([{"id": "c1", "agency_id": "agency-1"}, None])
-    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    response = client.patch("/portal/clientes/c1/equipo", json={"team_id": "foreign-team"})
-    assert response.status_code == 422
-    assert db.updates == []
-
-
-def test_patch_client_team_can_unassign(monkeypatch, client):
-    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "c1", "team_id": None}]])
-    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    response = client.patch("/portal/clientes/c1/equipo", json={"team_id": None})
-    assert response.status_code == 200
-    assert db.updates == [("clients", {"team_id": None}, [("id", "c1")])]
 
 
 def test_drive_info_reports_image_count(monkeypatch, client):

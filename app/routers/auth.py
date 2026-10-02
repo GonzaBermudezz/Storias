@@ -129,7 +129,6 @@ async def google_callback(request: Request, code: str, state: str):
         "name": name,
         "agency_id": employee["agency_id"],
         "role": employee["role"],
-        "team_id": employee.get("team_id"),
     })
 
     response = RedirectResponse(url="/portal", status_code=302)

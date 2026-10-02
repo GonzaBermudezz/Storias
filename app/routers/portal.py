@@ -30,7 +30,7 @@ _LOCKED_STATES = {"publicando", "publicado", "cancelada"}
 _CLIENT_DETAIL = (
     "id,agency_id,name,business_description,weekly_focus,"
     "weekly_focus_expires_at,tone_examples,topics,drive_folder_id,logo_url,"
-    "calendly_link,prob_link,generation_error,generation_error_at,team_id,publish_days,"
+    "calendly_link,prob_link,generation_error,generation_error_at,publish_days,"
     "publish_together,font_choice"
 )
 
@@ -48,10 +48,6 @@ class ClientPatch(BaseModel):
         if value is None:
             raise ValueError("tone_examples no puede ser null")
         return value
-
-
-class ClientTeamPatch(BaseModel):
-    team_id: str | None = None
 
 
 class ScheduleEntry(BaseModel):
@@ -89,10 +85,6 @@ class ClientRitmoPatch(BaseModel):
         return sorted(value, key=lambda entry: entry.day)
 
 
-class TeamCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
-
-
 _DRIVE_FOLDER_URL_RE = re.compile(r"/folders/([a-zA-Z0-9_-]+)")
 
 
@@ -100,7 +92,6 @@ class BulkClientEntry(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     drive_folder_id: str = Field(min_length=1)
     business_description: str | None = None
-    team_id: str | None = None
 
     @field_validator("name", mode="before")
     @classmethod
@@ -152,40 +143,13 @@ def _client_or_error(db, client_id: str, agency_id: str) -> dict:
 @router.get("/me")
 def get_me(employee: EmployeeDep):
     return {"id": employee.id, "name": employee.name, "email": employee.email,
-            "role": employee.role, "agency_id": employee.agency_id, "team_id": employee.team_id}
-
-
-@router.get("/equipos")
-def list_teams(employee: EmployeeDep):
-    db = get_admin_client()
-    return db.table("teams").select("id,name").eq(
-        "agency_id", employee.agency_id
-    ).order("name").execute().data or []
-
-
-@router.post("/equipos")
-def create_team(body: TeamCreate, employee: EmployeeDep):
-    db = get_admin_client()
-    name = body.name.strip()
-    try:
-        created = db.table("teams").insert(
-            {"agency_id": employee.agency_id, "name": name}
-        ).execute().data
-    except APIError:
-        raise HTTPException(status_code=409, detail="Ya existe un equipo con ese nombre")
-    return created[0] if isinstance(created, list) and created else {"name": name}
+            "role": employee.role, "agency_id": employee.agency_id}
 
 
 @router.post("/clientes/alta-masiva")
 def create_clients_bulk(body: BulkClientsRequest, employee: AdminDep):
     """Create each supplied client independently, reporting one result per row."""
     db = get_admin_client()
-    team_ids = {
-        row["id"]
-        for row in db.table("teams").select("id").eq(
-            "agency_id", employee.agency_id
-        ).execute().data or []
-    }
     existing_names = {
         row["name"].strip().lower()
         for row in db.table("clients").select("name").eq(
@@ -208,12 +172,6 @@ def create_clients_bulk(body: BulkClientsRequest, employee: AdminDep):
             })
             continue
         key = entry.name.lower()
-        if entry.team_id and entry.team_id not in team_ids:
-            resultados.append({
-                "fila": i, "name": entry.name, "status": "error",
-                "motivo": "El equipo indicado no existe en esta agencia.",
-            })
-            continue
         if key in existing_names or key in seen_in_batch:
             resultados.append({
                 "fila": i, "name": entry.name, "status": "error",
@@ -225,7 +183,6 @@ def create_clients_bulk(body: BulkClientsRequest, employee: AdminDep):
             "name": entry.name,
             "drive_folder_id": entry.drive_folder_id,
             "business_description": entry.business_description or "",
-            "team_id": entry.team_id,
             "active": True,
         }
         try:
@@ -281,14 +238,14 @@ def get_summary(employee: EmployeeDep):
     aprobado into "en edición" vs "agendadas" so these numbers always agree
     with what an employee sees per-client — no separate metric to drift."""
     db = get_admin_client()
-    clients = db.table("clients").select("id,name,team_id").eq(
+    clients = db.table("clients").select("id,name").eq(
         "agency_id", employee.agency_id
     ).execute().data or []
     if not clients:
         return {
             "historias_publicadas": 0, "historias_en_edicion": 0, "historias_agendadas": 0,
             "clientes_count": 0, "promedio_por_cliente": 0, "aprobacion_pct": None,
-            "clientes_sin_actividad": [], "por_equipo": [],
+            "clientes_sin_actividad": [],
         }
 
     client_ids = [c["id"] for c in clients]
@@ -308,16 +265,6 @@ def get_summary(employee: EmployeeDep):
     total_agendadas = sum(1 for row in upcoming if row["aprobado"])
     total_en_edicion = total_upcoming - total_agendadas
 
-    teams = db.table("teams").select("id,name").eq("agency_id", employee.agency_id).execute().data or []
-    team_names = {t["id"]: t["name"] for t in teams}
-    by_team: dict[str | None, dict] = {}
-    for c in clients:
-        bucket = by_team.setdefault(c.get("team_id"), {"clientes": 0, "agendadas": 0, "upcoming": 0})
-        bucket["clientes"] += 1
-        flags = by_client.get(c["id"], [])
-        bucket["upcoming"] += len(flags)
-        bucket["agendadas"] += sum(1 for f in flags if f)
-
     return {
         "historias_publicadas": len(published),
         "historias_en_edicion": total_en_edicion,
@@ -329,17 +276,6 @@ def get_summary(employee: EmployeeDep):
         # needs attention right now, regardless of how much it published before.
         "clientes_sin_actividad": [
             {"id": c["id"], "name": c["name"]} for c in clients if not by_client.get(c["id"])
-        ],
-        "por_equipo": [
-            {
-                "team_id": team_id,
-                "team_name": team_names.get(team_id, "Sin equipo") if team_id else "Sin equipo",
-                "clientes": bucket["clientes"],
-                "historias_en_edicion": bucket["upcoming"] - bucket["agendadas"],
-                "historias_agendadas": bucket["agendadas"],
-                "aprobacion_pct": round(bucket["agendadas"] / bucket["upcoming"] * 100, 1) if bucket["upcoming"] else None,
-            }
-            for team_id, bucket in sorted(by_team.items(), key=lambda kv: team_names.get(kv[0], "") if kv[0] else "")
         ],
     }
 
@@ -456,23 +392,6 @@ def list_prompt_history(client_id: str, employee: EmployeeDep):
         row["changed_by_name"] = (row.pop("employees", None) or {}).get("name")
     return rows
 
-
-@router.patch("/clientes/{client_id}/equipo")
-def patch_client_team(client_id: str, body: ClientTeamPatch, employee: EmployeeDep):
-    """Reassign which team manages this client — purely organizational, so it
-    goes through a plain update instead of the audited update_client_prompt RPC."""
-    db = get_admin_client()
-    _client_or_error(db, client_id, employee.agency_id)
-    if body.team_id is not None:
-        team = db.table("teams").select("id").eq("id", body.team_id).eq(
-            "agency_id", employee.agency_id
-        ).maybe_single().execute()
-        if not team or not team.data:
-            raise HTTPException(status_code=422, detail="Equipo no encontrado en tu agencia")
-    updated = db.table("clients").update({"team_id": body.team_id}).eq(
-        "id", client_id
-    ).execute().data
-    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, "team_id": body.team_id}
 
 
 @router.get("/tipografias")

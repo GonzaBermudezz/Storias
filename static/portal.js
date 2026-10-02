@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, teams: [], me: null, clientSearch: '' };
+  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, me: null, clientSearch: '' };
   const LOCKED_STORY_STATES = new Set(['publicando', 'publicado', 'cancelada']);
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
@@ -85,7 +85,7 @@
   }
   async function loadHomeSummary() {
     const summaryVersion = ++state.homeSummaryVersion;
-    $('home-teams').textContent = 'Cargando...'; $('home-idle').textContent = 'Cargando...';
+    $('home-idle').textContent = 'Cargando...';
     $('health-generacion').textContent = 'Cargando...'; $('health-pool').textContent = 'Cargando...'; $('health-errores').textContent = 'Cargando...';
     ['stat-edicion','stat-agendadas','stat-publicadas','stat-promedio','stat-aprobacion'].forEach((id) => { $(id).textContent = '–'; });
     const [summaryResult, healthResult] = await Promise.allSettled([api('/portal/resumen'), api('/portal/salud')]);
@@ -99,14 +99,11 @@
       $('stat-publicadas').textContent = summary.historias_publicadas;
       $('stat-promedio').textContent = summary.promedio_por_cliente;
       $('stat-aprobacion').textContent = summary.aprobacion_pct === null ? '—' : `${summary.aprobacion_pct}%`;
-      $('home-teams').innerHTML = summary.por_equipo.length
-        ? `<table class="team-table"><thead><tr><th>Equipo</th><th>Clientes</th><th>En edición</th><th>Agendadas</th><th>% aprobación</th></tr></thead><tbody>${summary.por_equipo.map((team) => `<tr><td>${escapeHtml(team.team_name)}</td><td>${team.clientes}</td><td>${team.historias_en_edicion}</td><td>${team.historias_agendadas}</td><td>${team.aprobacion_pct === null ? '—' : team.aprobacion_pct + '%'}</td></tr>`).join('')}</tbody></table>`
-        : '<div class="empty">Todavía no hay clientes.</div>';
       $('home-idle').innerHTML = summary.clientes_sin_actividad.length
         ? `<div class="idle-list">${summary.clientes_sin_actividad.map((c) => `<span class="idle-chip neutral">${escapeHtml(c.name)}</span>`).join('')}</div>`
         : '<div class="empty">Todos los clientes tienen historias agendadas. 🎉</div>';
     } else {
-      $('home-teams').textContent = ''; $('home-idle').textContent = '';
+      $('home-idle').textContent = '';
       const error = summaryResult.reason;
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
@@ -134,11 +131,10 @@
     }
   }
 
-  async function loadMeAndTeams() {
+  async function loadMeAndFonts() {
     try {
-      const [me, teams, fonts] = await Promise.all([api('/portal/me'), api('/portal/equipos'), api('/portal/tipografias')]);
-      state.me = me; state.teams = teams; state.fontChoices = fonts;
-      $('client-team').innerHTML = '<option value="">Sin equipo</option>' + teams.map((team) => `<option value="${escapeHtml(team.id)}">${escapeHtml(team.name)}</option>`).join('');
+      const [me, fonts] = await Promise.all([api('/portal/me'), api('/portal/tipografias')]);
+      state.me = me; state.fontChoices = fonts;
       injectFontFaces(fonts);
       const fontOptions = fonts.map((font) => `<option value="${escapeHtml(font.key)}" style="font-family:'sf-${escapeHtml(font.key)}',sans-serif">${escapeHtml(font.label)}</option>`).join('');
       $('client-font').innerHTML = '<option value="">Default</option>' + fontOptions;
@@ -146,30 +142,14 @@
       $('me-avatar').textContent = initials(me.name || me.email); $('me-name').textContent = me.name || me.email;
       $('me-role').textContent = me.role === 'admin' ? 'Administrador' : 'Empleado'; $('me-card').classList.remove('hidden');
       $('add-clients-bulk').classList.toggle('hidden', me.role !== 'admin');
-    } catch (error) { /* non-fatal: the sidebar just falls back to a flat, ungrouped list */ }
-  }
-  function teamName(teamId) { const team = state.teams.find((item) => item.id === teamId); return team ? team.name : 'Sin equipo'; }
-  async function createTeam() {
-    const name = window.prompt('Nombre del equipo nuevo:');
-    if (!name || !name.trim()) return;
-    try {
-      const team = await api('/portal/equipos', {method:'POST', body:JSON.stringify({name:name.trim()})});
-      state.teams.push(team); state.teams.sort((a,b)=>a.name.localeCompare(b.name,'es'));
-      $('client-team').innerHTML = '<option value="">Sin equipo</option>' + state.teams.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
-      renderClients(); showMessage('Equipo creado.');
-    } catch(error) { showMessage(error.message, true); }
+    } catch (error) { /* non-fatal: client loading remains available */ }
   }
 
   function parseBulkClientsInput(text) {
     return text.split('\n').map((line) => line.trim()).filter(Boolean).map((line, idx) => {
-      const [name, drive, businessDescription, teamName] = line.split(',').map((part) => (part || '').trim());
-      return {fila: idx + 1, name: name || '', drive: drive || '', businessDescription: businessDescription || '', teamName: teamName || ''};
+      const [name, drive, businessDescription] = line.split(',').map((part) => (part || '').trim());
+      return {fila: idx + 1, name: name || '', drive: drive || '', businessDescription: businessDescription || ''};
     });
-  }
-  function resolveTeamId(teamName) {
-    if (!teamName) return {teamId: null, error: null};
-    const match = state.teams.find((team) => team.name.toLocaleLowerCase('es') === teamName.toLocaleLowerCase('es'));
-    return match ? {teamId: match.id, error: null} : {teamId: null, error: `Equipo no encontrado: "${teamName}"`};
   }
   function renderBulkClientsResults(rows) {
     if (!rows.length) { $('bulk-clients-results').innerHTML = ''; return; }
@@ -193,12 +173,7 @@
         localErrors.push({fila: row.fila, name: row.name, status: 'error', motivo: 'Faltan columnas obligatorias (nombre y carpeta de Drive).'});
         continue;
       }
-      const {teamId, error} = resolveTeamId(row.teamName);
-      if (error) {
-        localErrors.push({fila: row.fila, name: row.name, status: 'error', motivo: error});
-        continue;
-      }
-      payload.push({name: row.name, drive_folder_id: row.drive, business_description: row.businessDescription || null, team_id: teamId});
+      payload.push({name: row.name, drive_folder_id: row.drive, business_description: row.businessDescription || null});
       payloadRowNumbers.push(row.fila);
     }
     $('submit-bulk-clients').disabled = true;
@@ -247,29 +222,12 @@
     const query = (state.clientSearch || '').trim().toLocaleLowerCase('es');
     const visibleClients = query ? state.clients.filter((client) => client.name.toLocaleLowerCase('es').includes(query)) : state.clients;
     if (!visibleClients.length) { $('client-list').textContent = 'Ningún cliente coincide con la búsqueda.'; return; }
-    const byTeam = new Map();
-    for (const client of visibleClients) {
-      const key = client.team_id || '';
-      if (!byTeam.has(key)) byTeam.set(key, []);
-      byTeam.get(key).push(client);
-    }
-    const myTeam = state.me?.team_id || '';
-    const keys = [...byTeam.keys()].sort((a, b) => {
-      if (a === b) return 0;
-      if (myTeam && a === myTeam) return -1;
-      if (myTeam && b === myTeam) return 1;
-      if (a === '') return 1;
-      if (b === '') return -1;
-      return teamName(a).localeCompare(teamName(b), 'es');
-    });
-    $('client-list').innerHTML = keys.map((key) => {
-      const cards = byTeam.get(key).map((client) => {
-        const active = state.client?.id === client.id;
-        const count = client.stories_count ?? 0;
-        const countLabel = `${count} historia${count === 1 ? '' : 's'}${active ? ' · Esta semana' : ''}`;
-        return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}"><span class="avatar avatar-${avatarColor(client.id)}">${escapeHtml(initials(client.name))}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count">${escapeHtml(countLabel)}</span></span></button>`;
-      }).join('');
-      return `<div class="team-group"><h4 class="team-label">${escapeHtml(key ? teamName(key) : 'Sin equipo')}</h4>${cards}</div>`;
+    const sorted = [...visibleClients].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    $('client-list').innerHTML = sorted.map((client) => {
+      const active = state.client?.id === client.id;
+      const count = client.stories_count ?? 0;
+      const countLabel = `${count} historia${count === 1 ? '' : 's'}${active ? ' · Esta semana' : ''}`;
+      return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}"><span class="avatar avatar-${avatarColor(client.id)}">${escapeHtml(initials(client.name))}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count">${escapeHtml(countLabel)}</span></span></button>`;
     }).join('');
   }
   async function selectClient(clientId) {
@@ -347,7 +305,6 @@
     updateFieldView('focus', state.client.weekly_focus, 'Sin enfoque puntual para esta semana.');
     renderTopicsView(state.client.topics);
     setFieldMode('description', false); setFieldMode('focus', false); setFieldMode('topics', false);
-    $('client-team').value = state.client.team_id || '';
     $('client-font').value = state.client.font_choice || '';
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     $('header-tags').innerHTML = (state.client.topics || []).slice(0, 4).map((topic) => `<span class="tag">${escapeHtml(topic)}</span>`).join('');
@@ -549,16 +506,6 @@
       showMessage(field==='weekly_focus'?'Enfoque semanal guardado.':field==='topics'?'Temas guardados.':'Descripción guardada.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message,true); }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled=false; }
-  }
-  async function saveClientTeam() {
-    const select=$('client-team'), clientId=state.client?.id, selectionVersion=state.selectionVersion, teamId=select.value || null;
-    if (!clientId || teamId === (state.client?.team_id || null)) return; select.disabled=true;
-    try {
-      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/equipo`, {method:'PATCH', body:JSON.stringify({team_id:teamId})});
-      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
-      state.client.team_id = updated.team_id; renderClients(); showMessage('Equipo actualizado.');
-    } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message,true); select.value = state.client?.team_id || ''; } }
-    finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled=false; }
   }
   async function saveClientFont() {
     const select=$('client-font'), clientId=state.client?.id, selectionVersion=state.selectionVersion, fontChoice=select.value || null;
@@ -1159,9 +1106,7 @@
   $('save-focus').addEventListener('click',()=>saveClientField('weekly_focus','save-focus'));
   $('save-topics').addEventListener('click',()=>saveClientField('topics','save-topics'));
   $('try-prompt').addEventListener('click',tryPrompt);
-  $('client-team').addEventListener('change',saveClientTeam);
   $('client-font').addEventListener('change',saveClientFont);
-  $('add-team').addEventListener('click',createTeam);
   $('add-clients-bulk').addEventListener('click', () => {
     $('bulk-clients-input').value = ''; $('bulk-clients-feedback').classList.add('hidden'); $('bulk-clients-results').innerHTML = '';
     $('bulk-clients-dialog').showModal();
@@ -1295,5 +1240,5 @@
   $('ig-preview-edit').addEventListener('click',editPreviewStory);
   $('ig-preview-delete').addEventListener('click',deletePreviewStory);
   $('toast-close').addEventListener('click',clearMessage);
-  loadMeAndTeams().finally(loadClients);
+  loadMeAndFonts().finally(loadClients);
 })();
