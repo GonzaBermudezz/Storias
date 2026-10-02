@@ -50,6 +50,10 @@ class ClientPatch(BaseModel):
         return value
 
 
+class ClientPmPatch(BaseModel):
+    employee_id: str | None
+
+
 class ScheduleEntry(BaseModel):
     day: int = Field(ge=0, le=6)
     time: str
@@ -343,9 +347,46 @@ def get_health(employee: EmployeeDep):
     }
 
 
+@router.get("/empleados")
+def list_employees(employee: EmployeeDep):
+    """Employees available to assign to clients in this agency."""
+    db = get_admin_client()
+    return db.table("employees").select("id,name,email").eq(
+        "agency_id", employee.agency_id
+    ).order("name").execute().data or []
+
+
 @router.get("/clientes/{client_id}")
 def get_client(client_id: str, employee: EmployeeDep):
-    return _client_or_error(get_admin_client(), client_id, employee.agency_id)
+    db = get_admin_client()
+    client = _client_or_error(db, client_id, employee.agency_id)
+    assignment = db.table("employee_clients").select("employee_id").eq(
+        "client_id", client_id
+    ).maybe_single().execute()
+    return {**client, "assigned_employee_id": assignment.data.get("employee_id") if assignment and assignment.data else None}
+
+
+@router.patch("/clientes/{client_id}/pm")
+def patch_client_pm(client_id: str, body: ClientPmPatch, employee: EmployeeDep):
+    """Qué PM lleva este cliente — cualquier empleado puede reasignarlo.
+    Upsert atómico sobre employee_clients (UNIQUE en client_id) en vez de
+    delete+insert: dos reasignaciones concurrentes del mismo cliente nunca
+    pueden dejar dos filas, porque no hay ventana entre borrar e insertar."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    if body.employee_id is not None:
+        target = db.table("employees").select("id").eq("id", body.employee_id).eq(
+            "agency_id", employee.agency_id
+        ).maybe_single().execute()
+        if not target or not target.data:
+            raise HTTPException(status_code=422, detail="Empleado no encontrado en tu agencia")
+        db.table("employee_clients").upsert(
+            {"employee_id": body.employee_id, "client_id": client_id},
+            on_conflict="client_id",
+        ).execute()
+    else:
+        db.table("employee_clients").delete().eq("client_id", client_id).execute()
+    return {"client_id": client_id, "employee_id": body.employee_id}
 
 
 @router.get("/clientes/{client_id}/drive-info")

@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, me: null, clientSearch: '' };
+  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, me: null, employees: [], clientSearch: '' };
   const LOCKED_STORY_STATES = new Set(['publicando', 'publicado', 'cancelada']);
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
@@ -64,7 +64,7 @@
   }
   function initials(name) { return String(name || '?').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(); }
   function setControlsDisabled(disabled) {
-    ['save-description','save-focus','save-topics','try-prompt','save-story','generate-weekly'].forEach((id) => { $(id).disabled = disabled; });
+    ['save-description','save-focus','save-topics','try-prompt','save-story','generate-weekly','client-pm'].forEach((id) => { $(id).disabled = disabled; });
     $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating;
     $('edit-ritmo').disabled = disabled || ritmoLoading;
   }
@@ -131,12 +131,13 @@
     }
   }
 
-  async function loadMeAndFonts() {
+  async function loadMeAndOptions() {
     try {
-      const [me, fonts] = await Promise.all([api('/portal/me'), api('/portal/tipografias')]);
-      state.me = me; state.fontChoices = fonts;
+      const [me, fonts, employees] = await Promise.all([api('/portal/me'), api('/portal/tipografias'), api('/portal/empleados')]);
+      state.me = me; state.fontChoices = fonts; state.employees = employees;
       injectFontFaces(fonts);
       const fontOptions = fonts.map((font) => `<option value="${escapeHtml(font.key)}" style="font-family:'sf-${escapeHtml(font.key)}',sans-serif">${escapeHtml(font.label)}</option>`).join('');
+      $('client-pm').innerHTML = '<option value="">Sin asignar</option>' + employees.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name || person.email)}</option>`).join('');
       $('client-font').innerHTML = '<option value="">Default</option>' + fontOptions;
       $('story-font').innerHTML = '<option value="">Default del cliente</option>' + fontOptions;
       $('me-avatar').textContent = initials(me.name || me.email); $('me-name').textContent = me.name || me.email;
@@ -305,6 +306,7 @@
     updateFieldView('focus', state.client.weekly_focus, 'Sin enfoque puntual para esta semana.');
     renderTopicsView(state.client.topics);
     setFieldMode('description', false); setFieldMode('focus', false); setFieldMode('topics', false);
+    $('client-pm').value = state.client.assigned_employee_id || '';
     $('client-font').value = state.client.font_choice || '';
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     $('header-tags').innerHTML = (state.client.topics || []).slice(0, 4).map((topic) => `<span class="tag">${escapeHtml(topic)}</span>`).join('');
@@ -506,6 +508,16 @@
       showMessage(field==='weekly_focus'?'Enfoque semanal guardado.':field==='topics'?'Temas guardados.':'Descripción guardada.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message,true); }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled=false; }
+  }
+  async function saveClientPm() {
+    const select=$('client-pm'), clientId=state.client?.id, selectionVersion=state.selectionVersion, employeeId=select.value || null;
+    if (!clientId || employeeId === (state.client?.assigned_employee_id || null)) return; select.disabled=true;
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/pm`, {method:'PATCH', body:JSON.stringify({employee_id:employeeId})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.assigned_employee_id = updated.employee_id; showMessage(updated.employee_id ? 'PM asignado.' : 'Cliente sin PM asignado.');
+    } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message,true); select.value = state.client?.assigned_employee_id || ''; } }
+    finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled=false; }
   }
   async function saveClientFont() {
     const select=$('client-font'), clientId=state.client?.id, selectionVersion=state.selectionVersion, fontChoice=select.value || null;
@@ -1106,6 +1118,7 @@
   $('save-focus').addEventListener('click',()=>saveClientField('weekly_focus','save-focus'));
   $('save-topics').addEventListener('click',()=>saveClientField('topics','save-topics'));
   $('try-prompt').addEventListener('click',tryPrompt);
+  $('client-pm').addEventListener('change',saveClientPm);
   $('client-font').addEventListener('change',saveClientFont);
   $('add-clients-bulk').addEventListener('click', () => {
     $('bulk-clients-input').value = ''; $('bulk-clients-feedback').classList.add('hidden'); $('bulk-clients-results').innerHTML = '';
@@ -1240,5 +1253,5 @@
   $('ig-preview-edit').addEventListener('click',editPreviewStory);
   $('ig-preview-delete').addEventListener('click',deletePreviewStory);
   $('toast-close').addEventListener('click',clearMessage);
-  loadMeAndFonts().finally(loadClients);
+  loadMeAndOptions().finally(loadClients);
 })();

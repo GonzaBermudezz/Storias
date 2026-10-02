@@ -38,6 +38,8 @@ class Query:
     def maybe_single(self): self.is_maybe_single = True; return self
     def update(self, payload): self.payload = payload; self.db.updates.append((self.table, payload, self.filters)); return self
     def insert(self, payload): self.payload = payload; self.db.inserts.append((self.table, payload)); return self
+    def upsert(self, payload, on_conflict=None): self.payload = payload; self.db.upserts.append((self.table, payload, on_conflict)); return self
+    def delete(self): self.db.deletes.append((self.table, self.filters)); return self
     def execute(self):
         value = self.db.responses.pop(0)
         # Real postgrest-py's maybe_single() returns None outright (not a
@@ -52,6 +54,8 @@ class DB:
         self.responses = list(responses)
         self.updates = []
         self.inserts = []
+        self.deletes = []
+        self.upserts = []
 
     def table(self, name): return Query(self, name)
 
@@ -444,6 +448,83 @@ def test_list_font_choices_reports_all_bundled_fonts(client):
         {"key": k, "label": v, "file": _FONT_FILES[k]} for k, v in FONT_CHOICES.items()
     ]
     assert len(response.json()) == 20
+
+
+def test_list_employees_is_scoped_to_current_agency(monkeypatch, client):
+    db = DB([[{"id": "emp-1", "name": "PM", "email": "pm@example.com"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/empleados")
+
+    assert response.status_code == 200
+    assert response.json() == [{"id": "emp-1", "name": "PM", "email": "pm@example.com"}]
+
+
+def test_get_client_includes_assigned_employee_id(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, {"employee_id": "emp-2"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes/c1")
+
+    assert response.status_code == 200
+    assert response.json()["assigned_employee_id"] == "emp-2"
+
+
+def test_get_client_reports_null_when_unassigned(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes/c1")
+
+    assert response.status_code == 200
+    assert response.json()["assigned_employee_id"] is None
+
+
+def test_patch_client_pm_assigns_via_atomic_upsert(monkeypatch, client):
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1"},
+        {"id": "e1"},
+        [{"client_id": "c1", "employee_id": "e1"}],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/pm", json={"employee_id": "e1"})
+
+    assert response.status_code == 200
+    assert response.json() == {"client_id": "c1", "employee_id": "e1"}
+    assert db.upserts == [("employee_clients", {"employee_id": "e1", "client_id": "c1"}, "client_id")]
+    assert db.deletes == []
+
+
+def test_patch_client_pm_rejects_employee_from_another_agency(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/pm", json={"employee_id": "foreign-emp"})
+
+    assert response.status_code == 422
+    assert db.upserts == []
+    assert db.deletes == []
+
+
+def test_patch_client_pm_allows_unassigning(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/pm", json={"employee_id": None})
+
+    assert response.status_code == 200
+    assert response.json() == {"client_id": "c1", "employee_id": None}
+    assert db.deletes == [("employee_clients", [("client_id", "c1")])]
+    assert db.upserts == []
+
+
+def test_client_pm_selector_is_reset_for_each_loaded_client():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "'client-pm'" in source
+    assert "$('client-pm').value = state.client.assigned_employee_id || '';" in source
+    assert "clientId !== state.client?.id" in source
 
 
 def test_patch_client_font_saves_choice(monkeypatch, client):
