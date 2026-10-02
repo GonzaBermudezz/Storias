@@ -5,7 +5,7 @@
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'})[char]);
-  function avatarColor(id) { let hash = 0; for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0; return hash % 6; }
+  function avatarColor(id) { let hash = 0; for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0; return hash % 12; }
   let fontFacesInjected = false;
   function injectFontFaces(fonts) {
     // Lets the <option> list below render each font's name IN that font,
