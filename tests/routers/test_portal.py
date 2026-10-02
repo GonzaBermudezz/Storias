@@ -159,6 +159,57 @@ def test_summary_aggregates_published_upcoming_and_team_breakdown(monkeypatch, c
     ]
 
 
+def test_health_reports_empty_lists_when_agency_clients_have_no_problems(monkeypatch, client):
+    db = DB([[
+        {"id": "healthy", "name": "Saludable", "generation_error": None,
+         "generation_error_at": None, "pool_bajo_at": None},
+    ], []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/salud")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "clientes_con_error_generacion": [],
+        "clientes_con_pool_bajo": [],
+        "clientes_con_historias_en_error": [],
+    }
+
+
+def test_health_aggregates_generation_pool_and_story_errors_by_agency(monkeypatch, client):
+    clients = [
+        {"id": "generation", "name": "Generación", "generation_error": "Claude unavailable",
+         "generation_error_at": "2026-10-01T10:00:00Z", "pool_bajo_at": None},
+        {"id": "pool", "name": "Pool", "generation_error": None,
+         "generation_error_at": None, "pool_bajo_at": "2026-10-02T10:00:00Z"},
+        {"id": "stories", "name": "Historias", "generation_error": None,
+         "generation_error_at": None, "pool_bajo_at": None},
+    ]
+    failed_stories = [
+        {"client_id": "stories", "fecha_publicacion": "2026-10-05"},
+        {"client_id": "stories", "fecha_publicacion": "2026-10-03"},
+    ]
+    db = DB([clients, failed_stories])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/salud")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "clientes_con_error_generacion": [{
+            "id": "generation", "name": "Generación", "generation_error": "Claude unavailable",
+            "generation_error_at": "2026-10-01T10:00:00Z",
+        }],
+        "clientes_con_pool_bajo": [{
+            "id": "pool", "name": "Pool", "pool_bajo_at": "2026-10-02T10:00:00Z",
+        }],
+        "clientes_con_historias_en_error": [{
+            "id": "stories", "name": "Historias", "historias_en_error": 2,
+            "fecha_mas_antigua": "2026-10-03",
+        }],
+    }
+
+
 def test_patch_client_ritmo_saves_four_distinct_days(monkeypatch, client):
     saved_days = [{"day": 1, "time": "08:00", "count": 1},
                   {"day": 3, "time": "12:00", "count": 1},

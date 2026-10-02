@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, teams: [], me: null, clientSearch: '' };
+  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, teams: [], me: null, clientSearch: '' };
   const LOCKED_STORY_STATES = new Set(['publicando', 'publicado', 'cancelada']);
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
@@ -75,11 +75,25 @@
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
   }
+  function healthChips(items, emptyLabel, labelFor) {
+    if (!items.length) return `<div class="empty">${escapeHtml(emptyLabel)}</div>`;
+    return `<div class="idle-list">${items.map((item) => `<button type="button" class="idle-chip clickable" data-client-id="${escapeHtml(item.id)}" title="Ir a este cliente">${escapeHtml(item.name)} — ${escapeHtml(labelFor(item))}</button>`).join('')}</div>`;
+  }
+  function renderHealthUnavailable() {
+    const unavailable = '<div class="empty">El estado de salud no está disponible en este momento.</div>';
+    ['health-generacion', 'health-pool', 'health-errores'].forEach((id) => { $(id).innerHTML = unavailable; });
+  }
   async function loadHomeSummary() {
+    const summaryVersion = ++state.homeSummaryVersion;
     $('home-teams').textContent = 'Cargando...'; $('home-idle').textContent = 'Cargando...';
+    $('health-generacion').textContent = 'Cargando...'; $('health-pool').textContent = 'Cargando...'; $('health-errores').textContent = 'Cargando...';
     ['stat-edicion','stat-agendadas','stat-publicadas','stat-promedio','stat-aprobacion'].forEach((id) => { $(id).textContent = '–'; });
-    try {
-      const summary = await api('/portal/resumen');
+    const [summaryResult, healthResult] = await Promise.allSettled([api('/portal/resumen'), api('/portal/salud')]);
+    // Inicio can be opened twice before its first request returns, or closed
+    // while it is in flight. Only the latest visible request may update it.
+    if (summaryVersion !== state.homeSummaryVersion || $('home-view').classList.contains('hidden')) return;
+    if (summaryResult.status === 'fulfilled') {
+      const summary = summaryResult.value;
       $('stat-edicion').textContent = summary.historias_en_edicion;
       $('stat-agendadas').textContent = summary.historias_agendadas;
       $('stat-publicadas').textContent = summary.historias_publicadas;
@@ -91,10 +105,17 @@
       $('home-idle').innerHTML = summary.clientes_sin_actividad.length
         ? `<div class="idle-list">${summary.clientes_sin_actividad.map((c) => `<span class="idle-chip">${escapeHtml(c.name)}</span>`).join('')}</div>`
         : '<div class="empty">Todos los clientes tienen historias agendadas. 🎉</div>';
-    } catch (error) {
+    } else {
       $('home-teams').textContent = ''; $('home-idle').textContent = '';
+      const error = summaryResult.reason;
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
+    if (healthResult.status === 'fulfilled') {
+      const health = healthResult.value;
+      $('health-generacion').innerHTML = healthChips(health.clientes_con_error_generacion, 'Sin errores de generación. 🎉', (c) => dayLabel((c.generation_error_at || '').slice(0,10)) || 'reciente');
+      $('health-pool').innerHTML = healthChips(health.clientes_con_pool_bajo, 'Ningún cliente con pool bajo ahora mismo.', (c) => dayLabel((c.pool_bajo_at || '').slice(0,10)) || 'reciente');
+      $('health-errores').innerHTML = healthChips(health.clientes_con_historias_en_error, 'Sin historias pendientes de reintentar.', (c) => `${c.historias_en_error} historia${c.historias_en_error===1?'':'s'}`);
+    } else renderHealthUnavailable();
   }
   function showHome() {
     $('nav-home').classList.add('active'); $('nav-clients').classList.remove('active');
@@ -1027,6 +1048,10 @@
   }
   $('nav-home').addEventListener('click',showHome);
   $('nav-clients').addEventListener('click',showClients);
+  $('home-view').addEventListener('click',(event)=>{
+    const chip = event.target.closest('[data-client-id]'); if (!chip) return;
+    selectClient(chip.dataset.clientId);
+  });
   $('client-list').addEventListener('click',(event)=>{const item=event.target.closest('[data-client-id]');if(item)selectClient(item.dataset.clientId);});
   $('only-mine').addEventListener('change',loadClients);
   $('client-search').addEventListener('input',()=>{state.clientSearch=$('client-search').value;renderClients();});

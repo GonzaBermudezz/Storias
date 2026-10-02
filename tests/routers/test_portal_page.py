@@ -57,6 +57,26 @@ def test_portal_frontend_uses_real_api_without_prototype_data():
     assert "images.unsplash.com" not in source
 
 
+def test_portal_frontend_keeps_health_dashboard_independent_and_latest_only():
+    page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
+        "sub": "emp-1", "email": "pm@example.com", "name": "PM",
+        "agency_id": "agency-1", "role": "employee",
+    })})
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "Salud del sistema" in page.text
+    assert 'id="health-generacion"' in page.text
+    assert 'id="health-pool"' in page.text
+    assert 'id="health-errores"' in page.text
+    assert "homeSummaryVersion: 0" in source
+    assert "const summaryVersion = ++state.homeSummaryVersion;" in source
+    assert "Promise.allSettled([api('/portal/resumen'), api('/portal/salud')])" in source
+    assert "summaryVersion !== state.homeSummaryVersion" in source
+    assert "summaryResult.status === 'fulfilled'" in source
+    assert "healthResult.status === 'fulfilled'" in source
+    assert "renderHealthUnavailable()" in source
+
+
 def test_portal_frontend_supports_variable_rhythm_and_keeps_all_pending_groups_active():
     page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
         "sub": "emp-1", "email": "pm@example.com", "name": "PM",

@@ -194,6 +194,58 @@ def test_generate_for_client_persists_and_reports_success(generation):
     assert db.saved[0]["p_client_id"] == "good"
 
 
+def test_generate_for_client_clears_pool_bajo_after_a_generation_without_recycling(generation):
+    db = Database([client(pool_bajo_at="2026-09-10T00:00:00+00:00")])
+
+    jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert db.rows["clients"][0]["pool_bajo_at"] is None
+
+
+def test_generate_for_client_marks_pool_bajo_after_recycling(generation):
+    _, engine = generation
+    db = Database([client()])
+    now = datetime.now(timezone.utc)
+    db.rows["client_images"] = [
+        {"client_id": "good", "drive_file_id": f"file-{index}",
+         "last_used_at": (now - timedelta(days=1)).isoformat()}
+        for index in range(3)
+    ]
+    engine.return_value = HiloGenerado(
+        historias=[f"Story {index}" for index in range(4)],
+        imagenes_originales_url=[f"raw-{index}" for index in range(4)],
+        imagenes_editadas_url=[f"edited-{index}" for index in range(4)],
+        drive_file_ids_usados=["file-3", "file-4", "file-0", "file-1"],
+    )
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result["recycled"] is True
+    assert db.rows["clients"][0]["pool_bajo_at"] is not None
+
+
+def test_generate_for_client_keeps_success_when_pool_bookkeeping_fails(generation):
+    class PoolBookkeepingFailureDatabase(Database):
+        def table(self, name):
+            if name != "clients":
+                return super().table(name)
+
+            class FailingQuery(Query):
+                def execute(self):
+                    if self.op == "update" and self.values and "pool_bajo_at" in self.values:
+                        raise RuntimeError("pool flag unavailable")
+                    return super().execute()
+
+            return FailingQuery(self, name)
+
+    db = PoolBookkeepingFailureDatabase([client()])
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result == {"created": True, "group_id": "group-id", "recycled": False}
+    assert len(db.saved) == 1
+
+
 def test_generate_for_client_propagates_operational_errors(generation):
     drive, _ = generation
     drive.side_effect = RuntimeError("Drive unavailable")

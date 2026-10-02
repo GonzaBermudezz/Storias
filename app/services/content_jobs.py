@@ -215,8 +215,16 @@ def generate_for_client(db, row: dict, today: date) -> dict:
         # This is a benign, informational event, not a failure: don't write
         # it into generation_error, whose documented contract (AGENTS.md)
         # is "the last generation error" and gets cleared on every success.
-        # TODO(B3): give this its own column and expose it in the health dashboard.
         logger.warning("Client %s generated with image recycling (pool_bajo)", row["id"])
+    try:
+        # Bookkeeping is intentionally separate from the generation RPC: a
+        # successful thread must stay successful if this informational update
+        # happens to fail after the transaction has committed.
+        db.table("clients").update({
+            "pool_bajo_at": now.isoformat() if recycled else None
+        }).eq("id", row["id"]).execute()
+    except Exception:
+        logger.exception("Could not persist pool_bajo_at for client %s", row["id"])
     group_id = str(persisted.data) if persisted.data is not None else None
     return {"created": True, "group_id": group_id, "recycled": recycled}
 

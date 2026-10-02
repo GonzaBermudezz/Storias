@@ -34,7 +34,14 @@ try {
   assert.ok(applied.some((file) => file.endsWith('20260923_a5_atomic_manual_group_cleanup.sql')));
   assert.ok(applied.some((file) => file.endsWith('20260924_a5_story_schedule_state.sql')));
   assert.ok(applied.some((file) => file.endsWith('20260928_a6_publish_together.sql')));
+  assert.ok(applied.some((file) => file.endsWith('20261002_a18_health_dashboard.sql')));
   passed.push('all migrations apply in lexical order');
+
+  assert.deepEqual(
+    await query("SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='clients' AND column_name='pool_bajo_at'"),
+    [{ column_name: 'pool_bajo_at', data_type: 'timestamp with time zone', is_nullable: 'YES' }],
+  );
+  passed.push('pool_bajo_at supports the agency health signal');
 
   assert.deepEqual(
     await query("SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='clients' AND column_name='publish_together'"),

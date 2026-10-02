@@ -242,6 +242,69 @@ def get_summary(employee: EmployeeDep):
     }
 
 
+@router.get("/salud")
+def get_health(employee: EmployeeDep):
+    """Return agency-wide signals that otherwise require inspecting clients one by one."""
+    db = get_admin_client()
+    clients = db.table("clients").select(
+        "id,name,generation_error,generation_error_at,pool_bajo_at"
+    ).eq("agency_id", employee.agency_id).execute().data or []
+    if not clients:
+        return {
+            "clientes_con_error_generacion": [],
+            "clientes_con_pool_bajo": [],
+            "clientes_con_historias_en_error": [],
+        }
+
+    con_error_generacion = sorted(
+        (
+            {
+                "id": client["id"], "name": client["name"],
+                "generation_error": client["generation_error"],
+                "generation_error_at": client["generation_error_at"],
+            }
+            for client in clients if client.get("generation_error")
+        ),
+        key=lambda client: client["generation_error_at"] or "",
+    )
+    con_pool_bajo = sorted(
+        (
+            {
+                "id": client["id"], "name": client["name"],
+                "pool_bajo_at": client["pool_bajo_at"],
+            }
+            for client in clients if client.get("pool_bajo_at")
+        ),
+        key=lambda client: client["pool_bajo_at"] or "",
+    )
+
+    client_ids = [client["id"] for client in clients]
+    names_by_id = {client["id"]: client["name"] for client in clients}
+    failed_stories = db.table("stories").select("client_id,fecha_publicacion").in_(
+        "client_id", client_ids
+    ).eq("estado", "error").execute().data or []
+    by_client: dict[str, list[str]] = {}
+    for row in failed_stories:
+        by_client.setdefault(row["client_id"], []).append(row.get("fecha_publicacion") or "")
+    con_historias_en_error = sorted(
+        (
+            {
+                "id": client_id, "name": names_by_id.get(client_id, "?"),
+                "historias_en_error": len(fechas),
+                "fecha_mas_antigua": min(fechas) if fechas else None,
+            }
+            for client_id, fechas in by_client.items()
+        ),
+        key=lambda client: client["fecha_mas_antigua"] or "",
+    )
+
+    return {
+        "clientes_con_error_generacion": con_error_generacion,
+        "clientes_con_pool_bajo": con_pool_bajo,
+        "clientes_con_historias_en_error": con_historias_en_error,
+    }
+
+
 @router.get("/clientes/{client_id}")
 def get_client(client_id: str, employee: EmployeeDep):
     return _client_or_error(get_admin_client(), client_id, employee.agency_id)
