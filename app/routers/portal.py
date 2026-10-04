@@ -30,7 +30,9 @@ _LOCKED_STATES = {"generando", "publicando", "publicado", "cancelada"}
 _CLIENT_DETAIL = (
     "id,agency_id,name,business_description,weekly_focus,"
     "weekly_focus_expires_at,tone_examples,topics,drive_folder_id,logo_url,"
-    "calendly_link,prob_link,generation_error,generation_error_at,publish_days,"
+    "avatar_url,avatar_public_id,instagram_profile_url,whatsapp_contact,"
+    "contact_email,calendly_link,prob_link,generation_error,"
+    "generation_error_at,publish_days,"
     "publish_together,font_choice"
 )
 
@@ -453,6 +455,12 @@ def list_font_choices(employee: EmployeeDep):
     ]
 
 
+class ClientContactPatch(BaseModel):
+    instagram_profile_url: str | None = None
+    whatsapp_contact: str | None = None
+    contact_email: str | None = None
+
+
 class ClientFontPatch(BaseModel):
     font_choice: str | None = None
 
@@ -474,6 +482,49 @@ def patch_client_font(client_id: str, body: ClientFontPatch, employee: EmployeeD
         "id", client_id
     ).execute().data
     return updated[0] if isinstance(updated, list) and updated else {"id": client_id, "font_choice": body.font_choice}
+
+
+@router.patch("/clientes/{client_id}/contacto")
+def patch_client_contact(client_id: str, body: ClientContactPatch, employee: EmployeeDep):
+    """Save organizational contact details without changing editorial prompt data."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    changes = body.model_dump(mode="json", exclude_unset=True)
+    if not changes:
+        return {"id": client_id}
+    updated = db.table("clients").update(changes).eq("id", client_id).execute().data
+    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, **changes}
+
+
+@router.post("/clientes/{client_id}/avatar")
+async def upload_client_avatar(client_id: str, employee: EmployeeDep, image: UploadFile = File(...)):
+    """Upload a portal-only avatar; it remains separate from the content logo."""
+    db = get_admin_client()
+    current = _client_or_error(db, client_id, employee.agency_id)
+    data = await image.read()
+    try:
+        uploaded = uploads.upload_image(data, client_id, "avatar")
+    except uploads.UploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    try:
+        updated = db.table("clients").update(
+            {"avatar_url": uploaded.url, "avatar_public_id": uploaded.public_id}
+        ).eq("id", client_id).execute().data
+        if not updated:
+            raise RuntimeError("No se pudo guardar el avatar")
+    except Exception:
+        try:
+            uploads.delete_image(uploaded.public_id)
+        except uploads.UploadError:
+            pass
+        raise
+    old_public_id = current.get("avatar_public_id")
+    if old_public_id and old_public_id != uploaded.public_id:
+        try:
+            uploads.delete_image(old_public_id)
+        except uploads.UploadError:
+            pass
+    return updated[0]
 
 
 @router.patch("/clientes/{client_id}/ritmo")

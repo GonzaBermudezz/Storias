@@ -37,7 +37,9 @@
     .client-item .meta{display:flex;flex-direction:column;min-width:0}
     .client-item .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .client-item .count{font-size:10px;color:var(--muted);font-weight:500}
-    .avatar{width:29px;height:29px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;color:white;font-size:10px;font-weight:800;background:var(--accent)}
+    .avatar{width:29px;height:29px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;color:white;font-size:10px;font-weight:800;background:var(--accent);overflow:hidden}
+    .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+    .avatar.has-avatar{background:var(--surface-2)}
     .avatar-sm{width:26px;height:26px;font-size:9px}
 .avatar-0{background:#868E96}.avatar-1{background:#E64980}.avatar-2{background:#AE3EC9}.avatar-3{background:#7048E8}.avatar-4{background:#4263EB}.avatar-5{background:#228BE6}.avatar-6{background:#15AABF}.avatar-7{background:#12B886}.avatar-8{background:#F76707}.avatar-9{background:#F08C00}.avatar-10{background:#343A40}.avatar-11{background:#5C940D}
     .sidebar-filter{padding:11px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:7px}
@@ -141,6 +143,8 @@
     .team-field{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
     .team-field label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
     .team-field select{font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg);min-width:150px}
+    .team-field input[type="text"],.team-field input[type="email"]{font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg);flex:1;min-width:0}
+    .team-field .btn{flex-shrink:0;padding:7px 10px;font-size:11.5px}
 
     /* ── Weekly plan ── */
     .plan-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:16px;margin-top:18px}
@@ -432,6 +436,27 @@
             </div>
             <div class="team-field"><label for="client-pm">PM asignado</label><select id="client-pm"><option value="">Sin asignar</option></select></div>
             <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Default</option></select></div>
+            <div class="team-field">
+              <label for="client-avatar-input">Avatar del portal</label>
+              <span class="avatar avatar-sm" id="client-avatar-preview"></span>
+              <input type="file" id="client-avatar-input" accept="image/*" hidden>
+              <button type="button" class="btn" id="client-avatar-upload" title="Solo se usa para personalizar este portal — no aparece en las historias generadas">Subir imagen</button>
+            </div>
+            <div class="team-field">
+              <label for="client-instagram">Instagram</label>
+              <input type="text" id="client-instagram" placeholder="usuario o link del perfil">
+              <a id="client-instagram-open" class="btn hidden" target="_blank" rel="noopener noreferrer">📷 Abrir Instagram</a>
+            </div>
+            <div class="team-field">
+              <label for="client-whatsapp">WhatsApp</label>
+              <input type="text" id="client-whatsapp" placeholder="54911...">
+              <a id="client-whatsapp-open" class="btn hidden" target="_blank" rel="noopener noreferrer">💬 Abrir WhatsApp</a>
+            </div>
+            <div class="team-field">
+              <label for="client-email">Mail de contacto</label>
+              <input type="email" id="client-email" placeholder="contacto@cliente.com">
+              <a id="client-email-open" class="btn hidden">✉️ Enviar mail</a>
+            </div>
           </div>
         </div>
         <div id="plan-panel" class="plan-panel hidden">

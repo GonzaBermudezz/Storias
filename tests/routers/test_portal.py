@@ -552,6 +552,78 @@ def test_patch_client_font_rejects_unknown_key(monkeypatch, client):
     assert db.updates == []
 
 
+def test_patch_client_contact_persists_only_the_supplied_contact_field(monkeypatch, client):
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1"},
+        [{"id": "c1", "instagram_profile_url": "argomedia"}],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/contacto", json={"instagram_profile_url": "argomedia"})
+
+    assert response.status_code == 200
+    assert response.json()["instagram_profile_url"] == "argomedia"
+    assert db.updates == [(
+        "clients", {"instagram_profile_url": "argomedia"}, [("id", "c1")],
+    )]
+
+
+def test_upload_client_avatar_updates_only_avatar_and_cleans_old_asset(monkeypatch, client):
+    current = {
+        "id": "c1", "agency_id": "agency-1", "logo_url": "https://cdn/logo.png",
+        "avatar_url": "https://cdn/old-avatar.png", "avatar_public_id": "avatar/old",
+    }
+    updated = {
+        **current, "avatar_url": "https://cdn/new-avatar.png",
+        "avatar_public_id": "avatar/new",
+    }
+    db = DB([current, [updated]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag:
+                        SimpleNamespace(url="https://cdn/new-avatar.png", public_id="avatar/new"))
+    deleted = []
+    monkeypatch.setattr("app.routers.portal.uploads.delete_image", deleted.append)
+
+    response = client.post("/portal/clientes/c1/avatar", files={
+        "image": ("avatar.jpg", b"fake-image", "image/jpeg"),
+    })
+
+    assert response.status_code == 200
+    assert response.json()["avatar_url"] == "https://cdn/new-avatar.png"
+    assert db.updates == [(
+        "clients", {"avatar_url": "https://cdn/new-avatar.png", "avatar_public_id": "avatar/new"},
+        [("id", "c1")],
+    )]
+    assert "logo_url" not in db.updates[0][1]
+    assert deleted == ["avatar/old"]
+
+
+def test_upload_client_avatar_cleans_new_asset_when_database_update_fails(monkeypatch, client):
+    class FailingUpdateQuery(Query):
+        def execute(self):
+            if self.table == "clients" and self.payload is not None:
+                raise RuntimeError("Supabase no respondió")
+            return super().execute()
+
+    class FailingUpdateDB(DB):
+        def table(self, name):
+            return FailingUpdateQuery(self, name)
+
+    db = FailingUpdateDB([{"id": "c1", "agency_id": "agency-1", "avatar_public_id": "avatar/old"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda *args:
+                        SimpleNamespace(url="https://cdn/new-avatar.png", public_id="avatar/new"))
+    deleted = []
+    monkeypatch.setattr("app.routers.portal.uploads.delete_image", deleted.append)
+
+    with pytest.raises(RuntimeError, match="Supabase no respondió"):
+        client.post("/portal/clientes/c1/avatar", files={
+            "image": ("avatar.jpg", b"fake-image", "image/jpeg"),
+        })
+
+    assert deleted == ["avatar/new"]
+
+
 def test_create_manual_story_creates_group_and_first_story(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1"}, [], [{"id": "g1"}], [{"id": "s1", "order": 1}]])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)

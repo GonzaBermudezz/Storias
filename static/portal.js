@@ -63,8 +63,11 @@
     });
   }
   function initials(name) { return String(name || '?').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(); }
+  function avatarContent(client) {
+    return client.avatar_url ? `<img src="${escapeHtml(client.avatar_url)}" alt="">` : escapeHtml(initials(client.name));
+  }
   function setControlsDisabled(disabled) {
-    ['save-description','save-focus','save-topics','try-prompt','save-story','generate-weekly','client-pm'].forEach((id) => { $(id).disabled = disabled; });
+    ['save-description','save-focus','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-instagram','client-whatsapp','client-email','client-avatar-upload'].forEach((id) => { $(id).disabled = disabled; });
     $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating;
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
@@ -227,7 +230,7 @@
       const active = state.client?.id === client.id;
       const count = client.stories_count ?? 0;
       const countLabel = `${count} historia${count === 1 ? '' : 's'}${active ? ' · Esta semana' : ''}`;
-      return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}"><span class="avatar avatar-${avatarColor(client.id)}">${escapeHtml(initials(client.name))}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count">${escapeHtml(countLabel)}</span></span></button>`;
+      return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}"><span class="avatar${client.avatar_url ? ' has-avatar' : ' avatar-' + avatarColor(client.id)}">${avatarContent(client)}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count">${escapeHtml(countLabel)}</span></span></button>`;
     }).join('');
   }
   async function selectClient(clientId) {
@@ -294,7 +297,11 @@
     $('topics-view').classList.toggle('empty', !values.length);
   }
   function renderClient() {
-    $('client-name').textContent = state.client.name; $('client-avatar').textContent = initials(state.client.name);
+    $('client-name').textContent = state.client.name;
+    $('client-avatar').innerHTML = avatarContent(state.client);
+    $('client-avatar').classList.toggle('has-avatar', !!state.client.avatar_url);
+    $('client-avatar-preview').innerHTML = avatarContent(state.client);
+    $('client-avatar-preview').classList.toggle('has-avatar', !!state.client.avatar_url);
     $('client-workspace-title').textContent = `${state.client.name} · contenido de la próxima semana`;
     $('client-workspace-subtitle').textContent = state.client.weekly_focus
       ? 'La dirección semanal está cargada. Revisá las historias y dejalas listas para publicar.'
@@ -307,12 +314,36 @@
     setFieldMode('description', false); setFieldMode('focus', false); setFieldMode('topics', false);
     $('client-pm').value = state.client.assigned_employee_id || '';
     $('client-font').value = state.client.font_choice || '';
+    $('client-instagram').value = state.client.instagram_profile_url || '';
+    $('client-whatsapp').value = state.client.whatsapp_contact || '';
+    $('client-email').value = state.client.contact_email || '';
+    updateContactLinks();
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     $('header-tags').innerHTML = (state.client.topics || []).slice(0, 4).map((topic) => `<span class="tag">${escapeHtml(topic)}</span>`).join('');
     const url = driveUrl(state.client.drive_folder_id);
     if (url) { $('drive-link').href = url; $('drive-link').classList.remove('hidden'); $('qa-drive').href = url; $('qa-drive').classList.remove('hidden'); }
     else { $('drive-link').classList.add('hidden'); $('qa-drive').classList.add('hidden'); }
     $('prompt-preview').classList.add('hidden'); renderStories(); renderPlan(); renderActivity(); loadCalendar();
+  }
+  function instagramHref(value) {
+    if (!value) return null;
+    return /^https?:\/\//i.test(value) ? value : `https://instagram.com/${value.replace(/^@/, '')}`;
+  }
+  function whatsappHref(value) {
+    if (!value) return null;
+    const digits = value.replace(/\D/g, '');
+    return digits ? `https://wa.me/${digits}` : null;
+  }
+  function updateContactLinks() {
+    const ig = instagramHref(state.client?.instagram_profile_url);
+    $('client-instagram-open').href = ig || '#';
+    $('client-instagram-open').classList.toggle('hidden', !ig);
+    const wa = whatsappHref(state.client?.whatsapp_contact);
+    $('client-whatsapp-open').href = wa || '#';
+    $('client-whatsapp-open').classList.toggle('hidden', !wa);
+    const email = state.client?.contact_email;
+    $('client-email-open').href = email ? `mailto:${encodeURIComponent(email)}` : '#';
+    $('client-email-open').classList.toggle('hidden', !email);
   }
   function dayLabel(isoDate) {
     return isoDate ? new Intl.DateTimeFormat('es-AR', {weekday:'short', day:'numeric', timeZone:'UTC'}).format(new Date(`${isoDate}T00:00:00Z`)) : '';
@@ -591,6 +622,45 @@
       state.client.font_choice = updated.font_choice; showMessage('Tipografía actualizada.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message,true); select.value = state.client?.font_choice || ''; } }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled=false; }
+  }
+  async function saveClientContact(field, inputId) {
+    const input=$(`${inputId}`), clientId=state.client?.id, selectionVersion=state.selectionVersion, value=input.value.trim() || null;
+    if (!clientId || value === (state.client?.[field] || null)) return;
+    input.disabled = true;
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/contacto`, {method:'PATCH', body:JSON.stringify({[field]: value})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client[field] = updated[field] ?? value;
+      updateContactLinks();
+      showMessage('Contacto actualizado.');
+    } catch(error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) {
+        showMessage(error.message, true);
+        input.value = state.client?.[field] || '';
+      }
+    } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) input.disabled = false; }
+  }
+  async function uploadClientAvatar(file) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    const button = $('client-avatar-upload'); button.disabled = true;
+    const formData = new FormData(); formData.append('image', file);
+    try {
+      const response = await fetch(`/portal/clientes/${encodeURIComponent(clientId)}/avatar`, {method:'POST', credentials:'same-origin', body: formData});
+      if (response.status === 401) { window.location.assign('/login'); return; }
+      if (!response.ok) { let detail = 'No se pudo subir el avatar.'; try { detail = (await response.json()).detail || detail; } catch(_) {} throw new Error(detail); }
+      const updated = await response.json();
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.avatar_url = updated.avatar_url; state.client.avatar_public_id = updated.avatar_public_id;
+      $('client-avatar').innerHTML = avatarContent(state.client); $('client-avatar').classList.add('has-avatar');
+      $('client-avatar-preview').innerHTML = avatarContent(state.client); $('client-avatar-preview').classList.add('has-avatar');
+      const listed = state.clients.find((client) => client.id === clientId);
+      if (listed) { listed.avatar_url = updated.avatar_url; listed.avatar_public_id = updated.avatar_public_id; }
+      renderClients();
+      showMessage('Avatar actualizado.');
+    } catch(error) {
+      if (selectionVersion === state.selectionVersion) showMessage(error.message, true);
+    } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled = false; }
   }
   async function tryPrompt() {
     const button=$('try-prompt'), preview=$('prompt-preview'), clientId=state.client?.id, selectionVersion=state.selectionVersion;
@@ -1317,6 +1387,14 @@
   $('try-prompt').addEventListener('click',tryPrompt);
   $('client-pm').addEventListener('change',saveClientPm);
   $('client-font').addEventListener('change',saveClientFont);
+  $('client-instagram').addEventListener('change',()=>saveClientContact('instagram_profile_url','client-instagram'));
+  $('client-whatsapp').addEventListener('change',()=>saveClientContact('whatsapp_contact','client-whatsapp'));
+  $('client-email').addEventListener('change',()=>saveClientContact('contact_email','client-email'));
+  $('client-avatar-upload').addEventListener('click',()=>$('client-avatar-input').click());
+  $('client-avatar-input').addEventListener('change',()=>{
+    const file = $('client-avatar-input').files[0]; $('client-avatar-input').value = '';
+    if (file) uploadClientAvatar(file);
+  });
   $('add-clients-bulk').addEventListener('click', () => {
     $('bulk-clients-input').value = ''; $('bulk-clients-feedback').classList.add('hidden'); $('bulk-clients-results').innerHTML = '';
     $('bulk-clients-dialog').showModal();
