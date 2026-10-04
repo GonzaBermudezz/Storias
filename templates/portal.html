@@ -107,7 +107,8 @@
     .field{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
     .field-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
     .field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
-    .field-head .info{position:relative;color:var(--muted);cursor:help;font-size:11px}
+    .field-head .info{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:14px;height:14px;border-radius:50%;border:1.3px solid var(--muted);color:var(--muted);font-size:9.5px;font-style:italic;font-weight:700;line-height:1;cursor:help;transition:border-color .12s,color .12s}
+    .field-head .info:hover,.field-head .info:focus-visible{border-color:var(--accent);color:var(--accent)}
     .field-head .info[data-tooltip]::after{content:attr(data-tooltip);position:absolute;z-index:10;bottom:calc(100% + 9px);left:50%;width:max-content;max-width:220px;padding:8px 10px;border-radius:7px;background:var(--fg);color:#fff;font-size:11px;font-weight:400;line-height:1.4;text-align:center;box-shadow:0 7px 18px rgba(0,0,0,.18);opacity:0;pointer-events:none;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
     .field-head .info[data-tooltip]::before{content:"";position:absolute;z-index:11;bottom:calc(100% + 4px);left:50%;border:5px solid transparent;border-top-color:var(--fg);opacity:0;pointer-events:none;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
     .field-head .info[data-tooltip]:hover::after,.field-head .info[data-tooltip]:hover::before,.field-head .info[data-tooltip]:focus-visible::after,.field-head .info[data-tooltip]:focus-visible::before{opacity:1;transform:translate(-50%,0)}
@@ -385,7 +386,7 @@
                 <div id="prompt-preview" class="preview hidden"></div>
               </div>
               <div class="field" id="focus-field">
-                <div class="field-head"><label for="weekly-focus">Enfoque semanal</label><span class="info" tabindex="0" aria-label="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual." data-tooltip="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual.">ⓘ</span></div>
+                <div class="field-head"><label for="weekly-focus">Enfoque semanal</label><span class="info" tabindex="0" aria-label="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual." data-tooltip="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual.">i</span></div>
                 <div class="field-view" id="focus-view" role="button" tabindex="0" aria-label="Editar enfoque semanal"><p class="field-text" id="focus-text"></p></div>
                 <div class="field-edit hidden" id="focus-edit">
                   <textarea id="weekly-focus" maxlength="300" placeholder="Ej.: destacar la venta cerrada esta semana"></textarea>
@@ -395,7 +396,7 @@
                 <div class="actions hidden" id="focus-edit-actions"><button id="save-focus" class="btn primary">Guardar</button><button id="cancel-focus" class="btn">Cancelar</button></div>
               </div>
               <div class="field" id="topics-field">
-                <div class="field-head"><label for="client-topics">Temas</label><span class="info" tabindex="0" aria-label="Un tema por línea. La IA usa esta lista como punto de partida para elegir el enfoque de las historias." data-tooltip="Un tema por línea. La IA usa esta lista como punto de partida para elegir el enfoque de las historias.">ⓘ</span></div>
+                <div class="field-head"><label for="client-topics">Temas</label><span class="info" tabindex="0" aria-label="Un tema por línea. La IA usa esta lista como punto de partida para elegir el enfoque de las historias.">i</span></div>
                 <div class="field-view" id="topics-view" role="button" tabindex="0" aria-label="Editar temas"><div class="tags-view" id="topics-text"></div></div>
                 <div class="field-edit hidden" id="topics-edit">
                   <textarea id="client-topics" placeholder="Un tema por línea\nEj.: Cocinas a medida\nMateriales durables"></textarea>
