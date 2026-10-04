@@ -166,6 +166,9 @@
     .historico-chip-body{flex:1;min-width:0}
     .historico-chip-body .date{font-size:10px;font-weight:650;color:var(--muted);text-transform:capitalize}
     .historico-chip-body .title{font-size:10.5px;color:var(--fg);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .historico-chip-body .type{font-size:9.5px;color:var(--muted);margin-top:1px}
+    .historico-chip{cursor:pointer;transition:border-color .12s}
+    .historico-chip:hover{border-color:var(--accent)}
     .plan-head{gap:10px;flex-wrap:wrap}
     .cal-nav{display:flex;align-items:center;justify-content:space-between;margin:2px 0 8px}
     .cal-nav span{font-size:11.5px;font-weight:650}
@@ -177,7 +180,13 @@
     .cal-cell:not(.outside):not(.past):hover{background:var(--bg)}
     .cal-cell.outside{visibility:hidden;cursor:default}
     .cal-cell.past{cursor:default;opacity:.4}
-    .cal-cell .dot{width:4px;height:4px;border-radius:50%;background:var(--success);position:absolute;bottom:3px}
+    .cal-cell .dots{position:absolute;bottom:3px;left:50%;transform:translateX(-50%);display:flex;gap:2px}
+    .cal-cell .dot{width:4px;height:4px;border-radius:50%}
+    .cal-cell .dot.dot-pending{background:var(--muted)}
+    .cal-cell .dot.dot-approved{background:var(--accent)}
+    .cal-cell .dot.dot-scheduled{background:var(--ok)}
+    .cal-cell .dot.dot-done{background:var(--success)}
+    .cal-cell .dot.dot-error{background:var(--danger)}
     .cal-cell.pending{outline:2px dashed var(--accent);outline-offset:-2px}
     .ritmo-chips{display:flex;gap:5px;flex-wrap:wrap}
     .ritmo-chips.is-saving{pointer-events:none;opacity:.55}
@@ -308,7 +317,7 @@
     .btn{border-color:#D7E2DF;color:#375357;background:#fff;border-radius:8px;padding:9px 12px}.btn:hover:not(:disabled){border-color:#3C716C;color:#285B59;background:#F5FAF9}.btn.primary{background:var(--accent);border-color:var(--accent);color:#17363A}.btn.primary:hover:not(:disabled){background:#C6E477;color:#17363A}.btn.danger{color:#fff}.client-hero .btn{flex:none;padding:11px 14px}
     .plan-panel{margin-top:17px;padding:17px 18px;background:#fff}.plan-head{margin-bottom:15px}.plan-chip{background:#F5F8F8;border-color:#E0E8E6;border-radius:10px;flex-basis:224px}.plan-chip:hover{border-color:#5B817B;background:#F8FBFA}.plan-chip .thumb{border-radius:7px}.week-badge{border-color:#D7E2DF;background:#fff;color:#577073}
     .workspace{grid-template-columns:minmax(0,1fr) 280px;gap:18px;margin-top:19px}.stories-panel{padding:18px}.section-title-row{align-items:flex-start}.section-title{display:block;font-size:15px;letter-spacing:-.2px;text-transform:none;color:var(--fg)}.day-row{padding:14px 0 17px;border-top:1px solid #EDF1F0;margin:0}.day-row:first-child{border-top:0;padding-top:5px}.day-row-cards .story{flex-basis:154px}.story{border-radius:11px;box-shadow:0 8px 20px -15px rgba(16,47,47,.55)}.story.approved{box-shadow:0 0 0 2px #66A961,0 8px 20px -15px rgba(16,47,47,.55)}.story-actions{opacity:1}.story-overlay{inset:42% 0 0}.story-text{font-size:10.5px}.story.add-placeholder{background:#F7FAF9;border-color:#CBD9D6}.story.add-placeholder:hover{border-color:#3C716C;color:#285B59}.schedule-btn{background:#EDF7D7;color:#32643B}.publish-now-btn{background:#E9F2FB;color:#285B8A}.approve-all-btn{background:#DCFCE7;color:#16A34A}.day-time,.day-desc{border-color:#D8E3E1;background:#FCFDFD}.empty-state{border:1px dashed #CBD9D6;border-radius:12px;background:#FCFDFD}
-    .side-col{gap:14px;top:18px}.activity{padding:15px}.activity h3{font-size:13px;color:#263A3D}.activity .hint{line-height:1.48}.cal-cell{border-radius:6px}.cal-cell:not(.outside):not(.past):hover{background:#EDF7D7}.cal-cell .dot{background:#66A961}.cal-cell.pending{outline-color:#5B817B}.activity-item .dot{background:#EDF7D7;color:#32643B}.status-card.ok{background:#F4FAE9;color:#466143}.quick-actions .btn{background:#FCFDFD}.quick-actions .btn:hover{background:#F4FAE9}.icon-btn:hover{background:#3C716C}.cal-nav .icon-btn:hover{background:#EDF7D7;color:#285B59}
+    .side-col{gap:14px;top:18px}.activity{padding:15px}.activity h3{font-size:13px;color:#263A3D}.activity .hint{line-height:1.48}.cal-cell{border-radius:6px}.cal-cell:not(.outside):not(.past):hover{background:#EDF7D7}.cal-cell .dot.dot-done{background:#66A961}.cal-cell.pending{outline-color:#5B817B}.activity-item .dot{background:#EDF7D7;color:#32643B}.status-card.ok{background:#F4FAE9;color:#466143}.quick-actions .btn{background:#FCFDFD}.quick-actions .btn:hover{background:#F4FAE9}.icon-btn:hover{background:#3C716C}.cal-nav .icon-btn:hover{background:#EDF7D7;color:#285B59}
     @media(max-width:900px){.workspace{grid-template-columns:1fr}.side-col{position:static;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.client-hero{align-items:flex-start}.activity{height:100%}}
     @media(max-width:700px){.content{padding:20px 16px}.topbar{padding:10px 16px}.client-hero{align-items:stretch;flex-direction:column}.client-hero h2{font-size:23px}.side-col{grid-template-columns:1fr}.client-hero .btn{width:100%;justify-content:center}}
   </style>

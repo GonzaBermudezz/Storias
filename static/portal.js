@@ -397,15 +397,29 @@
     const raw = group.scheduled_date || group.generation_week;
     return raw ? new Intl.DateTimeFormat('es-AR', {dateStyle:'long', timeZone:'UTC'}).format(new Date(`${raw}T00:00:00Z`)) : 'Sin fecha';
   }
-  function renderHistorico(historicos) {
+  function historicoItemsByDate() {
+    const byDate = new Map();
+    for (const group of state.groups) {
+      for (const story of (group.stories || [])) {
+        if (story.estado !== 'publicado' || !story.fecha_publicacion) continue;
+        if (!byDate.has(story.fecha_publicacion)) byDate.set(story.fecha_publicacion, []);
+        byDate.get(story.fecha_publicacion).push(story);
+      }
+    }
+    return byDate;
+  }
+  function renderHistorico(byDate) {
     const panel = $('historico-panel');
-    if (!historicos.length) { panel.classList.add('hidden'); return; }
+    const dates = [...byDate.keys()].sort().reverse();
+    if (!dates.length) { panel.classList.add('hidden'); return; }
     panel.classList.remove('hidden');
-    const sorted = [...historicos].sort((a, b) => (b.fecha_publicacion || '').localeCompare(a.fecha_publicacion || ''));
-    $('historico-list').innerHTML = sorted.map((story) => {
-      const title = story.text || 'Sin texto todavía';
+    $('historico-list').innerHTML = dates.map((iso) => {
+      const stories = [...byDate.get(iso)].sort((a, b) => a.order - b.order);
+      const first = stories[0];
+      const title = stories.map((s) => s.text).find(Boolean) || 'Sin texto todavía';
       const shortTitle = title.length > 28 ? title.slice(0, 25) + '…' : title;
-      return `<div class="historico-chip"><span class="thumb">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="">` : '🖼'}</span><div class="historico-chip-body"><div class="date">${escapeHtml(dayLabel(story.fecha_publicacion))}</div><div class="title">${escapeHtml(shortTitle)}</div></div></div>`;
+      const count = stories.length;
+      return `<div class="historico-chip" data-historico-date="${escapeHtml(iso)}"><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : '🖼'}</span><div class="historico-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count === 1 ? '' : 's'}</div></div></div>`;
     }).join('');
   }
   function renderStories() {
@@ -414,10 +428,9 @@
     const active = activeDates();
     const byDate = new Map();
     const manualGroupByDate = new Map(); // date -> its manual (non-AI) group, if any
-    const historicos = []; // stories already published — shown in the compact Histórico strip, not as full cards
     for (const group of state.groups) {
       for (const story of (group.stories || [])) {
-        if (story.estado === 'publicado') { historicos.push(story); continue; }
+        if (story.estado === 'publicado') continue; // ya publicada — va al Histórico, lo arma historicoItemsByDate()
         if (storyIsScheduled(story, group)) continue; // confirmed date lives in Plan
         if (!story.fecha_publicacion || !active.has(story.fecha_publicacion)) continue;
         if (!byDate.has(story.fecha_publicacion)) byDate.set(story.fecha_publicacion, []);
@@ -427,7 +440,7 @@
     }
     for (const iso of active) if (!byDate.has(iso)) byDate.set(iso, []);
     const dates = [...byDate.keys()].sort();
-    renderHistorico(historicos);
+    renderHistorico(historicoItemsByDate());
     if (!dates.length) {
       $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">🖼</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Clickeá un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>🚀 Generar historias para este cliente</button></div>';
       $('week-badge').classList.add('hidden');
@@ -578,6 +591,13 @@
   function monthBase() { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + calMonthOffset); return d; }
   function isoDate(year, month, day) { return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; }
   function todayIso() { const d = new Date(); return isoDate(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function calendarDotClass(story, group) {
+    if (story.estado === 'error') return 'dot-error';
+    if (story.estado === 'publicado') return 'dot-done';
+    if (storyIsScheduled(story, group)) return 'dot-scheduled';
+    if (story.aprobado) return 'dot-approved';
+    return 'dot-pending';
+  }
   function renderCalendarMonth() {
     const base = monthBase(), year = base.getFullYear(), month = base.getMonth();
     const monthLabel = base.toLocaleDateString('es-AR', {month:'long', year:'numeric'});
@@ -586,15 +606,23 @@
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const cells = Array(firstWeekday).fill(null).concat(Array.from({length: daysInMonth}, (_, i) => i + 1));
     while (cells.length % 7 !== 0) cells.push(null);
-    const contentDates = new Set();
-    for (const group of state.groups) for (const story of (group.stories || [])) if (story.fecha_publicacion) contentDates.add(story.fecha_publicacion);
+    const dotClassesByDate = new Map();
+    for (const group of state.groups) {
+      for (const story of (group.stories || [])) {
+        if (!story.fecha_publicacion) continue;
+        if (!dotClassesByDate.has(story.fecha_publicacion)) dotClassesByDate.set(story.fecha_publicacion, new Set());
+        dotClassesByDate.get(story.fecha_publicacion).add(calendarDotClass(story, group));
+      }
+    }
     const today = todayIso();
     $('calendar-grid').innerHTML = cells.map((day) => {
       if (day === null) return '<div class="cal-cell outside"></div>';
       const iso = isoDate(year, month, day);
       const isPast = iso < today;
-      const pending = draftDates.has(iso) && !contentDates.has(iso);
-      return `<div class="cal-cell${pending?' pending':''}${isPast?' past':''}" data-date="${iso}">${day}${contentDates.has(iso)?'<span class="dot"></span>':''}</div>`;
+      const dotClasses = dotClassesByDate.get(iso);
+      const pending = draftDates.has(iso) && !dotClasses;
+      const dots = dotClasses ? `<span class="dots">${[...dotClasses].map((cls) => `<span class="dot ${cls}"></span>`).join('')}</span>` : '';
+      return `<div class="cal-cell${pending?' pending':''}${isPast?' past':''}" data-date="${iso}">${day}${dots}</div>`;
     }).join('');
   }
   function renderRitmoChips() {
@@ -1382,6 +1410,11 @@
     const chip = event.target.closest('[data-plan-date]'); if (!chip) return;
     const entry = planItemsByDate().get(chip.dataset.planDate);
     if (entry && entry.stories.length) openPreview([...entry.stories].sort((a,b) => a.order - b.order));
+  });
+  $('historico-list').addEventListener('click',(event)=>{
+    const chip = event.target.closest('[data-historico-date]'); if (!chip) return;
+    const stories = historicoItemsByDate().get(chip.dataset.historicoDate);
+    if (stories && stories.length) openPreview([...stories].sort((a,b) => a.order - b.order));
   });
   $('save-story').addEventListener('click',saveStory); $('close-story').addEventListener('click',()=>$('story-dialog').close()); $('cancel-story-edit').addEventListener('click',()=>$('story-dialog').close());
   $('generate-ai-text').addEventListener('click',generateStoryText);
