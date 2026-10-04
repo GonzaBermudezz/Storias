@@ -397,13 +397,30 @@
     const raw = group.scheduled_date || group.generation_week;
     return raw ? new Intl.DateTimeFormat('es-AR', {dateStyle:'long', timeZone:'UTC'}).format(new Date(`${raw}T00:00:00Z`)) : 'Sin fecha';
   }
+  function publishedDateIso(story) {
+    // "Publicar ahora" puede subir una historia mucho antes (o después) de su
+    // fecha_publicacion planeada — el Histórico tiene que agruparla por cuándo
+    // se publicó DE VERDAD, no por esa fecha planeada. published_at es un
+    // timestamp UTC; lo convertimos al día calendario de Argentina (el mismo
+    // huso que usa el resto del sistema) para que coincida con lo que el
+    // empleado espera ver. Las filas viejas sin published_at (publicadas antes
+    // de que esta columna se empezara a llenar) caen de vuelta a fecha_publicacion.
+    if (!story.published_at) return story.fecha_publicacion;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date(story.published_at));
+    const datePart = (type) => parts.find((part) => part.type === type)?.value;
+    return [datePart('year'), datePart('month'), datePart('day')].join('-');
+  }
   function historicoItemsByDate() {
     const byDate = new Map();
     for (const group of state.groups) {
       for (const story of (group.stories || [])) {
-        if (story.estado !== 'publicado' || !story.fecha_publicacion) continue;
-        if (!byDate.has(story.fecha_publicacion)) byDate.set(story.fecha_publicacion, []);
-        byDate.get(story.fecha_publicacion).push(story);
+        if (story.estado !== 'publicado') continue;
+        const iso = publishedDateIso(story);
+        if (!iso) continue;
+        if (!byDate.has(iso)) byDate.set(iso, []);
+        byDate.get(iso).push(story);
       }
     }
     return byDate;
