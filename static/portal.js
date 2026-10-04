@@ -1217,6 +1217,7 @@
       $('history-list').innerHTML = rows.length ? rows.map((row) => `<div class="history-row"><div class="field">${escapeHtml(row.field)}</div><div class="meta">${row.changed_by_name ? escapeHtml(row.changed_by_name)+' · ' : ''}${new Date(row.changed_at).toLocaleString('es-AR')}</div><div class="diff"><span class="old">${escapeHtml(row.old_value || '(vacío)')}</span><span>${escapeHtml(row.new_value || '(vacío)')}</span></div></div>`).join('') : '<div class="empty">Todavía no hay cambios registrados para este cliente.</div>';
     } catch (error) { $('history-list').textContent = error.message; }
   }
+  function openSettings() { $('settings-dialog').showModal(); }
   function findStory(storyId) { for (const group of state.groups) { const story=(group.stories||[]).find((item)=>item.id===storyId); if(story) return {group,story}; } return null; }
   function openStory(story, group) {
     if (storyIsLocked(story)) return;
@@ -1417,6 +1418,9 @@
   $('qa-history').addEventListener('click',openHistory);
   $('close-history').addEventListener('click',()=>$('history-dialog').close());
   $('close-history-2').addEventListener('click',()=>$('history-dialog').close());
+  $('qa-settings').addEventListener('click',openSettings);
+  $('close-settings').addEventListener('click',()=>$('settings-dialog').close());
+  $('close-settings-2').addEventListener('click',()=>$('settings-dialog').close());
   $('cal-prev').addEventListener('click',()=>{calMonthOffset--; renderCalendarMonth();});
   $('cal-next').addEventListener('click',()=>{calMonthOffset++; renderCalendarMonth();});
   $('calendar-grid').addEventListener('click',(event)=>{

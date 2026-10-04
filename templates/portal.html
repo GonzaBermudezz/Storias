@@ -294,6 +294,7 @@
     .modal-head strong{font-size:14px}
     .modal-body{padding:19px;max-height:60vh;overflow:auto}
     .modal-body textarea{min-height:130px}
+    .modal-body .team-field:first-child{margin-top:0;padding-top:0;border-top:0}
     .modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:0 19px 19px}
     .modal-feedback{margin:12px 0 0;padding:9px 11px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:12px;line-height:1.45}
     dialog.story-edit{width:min(860px,calc(100% - 32px))}
@@ -436,27 +437,6 @@
             </div>
             <div class="team-field"><label for="client-pm">PM asignado</label><select id="client-pm"><option value="">Sin asignar</option></select></div>
             <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Default</option></select></div>
-            <div class="team-field">
-              <label for="client-avatar-input">Avatar del portal</label>
-              <span class="avatar avatar-sm" id="client-avatar-preview"></span>
-              <input type="file" id="client-avatar-input" accept="image/*" hidden>
-              <button type="button" class="btn" id="client-avatar-upload" title="Solo se usa para personalizar este portal — no aparece en las historias generadas">Subir imagen</button>
-            </div>
-            <div class="team-field">
-              <label for="client-instagram">Instagram</label>
-              <input type="text" id="client-instagram" placeholder="usuario o link del perfil">
-              <a id="client-instagram-open" class="btn hidden" target="_blank" rel="noopener noreferrer">📷 Abrir Instagram</a>
-            </div>
-            <div class="team-field">
-              <label for="client-whatsapp">WhatsApp</label>
-              <input type="text" id="client-whatsapp" placeholder="54911...">
-              <a id="client-whatsapp-open" class="btn hidden" target="_blank" rel="noopener noreferrer">💬 Abrir WhatsApp</a>
-            </div>
-            <div class="team-field">
-              <label for="client-email">Mail de contacto</label>
-              <input type="email" id="client-email" placeholder="contacto@cliente.com">
-              <a id="client-email-open" class="btn hidden">✉️ Enviar mail</a>
-            </div>
           </div>
         </div>
         <div id="plan-panel" class="plan-panel hidden">
@@ -492,6 +472,7 @@
                 <a id="qa-drive" class="btn" target="_blank" rel="noopener noreferrer">📁 Ver en Drive</a>
                 <button id="qa-history" class="btn">🕓 Ver historial</button>
                 <button id="qa-focus" class="btn">✎ Editar información del cliente</button>
+                <button id="qa-settings" class="btn">⚙ Ajustes del cliente</button>
               </div>
             </aside>
           </div>
@@ -512,6 +493,29 @@
     <div class="modal-foot"><button id="cancel-story-edit" class="btn">Cancelar</button><button id="save-story" class="btn primary">Guardar historia</button></div>
   </dialog>
   <dialog id="history-dialog" class="wide"><div class="modal-head"><strong>Historial de cambios</strong><button id="close-history" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body" id="history-list"></div><div class="modal-foot"><button id="close-history-2" class="btn">Cerrar</button></div></dialog>
+  <dialog id="settings-dialog"><div class="modal-head"><strong>Ajustes del cliente</strong><button id="close-settings" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body">
+    <div class="team-field">
+      <label for="client-avatar-input">Avatar del portal</label>
+      <span class="avatar avatar-sm" id="client-avatar-preview"></span>
+      <input type="file" id="client-avatar-input" accept="image/*" hidden>
+      <button type="button" class="btn" id="client-avatar-upload" title="Solo se usa para personalizar este portal — no aparece en las historias generadas">Subir imagen</button>
+    </div>
+    <div class="team-field">
+      <label for="client-instagram">Instagram</label>
+      <input type="text" id="client-instagram" placeholder="usuario o link del perfil">
+      <a id="client-instagram-open" class="btn hidden" target="_blank" rel="noopener noreferrer">📷 Abrir Instagram</a>
+    </div>
+    <div class="team-field">
+      <label for="client-whatsapp">WhatsApp</label>
+      <input type="text" id="client-whatsapp" placeholder="54911...">
+      <a id="client-whatsapp-open" class="btn hidden" target="_blank" rel="noopener noreferrer">💬 Abrir WhatsApp</a>
+    </div>
+    <div class="team-field">
+      <label for="client-email">Mail de contacto</label>
+      <input type="email" id="client-email" placeholder="contacto@cliente.com">
+      <a id="client-email-open" class="btn hidden">✉️ Enviar mail</a>
+    </div>
+  </div><div class="modal-foot"><button id="close-settings-2" class="btn">Cerrar</button></div></dialog>
   <dialog id="ritmo-dialog"><div class="modal-head"><strong>Días y horarios de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días y definí cuántas de las 4 historias se publican cada día.</p><div id="ritmo-chips" class="ritmo-chips"></div><div id="ritmo-days-detail" class="ritmo-days-detail"></div><p id="ritmo-count-total" class="hint"></p><p id="ritmo-detail-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p><button id="save-ritmo-detail" class="btn">Guardar días y horarios</button><p id="ritmo-generation-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button><button id="generate-weekly" class="btn primary">Generar historias para la semana que viene</button></div></dialog>
   <dialog id="bulk-clients-dialog" class="wide">
     <div class="modal-head"><strong>Alta masiva de clientes</strong><button id="close-bulk-clients" class="icon-btn" aria-label="Cerrar">×</button></div>
