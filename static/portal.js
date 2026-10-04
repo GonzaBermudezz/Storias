@@ -237,7 +237,7 @@
     clearMessage(); $('empty').classList.add('hidden'); $('client-view').classList.remove('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
-    $('client-name').textContent = 'Cargando...'; $('stories').textContent = 'Cargando...'; $('week-badge').classList.add('hidden');
+    $('client-name').textContent = 'Cargando...'; $('stories').innerHTML = '<div class="loading-state"><span class="spinner"></span><p>Cargando...</p></div>'; $('week-badge').classList.add('hidden');
     $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; $('header-tags').innerHTML = ''; $('drive-link').classList.add('hidden');
     $('plan-panel').classList.add('hidden'); $('historico-panel').classList.add('hidden'); $('historico-list').innerHTML = ''; state.driveCount = undefined;
     try {
@@ -626,9 +626,13 @@
     const dotClassesByDate = new Map();
     for (const group of state.groups) {
       for (const story of (group.stories || [])) {
-        if (!story.fecha_publicacion) continue;
-        if (!dotClassesByDate.has(story.fecha_publicacion)) dotClassesByDate.set(story.fecha_publicacion, new Set());
-        dotClassesByDate.get(story.fecha_publicacion).add(calendarDotClass(story, group));
+        const cls = calendarDotClass(story, group);
+        // El punto "publicada" va en el día en que se publicó de verdad; los
+        // demás estados siguen marcando fecha_publicacion, el día planeado.
+        const iso = cls === 'dot-done' ? publishedDateIso(story) : story.fecha_publicacion;
+        if (!iso) continue;
+        if (!dotClassesByDate.has(iso)) dotClassesByDate.set(iso, new Set());
+        dotClassesByDate.get(iso).add(cls);
       }
     }
     const today = todayIso();

@@ -72,6 +72,9 @@
     @keyframes toast-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
     @media(max-width:480px){.toast{left:16px;right:16px;max-width:none;top:12px}}
     .empty{padding:70px 20px;text-align:center;color:var(--muted);font-size:14px}
+    .loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:70px 20px;color:var(--muted);font-size:14px}
+    .spinner{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
     .empty-state{padding:56px 24px;text-align:center}
     .empty-state-icon{display:block;font-size:34px;margin-bottom:12px;opacity:.7}
     .empty-state-text{color:var(--fg);font-size:14px;font-weight:600;margin:0 0 4px}
@@ -148,6 +151,7 @@
     .plan-panel.collapsed #plan-days{display:none}
     .plan-head h2{font-size:13px;font-weight:650;display:flex;align-items:center;gap:7px}
     .plan-days{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}
+    .plan-days .empty{flex:1 1 100%}
     .plan-chip{flex:0 0 210px;display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--bg);cursor:pointer;transition:border-color .12s}
     .plan-chip:hover{border-color:var(--accent)}
     .plan-chip .grip{color:var(--muted);font-size:13px;flex-shrink:0}
@@ -437,7 +441,7 @@
         <div class="workspace">
           <div class="stories-panel">
             <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Historias generadas</span><p class="section-hint">Aprobá una historia haciendo click sobre su tarjeta. Podés editar el texto o la tipografía cuando lo necesites.</p></div><span id="week-badge" class="week-badge hidden"></span></div>
-            <div id="stories" aria-live="polite">Cargando...</div>
+            <div id="stories" aria-live="polite"><div class="loading-state"><span class="spinner"></span><p>Cargando...</p></div></div>
             <div class="panel hidden" id="historico-panel">
               <div class="panel-head" id="historico-panel-toggle"><div><p class="eyebrow">Historial</p><h2>Historias subidas</h2></div><span class="chev">▾</span></div>
               <div class="panel-body"><div id="historico-list" class="historico-list"></div></div>
