@@ -239,7 +239,7 @@
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
     $('client-name').textContent = 'Cargando...'; $('stories').textContent = 'Cargando...'; $('week-badge').classList.add('hidden');
     $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; $('header-tags').innerHTML = ''; $('drive-link').classList.add('hidden');
-    $('plan-panel').classList.add('hidden'); state.driveCount = undefined;
+    $('plan-panel').classList.add('hidden'); $('historico-panel').classList.add('hidden'); $('historico-list').innerHTML = ''; state.driveCount = undefined;
     try {
       const [client, groups, driveInfo] = await Promise.all([
         api(`/portal/clientes/${encodeURIComponent(clientId)}`),
@@ -339,7 +339,7 @@
       for (const story of (g.stories || [])) {
         if (!story.fecha_publicacion) continue;
         if (storyIsScheduled(story, g)) agendadoDates.add(story.fecha_publicacion);
-        else {
+        else if (story.estado !== 'publicado') { // ya publicada → va al Histórico, no abre una fila de día
           dates.add(story.fecha_publicacion);
           groupHasDate = true;
         }
@@ -355,6 +355,7 @@
     const byDate = new Map();
     for (const group of state.groups) {
       for (const story of (group.stories || [])) {
+        if (story.estado === 'publicado') continue;
         if (!story.fecha_publicacion) continue;
         if (!storyIsScheduled(story, group)) continue;
         if (!byDate.has(story.fecha_publicacion)) byDate.set(story.fecha_publicacion, {stories: [], descripcion: null});
@@ -396,14 +397,27 @@
     const raw = group.scheduled_date || group.generation_week;
     return raw ? new Intl.DateTimeFormat('es-AR', {dateStyle:'long', timeZone:'UTC'}).format(new Date(`${raw}T00:00:00Z`)) : 'Sin fecha';
   }
+  function renderHistorico(historicos) {
+    const panel = $('historico-panel');
+    if (!historicos.length) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    const sorted = [...historicos].sort((a, b) => (b.fecha_publicacion || '').localeCompare(a.fecha_publicacion || ''));
+    $('historico-list').innerHTML = sorted.map((story) => {
+      const title = story.text || 'Sin texto todavía';
+      const shortTitle = title.length > 28 ? title.slice(0, 25) + '…' : title;
+      return `<div class="historico-chip"><span class="thumb">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="">` : '🖼'}</span><div class="historico-chip-body"><div class="date">${escapeHtml(dayLabel(story.fecha_publicacion))}</div><div class="title">${escapeHtml(shortTitle)}</div></div></div>`;
+    }).join('');
+  }
   function renderStories() {
     // One row per date: every date is its own horizontal strip of cards ending
     // in a "+" tile, so any day can hold as many images as needed — never just one.
     const active = activeDates();
     const byDate = new Map();
     const manualGroupByDate = new Map(); // date -> its manual (non-AI) group, if any
+    const historicos = []; // stories already published — shown in the compact Histórico strip, not as full cards
     for (const group of state.groups) {
       for (const story of (group.stories || [])) {
+        if (story.estado === 'publicado') { historicos.push(story); continue; }
         if (storyIsScheduled(story, group)) continue; // confirmed date lives in Plan
         if (!story.fecha_publicacion || !active.has(story.fecha_publicacion)) continue;
         if (!byDate.has(story.fecha_publicacion)) byDate.set(story.fecha_publicacion, []);
@@ -413,6 +427,7 @@
     }
     for (const iso of active) if (!byDate.has(iso)) byDate.set(iso, []);
     const dates = [...byDate.keys()].sort();
+    renderHistorico(historicos);
     if (!dates.length) {
       $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">🖼</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Clickeá un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>🚀 Generar historias para este cliente</button></div>';
       $('week-badge').classList.add('hidden');
@@ -1253,6 +1268,8 @@
   bindFieldViewEdit('topics-view', 'topics', 'client-topics');
   $('cancel-topics').addEventListener('click',()=>{$('client-topics').value=(state.client?.topics || []).join('\n'); $('topics-count').textContent=String((state.client?.topics || []).length); exitFieldEdit('topics');});
   $('content-panel-toggle').addEventListener('click',()=>$('content-panel').classList.toggle('collapsed'));
+  $('plan-panel-toggle').addEventListener('click',()=>$('plan-panel').classList.toggle('collapsed'));
+  $('historico-panel-toggle').addEventListener('click',()=>$('historico-panel').classList.toggle('collapsed'));
   $('qa-history').addEventListener('click',openHistory);
   $('close-history').addEventListener('click',()=>$('history-dialog').close());
   $('close-history-2').addEventListener('click',()=>$('history-dialog').close());

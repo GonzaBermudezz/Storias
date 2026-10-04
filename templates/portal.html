@@ -141,7 +141,11 @@
 
     /* ── Weekly plan ── */
     .plan-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:16px;margin-top:18px}
-    .plan-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+    .plan-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;cursor:pointer}
+    .plan-head .chev{color:var(--muted);display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--surface);flex-shrink:0;transition:transform .15s,background .12s,border-color .12s,color .12s}
+    .plan-head:hover .chev{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+    .plan-panel.collapsed .chev{transform:rotate(-90deg)}
+    .plan-panel.collapsed #plan-days{display:none}
     .plan-head h2{font-size:13px;font-weight:650;display:flex;align-items:center;gap:7px}
     .plan-days{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}
     .plan-chip{flex:0 0 210px;display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--bg);cursor:pointer;transition:border-color .12s}
@@ -155,6 +159,13 @@
     .plan-chip-body .type{font-size:10px;color:var(--muted);margin-top:2px}
     .plan-chip-delete,.plan-chip-retry{flex-shrink:0;width:24px;height:24px;font-size:11px}
     .plan-chip-retry{color:var(--danger, #d14343)}
+    .historico-list{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px}
+    .historico-chip{flex:0 0 150px;display:flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:10px;padding:6px 8px;background:var(--bg)}
+    .historico-chip .thumb{width:24px;height:24px;border-radius:6px;overflow:hidden;background:var(--surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px}
+    .historico-chip .thumb img{width:100%;height:100%;object-fit:cover}
+    .historico-chip-body{flex:1;min-width:0}
+    .historico-chip-body .date{font-size:10px;font-weight:650;color:var(--muted);text-transform:capitalize}
+    .historico-chip-body .title{font-size:10.5px;color:var(--fg);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .plan-head{gap:10px;flex-wrap:wrap}
     .cal-nav{display:flex;align-items:center;justify-content:space-between;margin:2px 0 8px}
     .cal-nav span{font-size:11.5px;font-weight:650}
@@ -411,13 +422,17 @@
           </div>
         </div>
         <div id="plan-panel" class="plan-panel hidden">
-          <div class="plan-head"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div></div>
+          <div class="plan-head" id="plan-panel-toggle"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div><span class="chev">▾</span></div>
           <div id="plan-days" class="plan-days"></div>
         </div>
         <div class="workspace">
           <div class="stories-panel">
             <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Historias generadas</span><p class="section-hint">Aprobá una historia haciendo click sobre su tarjeta. Podés editar el texto o la tipografía cuando lo necesites.</p></div><span id="week-badge" class="week-badge hidden"></span></div>
             <div id="stories" aria-live="polite">Cargando...</div>
+            <div class="panel hidden" id="historico-panel">
+              <div class="panel-head" id="historico-panel-toggle"><div><p class="eyebrow">Historial</p><h2>Historias subidas</h2></div><span class="chev">▾</span></div>
+              <div class="panel-body"><div id="historico-list" class="historico-list"></div></div>
+            </div>
           </div>
           <div class="side-col">
             <aside class="activity">
