@@ -512,14 +512,31 @@
     const activeCount = next ? (next.stories || []).length : 0;
     const rows = [];
     if (next) {
-      rows.push(`<div class="activity-item"><span class="dot">✓</span><div><div>${activeCount} historia${activeCount===1?'':'s'} lista${activeCount===1?'':'s'}</div><div class="sub">Generadas con la dirección actual</div></div></div>`);
+      // "generadas", no "listas" — este número incluye historias todavía sin
+      // aprobar (incluso con error), no solo las ya resueltas. El ✓ daba a
+      // entender que ya estaban aprobadas.
+      rows.push(`<div class="activity-item"><span class="dot">🖼</span><div><div>${activeCount} historia${activeCount===1?'':'s'} generada${activeCount===1?'':'s'}</div><div class="sub">Generadas con la dirección actual</div></div></div>`);
     } else {
       rows.push(`<div class="activity-item"><span class="dot">–</span><div><div>Sin historias programadas</div><div class="sub">Todavía no se generó contenido para este cliente</div></div></div>`);
     }
     if (state.driveCount !== null && state.driveCount !== undefined) {
       rows.push(`<div class="activity-item"><span class="dot">📁</span><div><div>${state.driveCount} imagen${state.driveCount===1?'':'es'} disponible${state.driveCount===1?'':'s'} en Drive</div><div class="sub">De la carpeta del cliente</div></div></div>`);
     }
-    if (next) rows.push(`<div class="activity-item"><span class="dot">📅</span><div><div>Próxima publicación: ${escapeHtml(groupDate(next))}${next.scheduled_time ? ' · ' + next.scheduled_time.slice(0,5) + 'hs' : ''}</div><div class="sub">Según el plan generado</div></div></div>`);
+    // Solo mostrar esto si hay una historia REALMENTE agendada en algún lado —
+    // antes aparecía con cualquier lote recién generado sin agendar nada,
+    // porque activeGroup() cae de vuelta a state.groups[0] igual. planItemsByDate
+    // ya filtra por storyIsScheduled (y excluye publicadas), así que es la
+    // fuente correcta de "qué hay realmente agendado" — y de paso, al recorrer
+    // todos los grupos en vez de solo `next`, muestra la fecha agendada más
+    // próxima de verdad, no la del primer grupo de la lista.
+    const scheduledDates = [...planItemsByDate().keys()].sort();
+    if (scheduledDates.length) {
+      const nextDate = scheduledDates[0];
+      const dayStories = planItemsByDate().get(nextDate).stories;
+      const first = [...dayStories].sort((a, b) => a.order - b.order)[0];
+      const hora = first?.hora_publicacion ? ' · ' + String(first.hora_publicacion).slice(0, 5) + 'hs' : '';
+      rows.push(`<div class="activity-item"><span class="dot">📅</span><div><div>Próxima publicación: ${escapeHtml(dayLabel(nextDate))}${hora}</div><div class="sub">Según el plan generado</div></div></div>`);
+    }
     $('activity-list').innerHTML = rows.join('');
     $('activity-summary').innerHTML = state.client.generation_error
       ? `<div class="status-card warn"><span>⚠️</span><div><strong>Necesita atención</strong><p>${escapeHtml(state.client.generation_error)}</p></div></div>`
