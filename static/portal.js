@@ -336,11 +336,11 @@
   }
   function updateContactLinks() {
     const ig = instagramHref(state.client?.instagram_profile_url);
-    $('client-instagram-open').href = ig || '#';
-    $('client-instagram-open').classList.toggle('hidden', !ig);
+    $('qa-instagram').href = ig || '#';
+    $('qa-instagram').classList.toggle('hidden', !ig);
     const wa = whatsappHref(state.client?.whatsapp_contact);
-    $('client-whatsapp-open').href = wa || '#';
-    $('client-whatsapp-open').classList.toggle('hidden', !wa);
+    $('qa-whatsapp').href = wa || '#';
+    $('qa-whatsapp').classList.toggle('hidden', !wa);
     const email = state.client?.contact_email;
     $('client-email-open').href = email ? `mailto:${encodeURIComponent(email)}` : '#';
     $('client-email-open').classList.toggle('hidden', !email);
