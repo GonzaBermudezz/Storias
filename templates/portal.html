@@ -21,7 +21,7 @@
     .nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font-size:13px;color:var(--fg);cursor:pointer;text-decoration:none}
     .nav-item.active{background:var(--nav-active-bg);color:var(--nav-active-fg);font-weight:650}
     .nav-item.disabled{color:var(--muted);cursor:default}
-    .nav-item .icon{width:16px;text-align:center;font-size:13px}
+    .nav-item .icon{width:16px;display:inline-flex;align-items:center;justify-content:center}
     .nav-divider{height:1px;background:var(--border);margin:6px 14px}
     .section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:var(--muted)}
     .section-label-row{padding:12px 14px 6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -78,7 +78,7 @@
     .spinner{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
     .empty-state{padding:56px 24px;text-align:center}
-    .empty-state-icon{display:block;font-size:34px;margin-bottom:12px;opacity:.7}
+    .empty-state-icon{display:block;margin-bottom:12px;color:var(--muted)}
     .empty-state-text{color:var(--fg);font-size:14px;font-weight:600;margin:0 0 4px}
     .empty-state-hint{color:var(--muted);font-size:13px;margin:0 0 18px}
 
@@ -158,7 +158,7 @@
     .plan-days .empty{flex:1 1 100%;padding:18px 20px}
     .plan-chip{flex:0 0 210px;display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--bg);cursor:pointer;transition:border-color .12s}
     .plan-chip:hover{border-color:var(--accent)}
-    .plan-chip .grip{color:var(--muted);font-size:13px;flex-shrink:0}
+    .plan-chip .grip{color:var(--muted);flex-shrink:0;display:inline-flex}
     .plan-chip .thumb{width:34px;height:34px;border-radius:8px;overflow:hidden;background:var(--surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px}
     .plan-chip .thumb img{width:100%;height:100%;object-fit:cover}
     .plan-chip-body{flex:1;min-width:0}
@@ -216,7 +216,7 @@
     .section-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
     .section-title{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
     .week-badge{font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:4px 11px}
-    .badge{font-size:10px;padding:3px 9px;border-radius:99px;background:var(--success-soft);color:var(--success);font-weight:650}
+    .badge{font-size:10px;padding:3px 9px;border-radius:99px;background:var(--success-soft);color:var(--success);font-weight:650;display:inline-flex;align-items:center;gap:4px}
     .schedule-btn{border:0;cursor:pointer;background:var(--accent-soft);color:var(--accent)}
     .schedule-btn:hover{background:var(--accent);color:#fff}
     .approve-all-btn{border:0;cursor:pointer;background:var(--success-soft);color:var(--success)}
@@ -245,7 +245,7 @@
     .approved-badge{position:absolute;bottom:7px;right:7px;width:20px;height:20px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
     .story-actions{position:absolute;top:7px;right:7px;display:flex;gap:4px;opacity:0;transition:opacity .12s}
     .story:hover .story-actions{opacity:1}
-    .icon-btn{width:26px;height:26px;border:0;border-radius:7px;background:rgba(0,0,0,.72);color:white;cursor:pointer;transition:background .12s}
+    .icon-btn{width:26px;height:26px;border:0;border-radius:7px;background:rgba(0,0,0,.72);color:white;cursor:pointer;transition:background .12s;display:inline-grid;place-items:center;padding:0}
     .icon-btn:hover{background:var(--accent)}
     .story.add-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);background:var(--bg);color:var(--muted);cursor:pointer;box-shadow:none}
     .story.add-placeholder:hover{border-color:var(--accent);color:var(--accent)}
@@ -291,7 +291,7 @@
     .ig-preview-close{position:absolute;top:8px;right:8px;z-index:3;width:26px;height:26px;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:15px;line-height:1}
     .ig-preview-close:hover{background:rgba(0,0,0,.8)}
     .ig-preview-actions{position:absolute;top:8px;right:42px;z-index:3;display:flex;gap:6px}
-    .ig-preview-actions button{width:26px;height:26px;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:13px;line-height:1}
+    .ig-preview-actions button{width:26px;height:26px;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:13px;line-height:1;display:inline-grid;place-items:center;padding:0}
     .ig-preview-actions button:hover{background:rgba(0,0,0,.8)}
     dialog::backdrop{background:rgba(28,20,16,.45)}
     .modal-head{padding:16px 19px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
@@ -318,6 +318,10 @@
 
     @media(max-width:900px){.workspace{grid-template-columns:1fr}.side-col{position:static}}
     @media(max-width:800px){.sidebar{width:188px}.editor-grid{flex-direction:column}}
+    [data-icon]{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+    .ic{display:block;flex-shrink:0}
+    .plan-chip .thumb,.historico-chip .thumb{color:var(--muted)}
+
     /* ── Rediseño: violeta sobre claro (a46) ── */
     :root{--bg:#F6F6FB;--surface:#FFFFFF;--surface-2:#FFFFFF;--border:#E6E6F0;--fg:#16162C;--muted:#6C6C84;--accent:#6D5EF5;--accent-strong:#5646E0;--accent-soft:#EFEDFF;--ok:#2F6BFF;--ok-soft:#EAF0FF;--nav-active-bg:#EFEDFF;--nav-active-fg:#5646E0;--shadow:0 1px 2px rgba(22,22,44,.04),0 10px 28px -16px rgba(22,22,44,.14);--radius:16px}
     body{background:var(--bg)}
@@ -448,9 +452,9 @@
   <aside class="sidebar">
     <div class="logo-row"><div class="logo"><span class="logo-icon"><span></span><span></span><span></span><span></span></span>Storias</div><div class="tagline">IA para historias con propósito</div></div>
     <nav class="main-nav">
-      <span class="nav-item" id="nav-home"><span class="icon">🏠</span>Inicio</span>
-      <span class="nav-item active" id="nav-clients"><span class="icon">👥</span>Mis clientes</span>
-      <span class="nav-item disabled hidden" title="Próximamente"><span class="icon">⚙️</span>Ajustes</span>
+      <span class="nav-item" id="nav-home"><span class="icon" data-icon="house" data-size="16"></span>Inicio</span>
+      <span class="nav-item active" id="nav-clients"><span class="icon" data-icon="users" data-size="16"></span>Mis clientes</span>
+      <span class="nav-item disabled hidden" title="Próximamente"><span class="icon" data-icon="settings" data-size="16"></span>Ajustes</span>
     </nav>
     <div class="nav-divider"></div>
     <div class="section-label-row"><span class="section-label">Clientes</span><button id="add-clients-bulk" class="btn-add hidden" title="Alta masiva de clientes" aria-label="Alta masiva de clientes">+ Clientes</button></div>
@@ -475,7 +479,7 @@
         <a id="drive-link" class="btn hidden" target="_blank" rel="noopener noreferrer"><svg width="15" height="15" viewBox="0 0 24 24" fill="#4285F4" aria-hidden="true"><path d="M12.01 1.485c-2.082 0-3.754.02-3.743.047.01.02 1.708 3.001 3.774 6.62l3.76 6.574h3.76c2.081 0 3.753-.02 3.742-.047-.005-.02-1.708-3.001-3.775-6.62l-3.76-6.574zm-4.76 1.73a789.828 789.861 0 0 0-3.63 6.319L0 15.868l1.89 3.298 1.885 3.297 3.62-6.335 3.618-6.33-1.88-3.287C8.1 4.704 7.255 3.22 7.25 3.214zm2.259 12.653-.203.348c-.114.198-.96 1.672-1.88 3.287a423.93 423.948 0 0 1-1.698 2.97c-.01.026 3.24.042 7.222.042h7.244l1.796-3.157c.992-1.734 1.85-3.23 1.906-3.323l.104-.167h-7.249z"/></svg> Abrir Drive</a>
         <a id="qa-instagram" class="qa-icon-btn hidden" target="_blank" rel="noopener noreferrer" title="Abrir Instagram" aria-label="Abrir Instagram"><svg width="17" height="17" viewBox="0 0 24 24" fill="#FF0069" aria-hidden="true"><path d="M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077"/></svg></a>
         <a id="qa-whatsapp" class="qa-icon-btn hidden" target="_blank" rel="noopener noreferrer" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"><svg width="17" height="17" viewBox="0 0 24 24" fill="#25D366" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg></a>
-        <span class="bell hidden" title="Notificaciones (próximamente)">🔔</span>
+        <span class="bell hidden" title="Notificaciones (próximamente)" data-icon="bell" data-size="18"></span>
         <a class="logout" href="/logout">Salir</a>
       </div>
     </header>
@@ -513,7 +517,7 @@
           <button id="open-ritmo-hero" class="btn primary">Generar historias</button>
         </div>
         <div class="panel" id="content-panel">
-          <div class="panel-head" id="content-panel-toggle"><div><p class="eyebrow">Prompt del cliente</p><h2>Dirección de contenido</h2></div><span class="chev">▾</span></div>
+          <div class="panel-head" id="content-panel-toggle"><div><p class="eyebrow">Prompt del cliente</p><h2>Dirección de contenido</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
           <div class="panel-body">
             <div class="editor-grid">
               <div class="field" id="description-field">
@@ -553,7 +557,7 @@
           </div>
         </div>
         <div id="plan-panel" class="plan-panel hidden">
-          <div class="plan-head" id="plan-panel-toggle"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div><span class="chev">▾</span></div>
+          <div class="plan-head" id="plan-panel-toggle"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
           <div id="plan-days" class="plan-days"></div>
         </div>
         <div class="workspace">
@@ -561,13 +565,13 @@
             <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Historias generadas</span><p class="section-hint">Aprobá una historia haciendo click sobre su tarjeta. Podés editar el texto o la tipografía cuando lo necesites.</p></div><span id="week-badge" class="week-badge hidden"></span></div>
             <div id="stories" aria-live="polite"><div class="loading-state"><span class="spinner"></span><p>Cargando...</p></div></div>
             <div class="panel hidden" id="historico-panel">
-              <div class="panel-head" id="historico-panel-toggle"><div><p class="eyebrow">Historial</p><h2>Historias subidas</h2></div><span class="chev">▾</span></div>
+              <div class="panel-head" id="historico-panel-toggle"><div><p class="eyebrow">Historial</p><h2>Historias subidas</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
               <div class="panel-body"><div id="historico-list" class="historico-list"></div></div>
             </div>
           </div>
           <div class="side-col">
             <aside class="activity">
-              <h3>📅 Calendario</h3>
+              <h3><span data-icon="calendar" data-size="16"></span>Calendario</h3>
               <p class="hint">Clickeá un día para sumar una historia a mano. Los puntitos marcan lo ya planificado.</p>
               <div class="cal-nav"><button id="cal-prev" class="icon-btn" aria-label="Mes anterior">‹</button><span id="cal-month-label"></span><button id="cal-next" class="icon-btn" aria-label="Mes siguiente">›</button></div>
               <div class="cal-weekday-head"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
@@ -582,9 +586,9 @@
             <aside class="activity">
               <h3>Acciones rápidas</h3>
               <div class="quick-actions">
-                <button id="qa-history" class="btn">🕓 Ver historial</button>
-                <button id="qa-focus" class="btn">✎ Editar dirección de contenido</button>
-                <button id="qa-settings" class="btn">⚙ Ajustes del cliente</button>
+                <button id="qa-history" class="btn"><span data-icon="clock" data-size="15"></span>Ver historial</button>
+                <button id="qa-focus" class="btn"><span data-icon="pencil" data-size="15"></span>Editar dirección de contenido</button>
+                <button id="qa-settings" class="btn"><span data-icon="settings" data-size="15"></span>Ajustes del cliente</button>
               </div>
             </aside>
           </div>
@@ -623,7 +627,7 @@
     <div class="team-field">
       <label for="client-email">Mail de contacto</label>
       <input type="email" id="client-email" placeholder="contacto@cliente.com">
-      <a id="client-email-open" class="btn hidden">✉️ Enviar mail</a>
+      <a id="client-email-open" class="btn hidden"><span data-icon="mail" data-size="15"></span>Enviar mail</a>
     </div>
   </div><div class="modal-foot"><button id="close-settings-2" class="btn">Cerrar</button></div></dialog>
   <dialog id="ritmo-dialog"><div class="modal-head"><strong>Días y horarios de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días y definí cuántas de las 4 historias se publican cada día.</p><div id="ritmo-chips" class="ritmo-chips"></div><div id="ritmo-days-detail" class="ritmo-days-detail"></div><p id="ritmo-count-total" class="hint"></p><p id="ritmo-detail-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p><button id="save-ritmo-detail" class="btn">Guardar días y horarios</button><p id="ritmo-generation-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button><button id="generate-weekly" class="btn primary">Generar historias para la semana que viene</button></div></dialog>
@@ -642,8 +646,8 @@
     <div class="ig-preview-frame">
       <div class="ig-preview-bars" id="ig-preview-bars"></div>
       <div class="ig-preview-actions">
-        <button id="ig-preview-edit" aria-label="Editar esta historia">✎</button>
-        <button id="ig-preview-delete" aria-label="Eliminar esta historia">🗑</button>
+        <button id="ig-preview-edit" aria-label="Editar esta historia"><span data-icon="pencil" data-size="14"></span></button>
+        <button id="ig-preview-delete" aria-label="Eliminar esta historia"><span data-icon="trash" data-size="14"></span></button>
       </div>
       <button id="ig-preview-close" class="ig-preview-close" aria-label="Cerrar">×</button>
       <img id="ig-preview-img" src="" alt="Vista previa de la historia">

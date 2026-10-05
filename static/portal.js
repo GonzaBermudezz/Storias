@@ -5,6 +5,35 @@
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'})[char]);
+  const ICONS = {
+    house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/> <path d="M16 3.128a4 4 0 0 1 0 7.744"/> <path d="M22 21v-2a4 4 0 0 0-3-3.87"/> <circle cx="9" cy="7" r="4"/>',
+    settings: '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/> <circle cx="12" cy="12" r="3"/>',
+    bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/> <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+    'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+    calendar: '<path d="M8 2v3"/> <path d="M16 2v3"/> <rect x="3" y="3" width="18" height="18" rx="2"/> <path d="M3 9h18"/>',
+    clock: '<circle cx="12" cy="12" r="10"/> <path d="M12 6v6l4 2"/>',
+    pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/> <path d="m15 5 4 4"/>',
+    mail: '<path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/> <rect x="2" y="4" width="20" height="16" rx="2"/>',
+    trash: '<path d="M10 11v6"/> <path d="M14 11v6"/> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/> <path d="M3 6h18"/> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    'rotate-cw': '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/> <path d="M21 3v5h-5"/>',
+    image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/> <circle cx="9" cy="9" r="2"/> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+    folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/> <path d="M12 9v4"/> <path d="M12 17h.01"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/> <circle cx="12" cy="12" r="3"/>',
+    'calendar-check': '<path d="M8 2v3"/> <path d="M16 2v3"/> <rect x="3" y="3" width="18" height="18" rx="2"/> <path d="M3 9h18"/> <path d="m9 15 2 2 4-4"/>',
+    send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/> <path d="m21.854 2.147-10.94 10.939"/>',
+    'check-check': '<path d="M18 6 7 17l-5-5"/> <path d="m22 10-7.5 7.5L13 16"/>',
+    sparkles: '<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/> <path d="M20 2v4"/> <path d="M22 4h-4"/> <circle cx="4" cy="20" r="2"/>',
+    'grip-vertical': '<circle cx="9" cy="12" r="1"/> <circle cx="9" cy="5" r="1"/> <circle cx="9" cy="19" r="1"/> <circle cx="15" cy="12" r="1"/> <circle cx="15" cy="5" r="1"/> <circle cx="15" cy="19" r="1"/>',
+  };
+  function icon(name, size = 16) {
+    return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+  }
+  function hydrateIcons() {
+    document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon, Number(el.dataset.size) || 16); });
+  }
   function avatarColor(id) { let hash = 0; for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0; return hash % 12; }
   let fontFacesInjected = false;
   function injectFontFaces(fonts) {
@@ -103,7 +132,7 @@
       $('stat-aprobacion').textContent = summary.aprobacion_pct === null ? '—' : `${summary.aprobacion_pct}%`;
       $('home-idle').innerHTML = summary.clientes_sin_actividad.length
         ? `<div class="idle-list">${summary.clientes_sin_actividad.map((c) => `<span class="idle-chip neutral">${escapeHtml(c.name)}</span>`).join('')}</div>`
-        : '<div class="empty">Todos los clientes tienen historias agendadas. 🎉</div>';
+        : '<div class="empty">Todos los clientes tienen historias agendadas.</div>';
     } else {
       $('home-idle').textContent = '';
       const error = summaryResult.reason;
@@ -111,7 +140,7 @@
     }
     if (healthResult.status === 'fulfilled') {
       const health = healthResult.value;
-      $('health-generacion').innerHTML = healthChips(health.clientes_con_error_generacion, 'Sin errores de generación. 🎉', (c) => dayLabel((c.generation_error_at || '').slice(0,10)) || 'reciente');
+      $('health-generacion').innerHTML = healthChips(health.clientes_con_error_generacion, 'Sin errores de generación.', (c) => dayLabel((c.generation_error_at || '').slice(0,10)) || 'reciente');
       $('health-pool').innerHTML = healthChips(health.clientes_con_pool_bajo, 'Ningún cliente con pool bajo ahora mismo.', (c) => dayLabel((c.pool_bajo_at || '').slice(0,10)) || 'reciente');
       $('health-errores').innerHTML = healthChips(health.clientes_con_historias_en_error, 'Sin historias pendientes de reintentar.', (c) => `${c.historias_en_error} historia${c.historias_en_error===1?'':'s'}`);
     } else renderHealthUnavailable();
@@ -418,10 +447,10 @@
       const hasFailedStory = stories.some((story) => story.estado === 'error');
       const retryBlocked = stories.some((story) => story.estado === 'publicando');
       const canRetry = hasFailedStory && !retryBlocked;
-      const retryButton = canRetry ? `<button class="icon-btn plan-chip-retry" data-plan-retry="${escapeHtml(iso)}" aria-label="Reintentar publicación fallida" title="Reintentar la publicación fallida de este día">🔁</button>` : '';
+      const retryButton = canRetry ? `<button class="icon-btn plan-chip-retry" data-plan-retry="${escapeHtml(iso)}" aria-label="Reintentar publicación fallida" title="Reintentar la publicación fallida de este día">${icon('rotate-cw', 13)}</button>` : '';
       const canDelete = stories.every((story) => !storyIsLocked(story));
-      const deleteButton = canDelete ? `<button class="icon-btn plan-chip-delete" data-plan-delete="${escapeHtml(iso)}" aria-label="Eliminar toda la publicación de este día">🗑</button>` : '';
-      return `<div class="plan-chip" data-plan-date="${escapeHtml(iso)}"><span class="grip">⠿</span><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : '🖼'}</span><div class="plan-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}${hora ? ' · ' + hora : ''}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count===1?'':'s'}</div></div>${retryButton}${deleteButton}</div>`;
+      const deleteButton = canDelete ? `<button class="icon-btn plan-chip-delete" data-plan-delete="${escapeHtml(iso)}" aria-label="Eliminar toda la publicación de este día">${icon('trash', 13)}</button>` : '';
+      return `<div class="plan-chip" data-plan-date="${escapeHtml(iso)}"><span class="grip">${icon('grip-vertical', 14)}</span><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : icon('image', 16)}</span><div class="plan-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}${hora ? ' · ' + hora : ''}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count===1?'':'s'}</div></div>${retryButton}${deleteButton}</div>`;
     }).join('');
   }
   function groupDate(group) {
@@ -467,7 +496,7 @@
       const title = stories.map((s) => s.text).find(Boolean) || 'Sin texto todavía';
       const shortTitle = title.length > 28 ? title.slice(0, 25) + '…' : title;
       const count = stories.length;
-      return `<div class="historico-chip" data-historico-date="${escapeHtml(iso)}"><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : '🖼'}</span><div class="historico-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count === 1 ? '' : 's'}</div></div></div>`;
+      return `<div class="historico-chip" data-historico-date="${escapeHtml(iso)}"><span class="thumb">${first.image_url ? `<img src="${escapeHtml(first.image_url)}" alt="">` : icon('image', 14)}</span><div class="historico-chip-body"><div class="date">${escapeHtml(dayLabel(iso))}</div><div class="title">${escapeHtml(shortTitle)}</div><div class="type">${count} historia${count === 1 ? '' : 's'}</div></div></div>`;
     }).join('');
   }
   function renderStories() {
@@ -490,7 +519,7 @@
     const dates = [...byDate.keys()].sort();
     renderHistorico(historicoItemsByDate());
     if (!dates.length) {
-      $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">🖼</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Clickeá un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>🚀 Generar historias para este cliente</button></div>';
+      $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">' + icon('image', 34) + '</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Clickeá un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>' + icon('sparkles', 14) + 'Generar historias para este cliente</button></div>';
       $('week-badge').classList.add('hidden');
       return;
     }
@@ -525,9 +554,9 @@
       const publishNowBlocked = stories.some((story) => story.estado === 'publicando');
       const readyToPublishNow = retryableStories.length > 0 && !publishNowBlocked && retryableStories.every((story) => story.aprobado);
       const unapprovedActionable = actionableStories.filter((story) => !story.aprobado);
-      const approveAllBtn = unapprovedActionable.length > 1 ? `<button class="badge approve-all-btn" data-approve-all-date="${escapeHtml(iso)}">✓ Aprobar todas (${unapprovedActionable.length})</button>` : '';
-      const scheduleBtn = readyToSchedule ? `<button class="badge schedule-btn" data-schedule-date="${escapeHtml(iso)}">📅 Agendar</button>` : '';
-      const publishNowBtn = readyToPublishNow ? `<button class="badge publish-now-btn" data-publish-now-date="${escapeHtml(iso)}">📤 Publicar ahora</button>` : '';
+      const approveAllBtn = unapprovedActionable.length > 1 ? `<button class="badge approve-all-btn" data-approve-all-date="${escapeHtml(iso)}">${icon('check-check', 12)}Aprobar todas (${unapprovedActionable.length})</button>` : '';
+      const scheduleBtn = readyToSchedule ? `<button class="badge schedule-btn" data-schedule-date="${escapeHtml(iso)}">${icon('calendar-check', 12)}Agendar</button>` : '';
+      const publishNowBtn = readyToPublishNow ? `<button class="badge publish-now-btn" data-publish-now-date="${escapeHtml(iso)}">${icon('send', 12)}Publicar ahora</button>` : '';
       const dayLocked = stories.some((story) => storyIsLocked(story));
       const timeSource = actionableStories[0] || stories[0];
       const timeValue = timeSource?.hora_publicacion ? String(timeSource.hora_publicacion).slice(0,5) : '09:00';
@@ -546,12 +575,12 @@
       // "generadas", no "listas" — este número incluye historias todavía sin
       // aprobar (incluso con error), no solo las ya resueltas. El ✓ daba a
       // entender que ya estaban aprobadas.
-      rows.push(`<div class="activity-item"><span class="dot">🖼</span><div><div>${activeCount} historia${activeCount===1?'':'s'} generada${activeCount===1?'':'s'}</div><div class="sub">Generadas con la dirección actual</div></div></div>`);
+      rows.push(`<div class="activity-item"><span class="dot">${icon('image', 12)}</span><div><div>${activeCount} historia${activeCount===1?'':'s'} generada${activeCount===1?'':'s'}</div><div class="sub">Generadas con la dirección actual</div></div></div>`);
     } else {
       rows.push(`<div class="activity-item"><span class="dot">–</span><div><div>Sin historias programadas</div><div class="sub">Todavía no se generó contenido para este cliente</div></div></div>`);
     }
     if (state.driveCount !== null && state.driveCount !== undefined) {
-      rows.push(`<div class="activity-item"><span class="dot">📁</span><div><div>${state.driveCount} imagen${state.driveCount===1?'':'es'} disponible${state.driveCount===1?'':'s'} en Drive</div><div class="sub">De la carpeta del cliente</div></div></div>`);
+      rows.push(`<div class="activity-item"><span class="dot">${icon('folder', 12)}</span><div><div>${state.driveCount} imagen${state.driveCount===1?'':'es'} disponible${state.driveCount===1?'':'s'} en Drive</div><div class="sub">De la carpeta del cliente</div></div></div>`);
     }
     // Solo mostrar esto si hay una historia REALMENTE agendada en algún lado —
     // antes aparecía con cualquier lote recién generado sin agendar nada,
@@ -566,21 +595,21 @@
       const dayStories = planItemsByDate().get(nextDate).stories;
       const first = [...dayStories].sort((a, b) => a.order - b.order)[0];
       const hora = first?.hora_publicacion ? ' · ' + String(first.hora_publicacion).slice(0, 5) + 'hs' : '';
-      rows.push(`<div class="activity-item"><span class="dot">📅</span><div><div>Próxima publicación: ${escapeHtml(dayLabel(nextDate))}${hora}</div><div class="sub">Según el plan generado</div></div></div>`);
+      rows.push(`<div class="activity-item"><span class="dot">${icon('calendar', 12)}</span><div><div>Próxima publicación: ${escapeHtml(dayLabel(nextDate))}${hora}</div><div class="sub">Según el plan generado</div></div></div>`);
     }
     $('activity-list').innerHTML = rows.join('');
     $('activity-summary').innerHTML = state.client.generation_error
-      ? `<div class="status-card warn"><span>⚠️</span><div><strong>Necesita atención</strong><p>${escapeHtml(state.client.generation_error)}</p></div></div>`
-      : `<div class="status-card ok"><span>✓</span><div><strong>Todo en orden</strong><p>No hay errores de generación pendientes.</p></div></div>`;
+      ? `<div class="status-card warn"><span>${icon('triangle-alert', 16)}</span><div><strong>Necesita atención</strong><p>${escapeHtml(state.client.generation_error)}</p></div></div>`
+      : `<div class="status-card ok"><span>${icon('check', 16)}</span><div><strong>Todo en orden</strong><p>No hay errores de generación pendientes.</p></div></div>`;
   }
   function storyCard(story, index, groupId, batchReorderable = true) {
     const dateBadge = story.fecha_publicacion ? `<span class="story-date">${escapeHtml(dayLabel(story.fecha_publicacion))}</span>` : '';
     const approvedClass = story.aprobado ? ' approved' : '';
-    const approvedBadge = story.aprobado ? '<span class="approved-badge" title="Aprobada">✓</span>' : '';
+    const approvedBadge = story.aprobado ? '<span class="approved-badge" title="Aprobada">' + icon('check', 12) + '</span>' : '';
     const locked = storyIsLocked(story);
     const reorderable = batchReorderable && !locked;
-    const mutationActions = locked ? '' : '<button class="icon-btn" data-action="edit" aria-label="Editar">✎</button><button class="icon-btn" data-action="delete" aria-label="Eliminar">×</button>';
-    return `<article class="story${approvedClass}${locked ? ' read-only' : ''}" draggable="${reorderable ? 'true' : 'false'}" data-reorderable="${reorderable ? 'true' : 'false'}" data-story-id="${escapeHtml(story.id)}" data-story-group-id="${escapeHtml(groupId)}">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="Historia ${index+1}">` : ''}<span class="story-num">${index+1}</span>${dateBadge}${approvedBadge}<div class="story-actions"><button class="icon-btn" data-action="preview" aria-label="Ver en grande">👁</button>${mutationActions}</div><div class="story-overlay"><p class="story-text">${escapeHtml(story.text || 'Sin texto todavía')}</p></div></article>`;
+    const mutationActions = locked ? '' : '<button class="icon-btn" data-action="edit" aria-label="Editar">' + icon('pencil', 13) + '</button><button class="icon-btn" data-action="delete" aria-label="Eliminar">×</button>';
+    return `<article class="story${approvedClass}${locked ? ' read-only' : ''}" draggable="${reorderable ? 'true' : 'false'}" data-reorderable="${reorderable ? 'true' : 'false'}" data-story-id="${escapeHtml(story.id)}" data-story-group-id="${escapeHtml(groupId)}">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="Historia ${index+1}">` : ''}<span class="story-num">${index+1}</span>${dateBadge}${approvedBadge}<div class="story-actions"><button class="icon-btn" data-action="preview" aria-label="Ver en grande">${icon('eye', 14)}</button>${mutationActions}</div><div class="story-overlay"><p class="story-text">${escapeHtml(story.text || 'Sin texto todavía')}</p></div></article>`;
   }
   async function saveClientField(field, buttonId) {
     const name = field === 'weekly_focus' ? 'focus' : field === 'topics' ? 'topics' : 'description';
@@ -1227,7 +1256,7 @@
     // an AI-thread story, whose text is already carefully written per-slot.
     const isManual = !!group && !group.generation_week;
     $('generate-ai-text').classList.toggle('hidden', !isManual);
-    $('generate-ai-text').textContent = story.text ? '🔄 Generar otra vez' : 'Generar con IA';
+    $('generate-ai-text').textContent = story.text ? 'Generar otra vez' : 'Generar con IA';
     // Changing the font recomposes the existing text onto the image, so it
     // only makes sense once the story actually has text saved.
     $('story-font').value = story.font_choice || '';
@@ -1262,7 +1291,7 @@
       $('story-text').value = updated.text || '';
       $('story-edit-img').src = updated.image_url || '';
       $('story-font').value = updated.font_choice || ''; $('story-font').disabled = false;
-      button.textContent = '🔄 Generar otra vez';
+      button.textContent = 'Generar otra vez';
       renderStories(); renderPlan();
       showMessage('Texto generado con IA.');
     } catch(error) {
@@ -1542,5 +1571,6 @@
   $('ig-preview-edit').addEventListener('click',editPreviewStory);
   $('ig-preview-delete').addEventListener('click',deletePreviewStory);
   $('toast-close').addEventListener('click',clearMessage);
+  hydrateIcons();
   loadMeAndOptions().finally(loadClients);
 })();
