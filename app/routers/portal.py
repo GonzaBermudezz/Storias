@@ -228,16 +228,20 @@ def list_clients(employee: EmployeeDep, solo_mios: bool = False):
     clients = query.order("name").execute().data or []
     if clients:
         ids = [c["id"] for c in clients]
-        rows = db.table("stories").select("client_id").in_("client_id", ids).neq(
+        rows = db.table("stories").select("client_id,aprobado,estado").in_("client_id", ids).neq(
             "estado", "cancelada"
         ).neq(
             "estado", "generando"
         ).gte("fecha_publicacion", date.today().isoformat()).execute().data or []
         counts: dict[str, int] = {}
+        pending: dict[str, int] = {}
         for row in rows:
             counts[row["client_id"]] = counts.get(row["client_id"], 0) + 1
+            if not row.get("aprobado") and row.get("estado") not in ("publicando", "publicado"):
+                pending[row["client_id"]] = pending.get(row["client_id"], 0) + 1
         for c in clients:
             c["stories_count"] = counts.get(c["id"], 0)
+            c["pending_count"] = pending.get(c["id"], 0)
     return clients
 
 

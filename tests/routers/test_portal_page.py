@@ -50,7 +50,7 @@ def test_portal_frontend_uses_real_api_without_prototype_data():
     assert "clientSearch: ''" in source
     assert "toLocaleLowerCase('es')" in source
     assert "Ningún cliente coincide con la búsqueda." in source
-    assert "const sorted = [...visibleClients].sort" in source
+    assert "const STATUS_ORDER = {error: 0, pending: 1, ready: 2, idle: 3}" in source
     assert "$('client-search').addEventListener('input'" in source
     assert "CUAN Arquitectura" not in source
     assert "Panadería Dora" not in source

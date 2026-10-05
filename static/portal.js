@@ -233,7 +233,7 @@
   async function loadClients() {
     clearMessage(); $('client-list').textContent = 'Cargando...';
     const listVersion = ++state.clientListVersion;
-    const suffix = $('only-mine').checked ? '?solo_mios=true' : '';
+    const suffix = $('client-filter').dataset.value === 'mine' ? '?solo_mios=true' : '';
     try {
       const clients = await api(`/portal/clientes${suffix}`);
       if (listVersion !== state.clientListVersion) return;
@@ -249,17 +249,26 @@
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
   }
+  function clientStatus(client) {
+    if (client.generation_error) return {key: 'error', label: 'Error de generación'};
+    const count = client.stories_count ?? 0, pending = client.pending_count ?? 0;
+    if (pending > 0) return {key: 'pending', label: `${pending} sin aprobar`};
+    if (count > 0) return {key: 'ready', label: `${count} historia${count === 1 ? '' : 's'} lista${count === 1 ? '' : 's'}`};
+    return {key: 'idle', label: 'Sin historias'};
+  }
+  const STATUS_ORDER = {error: 0, pending: 1, ready: 2, idle: 3};
   function renderClients() {
+    $('client-count').textContent = 'Clientes';
     if (!state.clients.length) { $('client-list').textContent = 'No hay clientes disponibles.'; return; }
     const query = (state.clientSearch || '').trim().toLocaleLowerCase('es');
     const visibleClients = query ? state.clients.filter((client) => client.name.toLocaleLowerCase('es').includes(query)) : state.clients;
+    $('client-count').textContent = `${visibleClients.length} cliente${visibleClients.length === 1 ? '' : 's'}`;
     if (!visibleClients.length) { $('client-list').textContent = 'Ningún cliente coincide con la búsqueda.'; return; }
-    const sorted = [...visibleClients].sort((a, b) => a.name.localeCompare(b.name, 'es'));
-    $('client-list').innerHTML = sorted.map((client) => {
+    const sorted = visibleClients.map((client) => ({client, status: clientStatus(client)}))
+      .sort((a, b) => STATUS_ORDER[a.status.key] - STATUS_ORDER[b.status.key] || a.client.name.localeCompare(b.client.name, 'es'));
+    $('client-list').innerHTML = sorted.map(({client, status}) => {
       const active = state.client?.id === client.id;
-      const count = client.stories_count ?? 0;
-      const countLabel = `${count} historia${count === 1 ? '' : 's'}${active ? ' · Esta semana' : ''}`;
-      return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}"><span class="avatar${client.avatar_url ? ' has-avatar' : ' avatar-' + avatarColor(client.id)}">${avatarContent(client)}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count">${escapeHtml(countLabel)}</span></span></button>`;
+      return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}" title="${escapeHtml(client.name)}"><span class="avatar${client.avatar_url ? ' has-avatar' : ' avatar-' + avatarColor(client.id)}">${avatarContent(client)}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count is-${status.key}">${escapeHtml(status.label)}</span></span><span class="status-dot is-${status.key}" aria-hidden="true"></span></button>`;
     }).join('');
   }
   async function selectClient(clientId) {
@@ -1409,8 +1418,19 @@
     selectClient(chip.dataset.clientId);
   });
   $('client-list').addEventListener('click',(event)=>{const item=event.target.closest('[data-client-id]');if(item)selectClient(item.dataset.clientId);});
-  $('only-mine').addEventListener('change',loadClients);
-  $('client-search').addEventListener('input',()=>{state.clientSearch=$('client-search').value;renderClients();});
+  $('client-filter').addEventListener('click',(event)=>{
+    const btn = event.target.closest('[data-filter]');
+    if (!btn || btn.dataset.filter === $('client-filter').dataset.value) return;
+    $('client-filter').dataset.value = btn.dataset.filter;
+    $('client-filter').querySelectorAll('.seg-btn').forEach((el)=>{
+      const selected = el === btn;
+      el.classList.toggle('active', selected);
+      el.setAttribute('aria-pressed', String(selected));
+    });
+    loadClients();
+  });
+  $('client-search').addEventListener('input',()=>{state.clientSearch=$('client-search').value;$('client-search-clear').classList.toggle('hidden',!$('client-search').value);renderClients();});
+  $('client-search-clear').addEventListener('click',()=>{$('client-search').value='';state.clientSearch='';$('client-search-clear').classList.add('hidden');renderClients();$('client-search').focus();});
   $('save-description').addEventListener('click',()=>saveClientField('business_description','save-description'));
   $('save-focus').addEventListener('click',()=>saveClientField('weekly_focus','save-focus'));
   $('save-topics').addEventListener('click',()=>saveClientField('topics','save-topics'));

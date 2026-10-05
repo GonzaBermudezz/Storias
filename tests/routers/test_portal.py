@@ -1362,6 +1362,26 @@ def test_list_clients_defaults_to_entire_agency(monkeypatch, client):
     rows = response.json()
     assert [row["id"] for row in rows] == ["c1", "c2"]
     assert [row["stories_count"] for row in rows] == [2, 0]
+    assert [row["pending_count"] for row in rows] == [2, 0]
+
+
+def test_list_clients_reports_pending_count_for_upcoming_stories(monkeypatch, client):
+    db = DB([
+        [{"id": "c1", "agency_id": "agency-1"}, {"id": "c2", "agency_id": "agency-1"}],
+        [
+            {"client_id": "c1", "aprobado": True, "estado": "pendiente"},
+            {"client_id": "c1", "aprobado": False, "estado": "pendiente"},
+        ],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": "c1", "agency_id": "agency-1", "stories_count": 2, "pending_count": 1},
+        {"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0},
+    ]
 
 
 def test_list_clients_can_filter_to_employee_assignments(monkeypatch, client):
@@ -1369,7 +1389,7 @@ def test_list_clients_can_filter_to_employee_assignments(monkeypatch, client):
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.get("/portal/clientes?solo_mios=true")
     assert response.status_code == 200
-    assert response.json() == [{"id": "c2", "agency_id": "agency-1", "stories_count": 0}]
+    assert response.json() == [{"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0}]
 
 
 def test_missing_client_is_404_not_a_crash_when_postgrest_returns_none(monkeypatch, client):
