@@ -1571,6 +1571,12 @@
   $('ig-preview-edit').addEventListener('click',editPreviewStory);
   $('ig-preview-delete').addEventListener('click',deletePreviewStory);
   $('toast-close').addEventListener('click',clearMessage);
+  function setSidebarCollapsed(collapsed) {
+    document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
+    try { localStorage.setItem('storias.sidebarCollapsed', collapsed ? '1' : '0'); } catch (_) {}
+  }
+  $('sidebar-close').addEventListener('click', () => setSidebarCollapsed(true));
+  $('sidebar-open').addEventListener('click', () => setSidebarCollapsed(false));
   hydrateIcons();
   loadMeAndOptions().finally(loadClients);
 })();

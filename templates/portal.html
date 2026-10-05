@@ -445,12 +445,30 @@
 
     @media(max-width:900px){.workspace{grid-template-columns:1fr}.side-col{position:static;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.client-hero{align-items:flex-start}.activity{height:100%}}
     @media(max-width:700px){.content{padding:20px 16px}.topbar{padding:10px 16px}.client-hero{align-items:stretch;flex-direction:column}.client-hero h2{font-size:23px}.side-col{grid-template-columns:1fr}.client-hero .btn{width:100%;justify-content:center}}
+
+    /* ── Menú lateral: altura completa y plegable (a48) ── */
+    .logo-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+    .sidebar{height:100vh;height:100dvh;max-height:none;overflow:hidden}
+    .sidebar>*{flex-shrink:0}
+    .sidebar>.client-list{flex:1 1 auto;min-height:0;overflow-y:auto}
+    .me-card{margin-top:0}
+    .sidebar-toggle{width:32px;height:32px;display:grid;place-items:center;flex-shrink:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--muted);cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+    .sidebar-toggle:hover{background:var(--accent-soft);color:var(--accent-strong);border-color:transparent}
+    .sidebar-open{display:none;position:fixed;top:15px;left:16px;z-index:30;box-shadow:var(--shadow)}
+    html.sidebar-collapsed .sidebar{display:none}
+    html.sidebar-collapsed .sidebar-open{display:grid}
+    html.sidebar-collapsed .topbar{padding-left:64px}
   </style>
+  <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
 </head>
 <body>
+  <button type="button" id="sidebar-open" class="sidebar-toggle sidebar-open" title="Mostrar menú" aria-label="Mostrar menú"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg></button>
   <aside class="sidebar">
-    <div class="logo-row"><div class="logo"><span class="logo-icon"><span></span><span></span><span></span><span></span></span>Storias</div><div class="tagline">IA para historias con propósito</div></div>
+    <div class="logo-row">
+      <div><div class="logo"><span class="logo-icon"><span></span><span></span><span></span><span></span></span>Storias</div><div class="tagline">Automatizá tus historias</div></div>
+      <button type="button" id="sidebar-close" class="sidebar-toggle" title="Ocultar menú" aria-label="Ocultar menú"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg></button>
+    </div>
     <nav class="main-nav">
       <span class="nav-item" id="nav-home"><span class="icon" data-icon="house" data-size="16"></span>Inicio</span>
       <span class="nav-item active" id="nav-clients"><span class="icon" data-icon="users" data-size="16"></span>Mis clientes</span>
