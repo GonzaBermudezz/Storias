@@ -241,7 +241,7 @@
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
     $('client-name').textContent = 'Cargando...'; $('stories').innerHTML = '<div class="loading-state"><span class="spinner"></span><p>Cargando...</p></div>'; $('week-badge').classList.add('hidden');
-    $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; $('header-tags').innerHTML = ''; $('drive-link').classList.add('hidden');
+    $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; updateContactLinks(); $('drive-link').classList.add('hidden');
     $('plan-panel').classList.add('hidden'); $('historico-panel').classList.add('hidden'); $('historico-list').innerHTML = ''; state.driveCount = undefined;
     try {
       const [client, groups, driveInfo] = await Promise.all([
@@ -319,10 +319,9 @@
     $('client-email').value = state.client.contact_email || '';
     updateContactLinks();
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
-    $('header-tags').innerHTML = (state.client.topics || []).slice(0, 4).map((topic) => `<span class="tag">${escapeHtml(topic)}</span>`).join('');
     const url = driveUrl(state.client.drive_folder_id);
-    if (url) { $('drive-link').href = url; $('drive-link').classList.remove('hidden'); $('qa-drive').href = url; $('qa-drive').classList.remove('hidden'); }
-    else { $('drive-link').classList.add('hidden'); $('qa-drive').classList.add('hidden'); }
+    if (url) { $('drive-link').href = url; $('drive-link').classList.remove('hidden'); }
+    else { $('drive-link').classList.add('hidden'); }
     $('prompt-preview').classList.add('hidden'); renderStories(); renderPlan(); renderActivity(); loadCalendar();
   }
   function instagramHref(value) {
@@ -402,10 +401,11 @@
     const byDate = planItemsByDate();
     const dates = [...byDate.keys()].sort();
     if (!dates.length) {
-      $('plan-range').textContent = '';
+      $('plan-range').textContent = ''; $('plan-range').classList.add('hidden');
       $('plan-days').innerHTML = '<div class="empty">No hay más publicaciones programadas todavía.</div>';
       return;
     }
+    $('plan-range').classList.remove('hidden');
     $('plan-range').textContent = dates.length === 1 ? dayLabel(dates[0]) : `${dayLabel(dates[0])} – ${dayLabel(dates[dates.length - 1])}`;
     $('plan-days').innerHTML = dates.map((iso) => {
       const entry = byDate.get(iso);
@@ -533,7 +533,7 @@
       const timeValue = timeSource?.hora_publicacion ? String(timeSource.hora_publicacion).slice(0,5) : '09:00';
       const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}"${dayLocked ? ' disabled title="La publicación de este día ya está en curso o finalizada"' : ''}>`;
       const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué van estas historias?"${dayLocked ? ' disabled' : ''}>` : '';
-      const addRow = dayLocked ? '' : `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span></div><div class="story add-placeholder add-placeholder-ai" data-generate-date="${escapeHtml(iso)}"><span class="add-icon">IA</span><span class="add-label">Generar</span></div></div>`;
+      const addRow = dayLocked ? '' : `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span><span class="add-label">Subir imagen</span></div><div class="story add-placeholder add-placeholder-ai" data-generate-date="${escapeHtml(iso)}"><span class="add-icon">IA</span><span class="add-label">Generar con IA</span></div></div>`;
       return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${approveAllBtn}${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
     }).join('');
     $('stories').innerHTML = `<section class="group">${rows}</section>`;
@@ -730,7 +730,7 @@
       const dotClasses = dotClassesByDate.get(iso);
       const pending = draftDates.has(iso) && !dotClasses;
       const dots = dotClasses ? `<span class="dots">${[...dotClasses].map((cls) => `<span class="dot ${cls}"></span>`).join('')}</span>` : '';
-      return `<div class="cal-cell${pending?' pending':''}${isPast?' past':''}" data-date="${iso}">${day}${dots}</div>`;
+      return `<div class="cal-cell${pending?' pending':''}${isPast?' past':''}${iso===today?' today':''}" data-date="${iso}">${day}${dots}</div>`;
     }).join('');
   }
   function renderRitmoChips() {
