@@ -162,6 +162,36 @@
     $('home-health').innerHTML = '<div class="home-note">El estado de salud no está disponible en este momento.</div>';
     $('home-health-pill').classList.add('hidden');
   }
+  function isoDateInTimeZone(value, timeZone = 'America/Argentina/Buenos_Aires') {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(value);
+    const datePart = (type) => parts.find((part) => part.type === type)?.value;
+    return [datePart('year'), datePart('month'), datePart('day')].join('-');
+  }
+  function nextCalendarIso(isoDate) {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+  }
+  function renderHomeUpcoming(items) {
+    const panel = $('home-upcoming-panel');
+    // Older backend without the field: keep the panel hidden instead of showing a false "nothing scheduled".
+    if (!Array.isArray(items)) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    $('home-upcoming-count').textContent = `${items.length} ${items.length === 1 ? 'publicación' : 'publicaciones'}`;
+    if (!items.length) { $('home-upcoming').innerHTML = '<div class="home-note">No hay publicaciones programadas para los próximos 7 días.</div>'; return; }
+    const todayIso = isoDateInTimeZone(new Date());
+    const tomorrowIso = nextCalendarIso(todayIso);
+    $('home-upcoming').innerHTML = items.map((item) => {
+      const dayText = item.fecha === todayIso ? 'Hoy' : item.fecha === tomorrowIso ? 'Mañana' : dayLabel(item.fecha);
+      const pending = item.total - item.aprobadas;
+      const detail = `${item.hora ? item.hora + ' hs · ' : ''}${item.total} historia${item.total === 1 ? '' : 's'}`;
+      const badge = pending === 0
+        ? '<span class="home-state is-ready">Lista</span>'
+        : `<span class="home-state is-pending">${pending} sin aprobar</span>`;
+      return `<div class="home-row" data-client-id="${escapeHtml(item.client_id)}" role="button" tabindex="0"><span class="home-day${item.fecha === todayIso ? ' is-today' : ''}">${escapeHtml(dayText)}</span><span>${homeAvatar(item.client_id, item.client_name)}</span><div class="home-row-text"><strong>${escapeHtml(item.client_name)}</strong><span>${escapeHtml(detail)}</span></div>${badge}<span class="home-row-go">${icon('chevron-right', 16)}</span></div>`;
+    }).join('');
+  }
   function renderHomeIdle(summary, problemIds) {
     // A client that already shows up in "Salud" is not repeated here.
     const idle = (summary?.clientes_sin_actividad || []).filter((client) => !problemIds.has(client.id));
@@ -179,6 +209,7 @@
     $('home-health').innerHTML = loadingMarkup('', {compact: true});
     $('home-health-pill').classList.add('hidden');
     $('home-idle-panel').classList.add('hidden');
+    $('home-upcoming-panel').classList.add('hidden');
     const [summaryResult, healthResult] = await Promise.allSettled([api('/portal/resumen'), api('/portal/salud')]);
     // Inicio can be opened twice before its first request returns, or closed
     // while it is in flight. Only the latest visible request may update it.
@@ -192,6 +223,7 @@
       setStat('stat-publicadas', summary.historias_publicadas, summary.historias_publicadas === 0);
       setStat('stat-promedio', summary.promedio_por_cliente, summary.promedio_por_cliente === 0);
       setStat('stat-aprobacion', summary.aprobacion_pct === null ? '—' : `${summary.aprobacion_pct}%`, summary.aprobacion_pct === null);
+      renderHomeUpcoming(summary.proximas_publicaciones);
     } else {
       const error = summaryResult.reason;
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
@@ -555,11 +587,7 @@
     // empleado espera ver. Las filas viejas sin published_at (publicadas antes
     // de que esta columna se empezara a llenar) caen de vuelta a fecha_publicacion.
     if (!story.published_at) return story.fecha_publicacion;
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).formatToParts(new Date(story.published_at));
-    const datePart = (type) => parts.find((part) => part.type === type)?.value;
-    return [datePart('year'), datePart('month'), datePart('day')].join('-');
+    return isoDateInTimeZone(new Date(story.published_at));
   }
   function historicoItemsByDate() {
     const byDate = new Map();

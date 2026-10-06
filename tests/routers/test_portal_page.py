@@ -67,6 +67,7 @@ def test_portal_frontend_keeps_health_dashboard_independent_and_latest_only():
     assert "Salud del sistema" in page.text
     assert 'id="home-health"' in page.text
     assert 'id="home-health-pill"' in page.text
+    assert 'id="home-upcoming-panel"' in page.text
     assert 'id="home-idle-panel"' in page.text
     assert 'id="health-generacion"' not in page.text
     assert "homeSummaryVersion: 0" in source
@@ -76,6 +77,7 @@ def test_portal_frontend_keeps_health_dashboard_independent_and_latest_only():
     assert "summaryResult.status === 'fulfilled'" in source
     assert "healthResult.status === 'fulfilled'" in source
     assert "renderHealthUnavailable()" in source
+    assert "renderHomeUpcoming(summary.proximas_publicaciones);" in source
 
 
 def test_portal_frontend_supports_variable_rhythm_and_keeps_all_pending_groups_active():

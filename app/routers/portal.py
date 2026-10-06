@@ -1,7 +1,7 @@
 """Authenticated API used by the employee portal."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import logging
 import re
 
@@ -245,6 +245,10 @@ def list_clients(employee: EmployeeDep, solo_mios: bool = False):
     return clients
 
 
+_UPCOMING_DAYS = 7
+_UPCOMING_LIMIT = 10
+
+
 @router.get("/resumen")
 def get_summary(employee: EmployeeDep):
     """Agency-wide snapshot for the Inicio tab: a publish funnel — en edición
@@ -262,14 +266,14 @@ def get_summary(employee: EmployeeDep):
         return {
             "historias_publicadas": 0, "historias_en_edicion": 0, "historias_agendadas": 0,
             "clientes_count": 0, "promedio_por_cliente": 0, "aprobacion_pct": None,
-            "clientes_sin_actividad": [],
+            "clientes_sin_actividad": [], "proximas_publicaciones": [],
         }
 
     client_ids = [c["id"] for c in clients]
     published = db.table("stories").select("id").in_("client_id", client_ids).eq(
         "estado", "publicado"
     ).execute().data or []
-    upcoming = db.table("stories").select("client_id,aprobado").in_(
+    upcoming = db.table("stories").select("client_id,aprobado,fecha_publicacion,hora_publicacion").in_(
         "client_id", client_ids
     ).neq("estado", "cancelada").neq("estado", "generando").gte(
         "fecha_publicacion", date.today().isoformat()
@@ -281,6 +285,29 @@ def get_summary(employee: EmployeeDep):
     total_upcoming = len(upcoming)
     total_agendadas = sum(1 for row in upcoming if row["aprobado"])
     total_en_edicion = total_upcoming - total_agendadas
+
+    # "Próximas publicaciones": the same upcoming rows grouped by client and
+    # day, limited to the next _UPCOMING_DAYS days and capped at _UPCOMING_LIMIT.
+    names_by_id = {c["id"]: c["name"] for c in clients}
+    horizon = (date.today() + timedelta(days=_UPCOMING_DAYS)).isoformat()
+    days: dict[tuple[str, str], dict] = {}
+    for row in upcoming:
+        fecha = row.get("fecha_publicacion")
+        if not fecha or fecha > horizon:
+            continue
+        entry = days.setdefault((row["client_id"], fecha), {
+            "client_id": row["client_id"], "client_name": names_by_id.get(row["client_id"], "?"),
+            "fecha": fecha, "hora": None, "total": 0, "aprobadas": 0,
+        })
+        entry["total"] += 1
+        entry["aprobadas"] += 1 if row["aprobado"] else 0
+        hora = (row.get("hora_publicacion") or "")[:5]
+        if hora and (entry["hora"] is None or hora < entry["hora"]):
+            entry["hora"] = hora
+    proximas = sorted(
+        days.values(),
+        key=lambda item: (item["fecha"], item["hora"] or "99:99", item["client_name"].lower()),
+    )[:_UPCOMING_LIMIT]
 
     return {
         "historias_publicadas": len(published),
@@ -294,6 +321,7 @@ def get_summary(employee: EmployeeDep):
         "clientes_sin_actividad": [
             {"id": c["id"], "name": c["name"]} for c in clients if not by_client.get(c["id"])
         ],
+        "proximas_publicaciones": proximas,
     }
 
 

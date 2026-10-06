@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -180,7 +180,7 @@ def test_summary_reports_zero_state_with_no_clients(monkeypatch, client):
     assert response.json() == {
         "historias_publicadas": 0, "historias_en_edicion": 0, "historias_agendadas": 0,
         "clientes_count": 0, "promedio_por_cliente": 0, "aprobacion_pct": None,
-        "clientes_sin_actividad": [],
+        "clientes_sin_actividad": [], "proximas_publicaciones": [],
     }
 
 
@@ -203,6 +203,62 @@ def test_summary_aggregates_published_and_upcoming_totals(monkeypatch, client):
     assert body["promedio_por_cliente"] == 1.0
     assert body["aprobacion_pct"] == 66.7
     assert body["clientes_sin_actividad"] == [{"id": "c3", "name": "Cliente Tres"}]
+
+
+def test_summary_groups_upcoming_publications_within_horizon(monkeypatch, client):
+    today = date.today()
+    clients = [
+        {"id": "a", "name": "Álamos"},
+        {"id": "b", "name": "Beta"},
+        {"id": "c", "name": "Cobre"},
+        {"id": "d", "name": "Delta"},
+    ]
+    upcoming = [
+        {"client_id": "a", "aprobado": True, "fecha_publicacion": (today + timedelta(days=1)).isoformat(), "hora_publicacion": "18:30:00"},
+        {"client_id": "a", "aprobado": False, "fecha_publicacion": (today + timedelta(days=1)).isoformat(), "hora_publicacion": "09:00:00"},
+        {"client_id": "b", "aprobado": True, "fecha_publicacion": (today + timedelta(days=1)).isoformat(), "hora_publicacion": None},
+        {"client_id": "c", "aprobado": True, "fecha_publicacion": (today + timedelta(days=2)).isoformat(), "hora_publicacion": "08:00:00"},
+        {"client_id": "d", "aprobado": True, "fecha_publicacion": (today + timedelta(days=2)).isoformat(), "hora_publicacion": "08:00:00"},
+        {"client_id": "b", "aprobado": True, "fecha_publicacion": (today + timedelta(days=8)).isoformat(), "hora_publicacion": "07:00:00"},
+    ]
+    db = DB([clients, [], upcoming])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/resumen")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["historias_agendadas"] == 5
+    assert body["historias_en_edicion"] == 1
+    assert body["proximas_publicaciones"] == [
+        {"client_id": "a", "client_name": "Álamos", "fecha": (today + timedelta(days=1)).isoformat(),
+         "hora": "09:00", "total": 2, "aprobadas": 1},
+        {"client_id": "b", "client_name": "Beta", "fecha": (today + timedelta(days=1)).isoformat(),
+         "hora": None, "total": 1, "aprobadas": 1},
+        {"client_id": "c", "client_name": "Cobre", "fecha": (today + timedelta(days=2)).isoformat(),
+         "hora": "08:00", "total": 1, "aprobadas": 1},
+        {"client_id": "d", "client_name": "Delta", "fecha": (today + timedelta(days=2)).isoformat(),
+         "hora": "08:00", "total": 1, "aprobadas": 1},
+    ]
+
+
+def test_summary_limits_upcoming_publications_to_ten_rows(monkeypatch, client):
+    today = date.today().isoformat()
+    clients = [{"id": f"c{index}", "name": f"Cliente {index:02d}"} for index in range(11)]
+    upcoming = [
+        {"client_id": client_data["id"], "aprobado": True, "fecha_publicacion": today,
+         "hora_publicacion": f"{index:02d}:00:00"}
+        for index, client_data in enumerate(clients)
+    ]
+    db = DB([clients, [], upcoming])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/resumen")
+
+    body = response.json()
+    assert body["historias_agendadas"] == 11
+    assert len(body["proximas_publicaciones"]) == 10
+    assert [item["client_id"] for item in body["proximas_publicaciones"]] == [f"c{index}" for index in range(10)]
 
 
 def test_health_reports_empty_lists_when_agency_clients_have_no_problems(monkeypatch, client):
