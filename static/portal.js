@@ -173,6 +173,7 @@
       $('story-font').innerHTML = '<option value="">Default del cliente</option>' + fontOptions;
       $('me-avatar').textContent = initials(me.name || me.email); $('me-name').textContent = me.name || me.email;
       $('me-role').textContent = me.role === 'admin' ? 'Administrador' : 'Empleado'; $('me-card').classList.remove('hidden');
+      $('me-menu-name').textContent = me.name || me.email; $('me-menu-email').textContent = me.name ? (me.email || '') : '';
       $('add-clients-bulk').classList.toggle('hidden', me.role !== 'admin');
     } catch (error) { /* non-fatal: client loading remains available */ }
   }
@@ -1594,9 +1595,28 @@
   function setSidebarCollapsed(collapsed) {
     document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
     try { localStorage.setItem('storias.sidebarCollapsed', collapsed ? '1' : '0'); } catch (_) {}
+    const label = collapsed ? 'Expandir menú' : 'Plegar menú';
+    $('sidebar-toggle').title = label; $('sidebar-toggle').setAttribute('aria-label', label);
   }
-  $('sidebar-close').addEventListener('click', () => setSidebarCollapsed(true));
-  $('sidebar-open').addEventListener('click', () => setSidebarCollapsed(false));
+  function setMobileMenu(open) { document.documentElement.classList.toggle('mobile-menu-open', open); }
+  function closeUserMenu() { $('me-menu').classList.add('hidden'); $('me-card').setAttribute('aria-expanded', 'false'); }
+  $('sidebar-toggle').addEventListener('click', () => {
+    closeUserMenu();
+    setSidebarCollapsed(!document.documentElement.classList.contains('sidebar-collapsed'));
+  });
+  $('sidebar-menu').addEventListener('click', () => setMobileMenu(true));
+  $('sidebar-scrim').addEventListener('click', () => setMobileMenu(false));
+  $('client-list').addEventListener('click', () => setMobileMenu(false));
+  $('nav-home').addEventListener('click', () => setMobileMenu(false));
+  $('nav-clients').addEventListener('click', () => setMobileMenu(false));
+  $('me-card').addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = !$('me-menu').classList.toggle('hidden');
+    $('me-card').setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', (event) => { if (!$('me-menu').contains(event.target)) closeUserMenu(); });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closeUserMenu(); setMobileMenu(false); } });
+  setSidebarCollapsed(document.documentElement.classList.contains('sidebar-collapsed'));
   hydrateIcons();
   loadMeAndOptions().finally(loadClients);
 })();
