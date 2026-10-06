@@ -116,8 +116,8 @@
   }
   async function loadHomeSummary() {
     const summaryVersion = ++state.homeSummaryVersion;
-    $('home-idle').textContent = 'Cargando...';
-    $('health-generacion').textContent = 'Cargando...'; $('health-pool').textContent = 'Cargando...'; $('health-errores').textContent = 'Cargando...';
+    $('home-idle').innerHTML = loadingMarkup('', {compact: true});
+    ['health-generacion', 'health-pool', 'health-errores'].forEach((id) => { $(id).innerHTML = loadingMarkup('', {compact: true}); });
     ['stat-edicion','stat-agendadas','stat-publicadas','stat-promedio','stat-aprobacion'].forEach((id) => { $(id).textContent = '–'; });
     const [summaryResult, healthResult] = await Promise.allSettled([api('/portal/resumen'), api('/portal/salud')]);
     // Inicio can be opened twice before its first request returns, or closed
@@ -231,8 +231,15 @@
     }
   }
 
+  function loadingMarkup(label, options = {}) {
+    const text = label ? `<p>${escapeHtml(label)}</p>` : '';
+    return `<div class="loading-state${options.compact ? ' compact' : ''}" role="status" aria-label="${escapeHtml(options.aria || label || 'Cargando')}"><span class="spinner"></span>${text}</div>`;
+  }
+  function listEmptyMarkup(title, hint, withRetry) {
+    return `<div class="list-empty"><span class="list-empty-icon">${icon('users', 18)}</span><p class="list-empty-title">${escapeHtml(title)}</p>${hint ? `<p class="list-empty-hint">${escapeHtml(hint)}</p>` : ''}${withRetry ? '<button type="button" class="btn list-empty-retry" data-client-retry>Reintentar</button>' : ''}</div>`;
+  }
   async function loadClients() {
-    clearMessage(); $('client-list').textContent = 'Cargando...';
+    clearMessage(); $('client-list').innerHTML = loadingMarkup('', {compact: true, aria: 'Cargando clientes'});
     const listVersion = ++state.clientListVersion;
     const suffix = $('client-filter').dataset.value === 'mine' ? '?solo_mios=true' : '';
     try {
@@ -246,7 +253,9 @@
       }
     } catch (error) {
       if (listVersion !== state.clientListVersion) return;
-      $('client-list').textContent = 'No se pudieron cargar los clientes.';
+      $('client-list').innerHTML = listEmptyMarkup('No se pudieron cargar', 'Revisá tu conexión e intentá de nuevo.', true);
+      const retryButton = $('client-list').querySelector('[data-client-retry]');
+      if (retryButton) retryButton.addEventListener('click', (event) => { event.stopPropagation(); loadClients(); });
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
   }
@@ -260,11 +269,16 @@
   const STATUS_ORDER = {error: 0, pending: 1, ready: 2, idle: 3};
   function renderClients() {
     $('client-count').textContent = 'Clientes';
-    if (!state.clients.length) { $('client-list').textContent = 'No hay clientes disponibles.'; return; }
+    if (!state.clients.length) {
+      $('client-list').innerHTML = $('client-filter').dataset.value === 'mine'
+        ? listEmptyMarkup('Sin clientes asignados', 'Cuando te asignen uno, aparece acá.')
+        : listEmptyMarkup('Todavía no hay clientes', 'Cuando se den de alta, aparecen acá.');
+      return;
+    }
     const query = (state.clientSearch || '').trim().toLocaleLowerCase('es');
     const visibleClients = query ? state.clients.filter((client) => client.name.toLocaleLowerCase('es').includes(query)) : state.clients;
     $('client-count').textContent = `${visibleClients.length} cliente${visibleClients.length === 1 ? '' : 's'}`;
-    if (!visibleClients.length) { $('client-list').textContent = 'Ningún cliente coincide con la búsqueda.'; return; }
+    if (!visibleClients.length) { $('client-list').innerHTML = listEmptyMarkup('Sin resultados', 'Probá con otro nombre.'); return; }
     const sorted = visibleClients.map((client) => ({client, status: clientStatus(client)}))
       .sort((a, b) => STATUS_ORDER[a.status.key] - STATUS_ORDER[b.status.key] || a.client.name.localeCompare(b.client.name, 'es'));
     $('client-list').innerHTML = sorted.map(({client, status}) => {
@@ -279,7 +293,7 @@
     clearMessage(); $('empty').classList.add('hidden'); $('client-view').classList.remove('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
-    $('client-name').textContent = 'Cargando...'; $('stories').innerHTML = '<div class="loading-state"><span class="spinner"></span><p>Cargando...</p></div>'; $('week-badge').classList.add('hidden');
+    $('client-name').textContent = 'Cargando...'; $('stories').innerHTML = loadingMarkup('Cargando historias...'); $('week-badge').classList.add('hidden');
     $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; updateContactLinks(); $('drive-link').classList.add('hidden');
     $('plan-panel').classList.add('hidden'); $('historico-panel').classList.add('hidden'); $('historico-list').innerHTML = ''; state.driveCount = undefined;
     try {
@@ -1250,7 +1264,7 @@
   }
   async function openHistory() {
     const clientId = state.client?.id; if (!clientId) return;
-    $('history-list').textContent = 'Cargando...'; $('history-dialog').showModal();
+    $('history-list').innerHTML = loadingMarkup('Cargando historial...', {compact: true}); $('history-dialog').showModal();
     try {
       const rows = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historial`);
       $('history-list').innerHTML = rows.length ? rows.map((row) => `<div class="history-row"><div class="field">${escapeHtml(row.field)}</div><div class="meta">${row.changed_by_name ? escapeHtml(row.changed_by_name)+' · ' : ''}${new Date(row.changed_at).toLocaleString('es-AR')}</div><div class="diff"><span class="old">${escapeHtml(row.old_value || '(vacío)')}</span><span>${escapeHtml(row.new_value || '(vacío)')}</span></div></div>`).join('') : '<div class="empty">Todavía no hay cambios registrados para este cliente.</div>';
