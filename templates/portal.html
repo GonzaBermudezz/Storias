@@ -543,6 +543,46 @@
       html.sidebar-collapsed .list-empty-hint,
       html.sidebar-collapsed .list-empty-retry{display:none}
     }
+
+    /* ── Inicio: saludo, métricas, salud y filas (a53) ── */
+    .home-hero{margin-bottom:22px}
+    .stat-card{padding:16px 16px 14px}
+    .stat-icon{width:32px;height:32px;display:grid;place-items:center;margin-bottom:12px;border-radius:10px;background:var(--accent-soft);color:var(--accent-strong)}
+    .stat-card[data-tone="warn"] .stat-icon{background:var(--warn-soft);color:var(--warn)}
+    .stat-card[data-tone="ok"] .stat-icon{background:var(--success-soft);color:var(--success)}
+    .stat-card[data-tone="neutral"] .stat-icon{background:var(--bg);color:var(--muted)}
+    .stat-value{font-size:26px;line-height:1.1}
+    .stat-card.is-zero .stat-value{color:var(--muted)}
+    .stat-label{margin-top:5px;font-size:12.5px;font-weight:650;color:var(--fg)}
+    .stat-hint{margin-top:2px;font-size:11px;color:var(--muted)}
+    .home-panel{padding:0}
+    .home-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 6px}
+    .home-panel-head h2{font-size:14px;font-weight:700;letter-spacing:-.01em}
+    .home-panel-body{padding:8px 12px 14px}
+    .home-pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:99px;font-size:11.5px;font-weight:700}
+    .home-pill.danger{background:var(--danger-soft);color:var(--danger)}
+    .home-pill.success{background:var(--success-soft);color:var(--success)}
+    .home-pill.neutral{background:var(--accent-soft);color:var(--accent-strong)}
+    .home-section{margin-bottom:6px}
+    .home-section-head{display:flex;align-items:center;gap:8px;padding:8px 6px 6px;font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    .home-count{padding:1px 7px;border-radius:99px;background:var(--bg);font-size:10.5px;letter-spacing:0}
+    .home-row{display:flex;align-items:center;gap:12px;padding:10px;border-radius:12px;cursor:pointer;transition:background .12s}
+    .home-row:hover{background:var(--bg)}
+    .home-row:focus-visible{outline:none;background:var(--bg);box-shadow:0 0 0 2px var(--accent)}
+    .home-row-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+    .home-row-text strong{overflow:hidden;font-size:13.5px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}
+    .home-row-text span{overflow:hidden;font-size:12px;color:var(--muted);text-overflow:ellipsis;white-space:nowrap}
+    .home-row.is-danger .home-row-text span{color:var(--danger)}
+    .home-row.is-warn .home-row-text span{color:var(--warn)}
+    .home-row-btn{flex:none;padding:6px 11px;font-size:12px}
+    .home-row-go{display:inline-flex;flex:none;color:var(--muted)}
+    .home-row:hover .home-row-go{color:var(--accent-strong)}
+    .home-section+.home-ok-list{margin-top:4px;padding-top:14px;border-top:1px solid var(--border)}
+    .home-ok-list{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 8px 2px}
+    .home-ok{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+    .home-ok .ic{color:var(--success)}
+    .home-note{padding:22px 10px;text-align:center;font-size:13px;color:var(--muted)}
+    @media(max-width:700px){.home-row-btn{display:none}}
   </style>
   <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
@@ -600,24 +640,27 @@
       <div id="toast" class="toast hidden" role="status"><span id="toast-text"></span><button id="toast-close" class="toast-close" aria-label="Cerrar">×</button></div>
       <div id="empty" class="empty">Seleccioná un cliente para gestionar su contenido.</div>
       <section id="home-view" class="hidden">
-        <div class="home-stats">
-          <div class="stat-card"><div class="stat-value" id="stat-edicion">–</div><div class="stat-label">En edición</div></div>
-          <div class="stat-card"><div class="stat-value" id="stat-agendadas">–</div><div class="stat-label">Agendadas para subir</div></div>
-          <div class="stat-card"><div class="stat-value" id="stat-publicadas">–</div><div class="stat-label">Historias publicadas</div></div>
-          <div class="stat-card"><div class="stat-value" id="stat-promedio">–</div><div class="stat-label">Promedio por cliente</div></div>
-          <div class="stat-card"><div class="stat-value" id="stat-aprobacion">–</div><div class="stat-label">% de aprobación</div></div>
-        </div>
-        <div class="panel">
-          <div class="panel-head"><h2>Salud del sistema</h2></div>
-          <div class="panel-body">
-            <div class="health-block"><h3>Clientes con error de generación</h3><div id="health-generacion"></div></div>
-            <div class="health-block"><h3>Clientes con pool de imágenes bajo</h3><div id="health-pool"></div></div>
-            <div class="health-block"><h3>Clientes con historias sin publicar por error</h3><div id="health-errores"></div></div>
+        <div class="client-hero home-hero">
+          <div>
+            <p class="eyebrow" id="home-date"></p>
+            <h2 id="home-greeting">Hola</h2>
+            <p id="home-subtitle">Resumen de tus clientes.</p>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h2>Clientes sin historias agendadas</h2></div>
-          <div class="panel-body"><div id="home-idle"></div></div>
+        <div class="home-stats">
+          <div class="stat-card" data-tone="warn"><span class="stat-icon" data-icon="pencil" data-size="16"></span><div class="stat-value" id="stat-edicion">–</div><div class="stat-label">En edición</div><div class="stat-hint">Sin aprobar todavía</div></div>
+          <div class="stat-card" data-tone="accent"><span class="stat-icon" data-icon="calendar-check" data-size="16"></span><div class="stat-value" id="stat-agendadas">–</div><div class="stat-label">Agendadas</div><div class="stat-hint">Listas para subir</div></div>
+          <div class="stat-card" data-tone="ok"><span class="stat-icon" data-icon="send" data-size="16"></span><div class="stat-value" id="stat-publicadas">–</div><div class="stat-label">Publicadas</div><div class="stat-hint">Historias ya subidas</div></div>
+          <div class="stat-card" data-tone="neutral"><span class="stat-icon" data-icon="users" data-size="16"></span><div class="stat-value" id="stat-promedio">–</div><div class="stat-label">Promedio por cliente</div><div class="stat-hint">Historias próximas</div></div>
+          <div class="stat-card" data-tone="accent"><span class="stat-icon" data-icon="check-check" data-size="16"></span><div class="stat-value" id="stat-aprobacion">–</div><div class="stat-label">Aprobación</div><div class="stat-hint">De las próximas</div></div>
+        </div>
+        <div class="panel home-panel" id="home-attention-panel">
+          <div class="home-panel-head"><h2>Salud del sistema</h2><span id="home-health-pill" class="home-pill hidden"></span></div>
+          <div class="home-panel-body" id="home-health"></div>
+        </div>
+        <div class="panel home-panel hidden" id="home-idle-panel">
+          <div class="home-panel-head"><h2>Sin historias agendadas</h2><span id="home-idle-count" class="home-pill neutral"></span></div>
+          <div class="home-panel-body" id="home-idle"></div>
         </div>
       </section>
       <section id="client-view" class="hidden">

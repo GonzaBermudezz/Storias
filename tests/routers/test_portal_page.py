@@ -65,9 +65,10 @@ def test_portal_frontend_keeps_health_dashboard_independent_and_latest_only():
     source = TestClient(app).get("/static/portal.js").text
 
     assert "Salud del sistema" in page.text
-    assert 'id="health-generacion"' in page.text
-    assert 'id="health-pool"' in page.text
-    assert 'id="health-errores"' in page.text
+    assert 'id="home-health"' in page.text
+    assert 'id="home-health-pill"' in page.text
+    assert 'id="home-idle-panel"' in page.text
+    assert 'id="health-generacion"' not in page.text
     assert "homeSummaryVersion: 0" in source
     assert "const summaryVersion = ++state.homeSummaryVersion;" in source
     assert "Promise.allSettled([api('/portal/resumen'), api('/portal/salud')])" in source

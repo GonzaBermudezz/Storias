@@ -11,6 +11,7 @@
     settings: '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/> <circle cx="12" cy="12" r="3"/>',
     bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/> <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
     'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+    'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     calendar: '<path d="M8 2v3"/> <path d="M16 2v3"/> <rect x="3" y="3" width="18" height="18" rx="2"/> <path d="M3 9h18"/>',
     clock: '<circle cx="12" cy="12" r="10"/> <path d="M12 6v6l4 2"/>',
     pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/> <path d="m15 5 4 4"/>',
@@ -106,54 +107,111 @@
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
   }
-  function healthChips(items, emptyLabel, labelFor) {
-    if (!items.length) return `<div class="empty">${escapeHtml(emptyLabel)}</div>`;
-    return `<div class="idle-list">${items.map((item) => `<button type="button" class="idle-chip clickable" data-client-id="${escapeHtml(item.id)}" title="Ir a este cliente">${escapeHtml(item.name)} — ${escapeHtml(labelFor(item))}</button>`).join('')}</div>`;
+  function homeAvatar(clientId, name) {
+    const client = state.clients.find((item) => item.id === clientId) || {id: clientId, name};
+    return `<span class="avatar avatar-sm${client.avatar_url ? ' has-avatar' : ' avatar-' + avatarColor(client.id)}">${avatarContent(client)}</span>`;
+  }
+  function homeRow({id, name, sub, tone, action}) {
+    return `<div class="home-row${tone ? ' is-' + tone : ''}" data-client-id="${escapeHtml(id)}" role="button" tabindex="0"><span>${homeAvatar(id, name)}</span><div class="home-row-text"><strong>${escapeHtml(name)}</strong><span title="${escapeHtml(sub)}">${escapeHtml(sub)}</span></div>${action || ''}<span class="home-row-go">${icon('chevron-right', 16)}</span></div>`;
+  }
+  function renderHomeHero(info) {
+    const first = String(state.me?.name || '').trim().split(/\s+/)[0];
+    $('home-greeting').textContent = first ? `Hola, ${first}` : 'Hola';
+    $('home-date').textContent = new Intl.DateTimeFormat('es-AR', {weekday: 'long', day: 'numeric', month: 'long'}).format(new Date());
+    if (!info) { $('home-subtitle').textContent = 'Resumen de tus clientes.'; return; }
+    const {summary, problems, healthKnown} = info;
+    if (problems > 0) {
+      $('home-subtitle').textContent = `${problems} cliente${problems === 1 ? ' necesita' : 's necesitan'} tu atención.`;
+    } else if (healthKnown && summary) {
+      const n = summary.historias_agendadas;
+      $('home-subtitle').textContent = `Todo en orden. Hay ${n} historia${n === 1 ? '' : 's'} agendada${n === 1 ? '' : 's'} para subir.`;
+    } else {
+      $('home-subtitle').textContent = 'Resumen de tus clientes.';
+    }
+  }
+  function renderHomeHealth(health) {
+    const checks = [
+      {
+        title: 'Error de generación', okText: 'Sin errores de generación', items: health.clientes_con_error_generacion || [],
+        row: (c) => homeRow({id: c.id, name: c.name, tone: 'danger', sub: `${safeHealthDayLabel(c.generation_error_at, 'Reciente')} · ${c.generation_error || 'Falló la generación'}`}),
+      },
+      {
+        title: 'Pool de imágenes bajo', okText: 'Pool de imágenes al día', items: health.clientes_con_pool_bajo || [],
+        row: (c) => homeRow({id: c.id, name: c.name, tone: 'warn', sub: `Quedan pocas imágenes en Drive · ${safeHealthDayLabel(c.pool_bajo_at, 'reciente')}`}),
+      },
+      {
+        title: 'Historias sin publicar por error', okText: 'Sin historias para reintentar', items: health.clientes_con_historias_en_error || [],
+        row: (c) => homeRow({id: c.id, name: c.name, tone: 'danger', sub: `${c.historias_en_error} historia${c.historias_en_error === 1 ? '' : 's'} sin publicar${c.fecha_mas_antigua ? ' · desde ' + dayLabel(c.fecha_mas_antigua) : ''}`}),
+      },
+    ];
+    const problemIds = new Set();
+    checks.forEach((check) => check.items.forEach((item) => problemIds.add(item.id)));
+    const sections = checks.filter((check) => check.items.length).map((check) =>
+      `<div class="home-section"><div class="home-section-head"><span>${escapeHtml(check.title)}</span><span class="home-count">${check.items.length}</span></div>${check.items.map(check.row).join('')}</div>`);
+    const okChecks = checks.filter((check) => !check.items.length);
+    const okList = okChecks.length
+      ? `<div class="home-ok-list">${okChecks.map((check) => `<span class="home-ok">${icon('check', 14)}${escapeHtml(check.okText)}</span>`).join('')}</div>`
+      : '';
+    $('home-health').innerHTML = sections.join('') + okList;
+    const pill = $('home-health-pill');
+    pill.className = 'home-pill ' + (problemIds.size ? 'danger' : 'success');
+    pill.textContent = problemIds.size ? `${problemIds.size} cliente${problemIds.size === 1 ? '' : 's'} con problemas` : 'Todo en orden';
+    return problemIds;
   }
   function renderHealthUnavailable() {
-    const unavailable = '<div class="empty">El estado de salud no está disponible en este momento.</div>';
-    ['health-generacion', 'health-pool', 'health-errores'].forEach((id) => { $(id).innerHTML = unavailable; });
+    $('home-health').innerHTML = '<div class="home-note">El estado de salud no está disponible en este momento.</div>';
+    $('home-health-pill').classList.add('hidden');
+  }
+  function renderHomeIdle(summary, problemIds) {
+    // A client that already shows up in "Salud" is not repeated here.
+    const idle = (summary?.clientes_sin_actividad || []).filter((client) => !problemIds.has(client.id));
+    $('home-idle-panel').classList.toggle('hidden', !idle.length);
+    $('home-idle-count').textContent = String(idle.length);
+    $('home-idle').innerHTML = idle.map((client) => homeRow({
+      id: client.id, name: client.name, sub: 'Sin historias próximas',
+      action: `<button type="button" class="btn home-row-btn" data-home-generate="${escapeHtml(client.id)}">${icon('sparkles', 13)}Generar semana</button>`,
+    })).join('');
   }
   async function loadHomeSummary() {
     const summaryVersion = ++state.homeSummaryVersion;
-    $('home-idle').innerHTML = loadingMarkup('', {compact: true});
-    ['health-generacion', 'health-pool', 'health-errores'].forEach((id) => { $(id).innerHTML = loadingMarkup('', {compact: true}); });
-    ['stat-edicion','stat-agendadas','stat-publicadas','stat-promedio','stat-aprobacion'].forEach((id) => { $(id).textContent = '–'; });
+    renderHomeHero(null);
+    ['stat-edicion','stat-agendadas','stat-publicadas','stat-promedio','stat-aprobacion'].forEach((id) => { $(id).textContent = '–'; $(id).closest('.stat-card').classList.remove('is-zero'); });
+    $('home-health').innerHTML = loadingMarkup('', {compact: true});
+    $('home-health-pill').classList.add('hidden');
+    $('home-idle-panel').classList.add('hidden');
     const [summaryResult, healthResult] = await Promise.allSettled([api('/portal/resumen'), api('/portal/salud')]);
     // Inicio can be opened twice before its first request returns, or closed
     // while it is in flight. Only the latest visible request may update it.
     if (summaryVersion !== state.homeSummaryVersion || $('home-view').classList.contains('hidden')) return;
-    if (summaryResult.status === 'fulfilled') {
-      const summary = summaryResult.value;
-      $('stat-edicion').textContent = summary.historias_en_edicion;
-      $('stat-agendadas').textContent = summary.historias_agendadas;
-      $('stat-publicadas').textContent = summary.historias_publicadas;
-      $('stat-promedio').textContent = summary.promedio_por_cliente;
-      $('stat-aprobacion').textContent = summary.aprobacion_pct === null ? '—' : `${summary.aprobacion_pct}%`;
-      $('home-idle').innerHTML = summary.clientes_sin_actividad.length
-        ? `<div class="idle-list">${summary.clientes_sin_actividad.map((c) => `<span class="idle-chip neutral">${escapeHtml(c.name)}</span>`).join('')}</div>`
-        : '<div class="empty">Todos los clientes tienen historias agendadas.</div>';
+    const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : null;
+    const health = healthResult.status === 'fulfilled' ? healthResult.value : null;
+    if (summary) {
+      const setStat = (id, value, isZero) => { $(id).textContent = value; $(id).closest('.stat-card').classList.toggle('is-zero', !!isZero); };
+      setStat('stat-edicion', summary.historias_en_edicion, summary.historias_en_edicion === 0);
+      setStat('stat-agendadas', summary.historias_agendadas, summary.historias_agendadas === 0);
+      setStat('stat-publicadas', summary.historias_publicadas, summary.historias_publicadas === 0);
+      setStat('stat-promedio', summary.promedio_por_cliente, summary.promedio_por_cliente === 0);
+      setStat('stat-aprobacion', summary.aprobacion_pct === null ? '—' : `${summary.aprobacion_pct}%`, summary.aprobacion_pct === null);
     } else {
-      $('home-idle').textContent = '';
       const error = summaryResult.reason;
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
-    if (healthResult.status === 'fulfilled') {
-      const health = healthResult.value;
-      $('health-generacion').innerHTML = healthChips(health.clientes_con_error_generacion, 'Sin errores de generación.', (c) => dayLabel((c.generation_error_at || '').slice(0,10)) || 'reciente');
-      $('health-pool').innerHTML = healthChips(health.clientes_con_pool_bajo, 'Ningún cliente con pool bajo ahora mismo.', (c) => dayLabel((c.pool_bajo_at || '').slice(0,10)) || 'reciente');
-      $('health-errores').innerHTML = healthChips(health.clientes_con_historias_en_error, 'Sin historias pendientes de reintentar.', (c) => `${c.historias_en_error} historia${c.historias_en_error===1?'':'s'}`);
-    } else renderHealthUnavailable();
+    let problemIds = new Set();
+    if (health) problemIds = renderHomeHealth(health); else renderHealthUnavailable();
+    renderHomeIdle(summary, problemIds);
+    renderHomeHero({summary, problems: problemIds.size, healthKnown: !!health});
   }
   function showHome() {
     $('nav-home').classList.add('active'); $('nav-clients').classList.remove('active');
     $('home-view').classList.remove('hidden'); $('empty').classList.add('hidden'); $('client-view').classList.add('hidden');
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
+    renderClients();
     loadHomeSummary();
   }
   function showClients() {
     $('nav-clients').classList.add('active'); $('nav-home').classList.remove('active');
     $('home-view').classList.add('hidden');
+    renderClients();
     if (state.client) {
       $('client-view').classList.remove('hidden'); $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
       if (driveUrl(state.client.drive_folder_id)) $('drive-link').classList.remove('hidden');
@@ -282,7 +340,7 @@
     const sorted = visibleClients.map((client) => ({client, status: clientStatus(client)}))
       .sort((a, b) => STATUS_ORDER[a.status.key] - STATUS_ORDER[b.status.key] || a.client.name.localeCompare(b.client.name, 'es'));
     $('client-list').innerHTML = sorted.map(({client, status}) => {
-      const active = state.client?.id === client.id;
+      const active = $('home-view').classList.contains('hidden') && state.client?.id === client.id;
       return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}" title="${escapeHtml(client.name)}"><span class="avatar${client.avatar_url ? ' has-avatar' : ' avatar-' + avatarColor(client.id)}">${avatarContent(client)}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count is-${status.key}">${escapeHtml(status.label)}</span></span><span class="status-dot is-${status.key}" aria-hidden="true"></span></button>`;
     }).join('');
   }
@@ -399,6 +457,13 @@
   }
   function dayLabel(isoDate) {
     return isoDate ? new Intl.DateTimeFormat('es-AR', {weekday:'short', day:'numeric', timeZone:'UTC'}).format(new Date(`${isoDate}T00:00:00Z`)) : '';
+  }
+  function safeHealthDayLabel(value, fallback) {
+    const isoDate = typeof value === 'string' ? value.slice(0, 10) : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return fallback;
+    const date = new Date(`${isoDate}T00:00:00Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== isoDate) return fallback;
+    return dayLabel(isoDate) || fallback;
   }
   function activeGroup() {
     // Prefer the nearest group still awaiting confirmation; if everything is
@@ -1429,8 +1494,20 @@
   $('nav-home').addEventListener('click',showHome);
   $('nav-clients').addEventListener('click',showClients);
   $('home-view').addEventListener('click',(event)=>{
+    const generate = event.target.closest('[data-home-generate]');
+    if (generate) {
+      const clientId = generate.dataset.homeGenerate;
+      selectClient(clientId).then(() => { if (state.client?.id === clientId) openRitmoDialog(); });
+      return;
+    }
     const chip = event.target.closest('[data-client-id]'); if (!chip) return;
     selectClient(chip.dataset.clientId);
+  });
+  $('home-view').addEventListener('keydown',(event)=>{
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = event.target.closest('.home-row');
+    if (!row || event.target !== row) return;
+    event.preventDefault(); row.click();
   });
   $('client-list').addEventListener('click',(event)=>{const item=event.target.closest('[data-client-id]');if(item)selectClient(item.dataset.clientId);});
   $('client-filter').addEventListener('click',(event)=>{
