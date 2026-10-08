@@ -495,7 +495,7 @@ def generar_texto_de_prueba(config: ClientContentConfig, imagen: ImagenCandidata
     return _llamar_claude(config, imagen.image_bytes)
 
 
-def _esperar_container_listo(media_id: str, access_token: str, base: str) -> None:
+def _esperar_container_listo(media_id: str, access_token: str) -> None:
     """Poll the container's status_code until Meta finishes processing it.
 
     media_publish called before this finishes is what produced "Contenido
@@ -506,7 +506,7 @@ def _esperar_container_listo(media_id: str, access_token: str, base: str) -> Non
     """
     for _ in range(STATUS_POLL_MAX_ATTEMPTS):
         try:
-            r = requests.get(f"{base}/{media_id}", params={
+            r = requests.get(f"{GRAPH_API_BASE}/{media_id}", params={
                 "fields": "status_code",
                 "access_token": access_token,
             })
@@ -565,7 +565,7 @@ def publicar_historia(
         r.raise_for_status()
         media_id = r.json()["id"]
 
-        _esperar_container_listo(media_id, meta_access_token, base)
+        _esperar_container_listo(media_id, meta_access_token)
 
         r2 = requests.post(f"{base}/media_publish", data={
             "creation_id": media_id,

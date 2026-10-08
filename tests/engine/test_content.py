@@ -602,6 +602,32 @@ def test_publicar_historia_container_expirado_no_publica(monkeypatch):
         content.publicar_historia("url", "acct", "tok", False, None)
 
 
+def test_publicar_historia_consulta_el_estado_del_container_por_su_id(monkeypatch):
+    gets = []
+
+    def fake_get(url, params=None, **_kw):
+        gets.append(url)
+        return SimpleNamespace(
+            ok=True,
+            raise_for_status=lambda: None,
+            json=lambda: {"status_code": "FINISHED"},
+        )
+
+    monkeypatch.setattr(content.requests, "get", fake_get)
+    monkeypatch.setattr(content.time, "sleep", lambda *_a, **_kw: None)
+    monkeypatch.setattr(content.requests, "post", lambda url, data=None, **_kw: SimpleNamespace(
+        ok=True,
+        raise_for_status=lambda: None,
+        json=lambda: {"id": "MEDIA_123"},
+    ))
+
+    content.publicar_historia("url", "ACCT_999", "tok", False, None)
+
+    assert gets == [f"{content.GRAPH_API_BASE}/MEDIA_123"]
+    assert "ACCT_999" not in gets[0]
+
+
+
 def test_publicar_historia_timeout_de_polling_tira_metapublisheerror(monkeypatch):
     monkeypatch.setattr(content.requests, "get", lambda *a, **k: SimpleNamespace(
         ok=True,
