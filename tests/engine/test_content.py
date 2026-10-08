@@ -640,3 +640,35 @@ def test_publicar_historia_redacta_el_token_en_error_de_polling(monkeypatch):
         content.publicar_historia("url", "acct", token, False, None)
 
     assert token not in str(exc_info.value)
+
+
+def test_publicar_historia_error_de_polling_incluye_cuerpo_de_meta_y_redacta_token(monkeypatch):
+    token = "SECRET_ACCESS_TOKEN_12345"
+
+    class FakeHTTPError(Exception):
+        def __init__(self):
+            super().__init__(
+                f"400 Client Error: Bad Request for url: https://graph.facebook.com/v21.0/1/2?fields=status_code&access_token={token}"
+            )
+            self.response = SimpleNamespace(
+                text='{"error":{"message":"Invalid OAuth access token","type":"OAuthException","code":190}}'
+            )
+
+    def fake_get(url, params=None, **_kw):
+        raise FakeHTTPError()
+
+    monkeypatch.setattr(content.requests, "get", fake_get)
+    monkeypatch.setattr(content.time, "sleep", lambda *_a, **_kw: None)
+    monkeypatch.setattr(content.requests, "post", lambda url, data=None, **_kw: SimpleNamespace(
+        ok=True,
+        raise_for_status=lambda: None,
+        json=lambda: {"id": "MEDIA_123"},
+    ))
+
+    with pytest.raises(MetaPublishError) as exc_info:
+        content.publicar_historia("url", "acct", token, False, None)
+
+    message = str(exc_info.value)
+    assert "respuesta de Meta" in message
+    assert "OAuthException" in message
+    assert token not in message

@@ -514,6 +514,9 @@ def _esperar_container_listo(media_id: str, access_token: str, base: str) -> Non
             status = r.json().get("status_code")
         except Exception as e:
             message = f"Error consultando el estado del container en Meta: {e}"
+            detail = getattr(getattr(e, "response", None), "text", None)
+            if detail:
+                message += f" — respuesta de Meta: {detail[:500]}"
             if access_token:
                 message = message.replace(access_token, "[redacted]")
             raise MetaPublishError(message) from e
