@@ -61,10 +61,17 @@
   }
   let toastTimer = null;
   function showMessage(text, error = false) {
+    const toast = $('toast');
+    const duration = error ? 7000 : 4000;
     $('toast-text').textContent = text;
-    $('toast').className = `toast${error ? ' error' : ''}`;
+    $('toast-icon').innerHTML = icon(error ? 'triangle-alert' : 'check', 18);
+    toast.className = 'toast hidden';
+    void toast.offsetWidth; // reinicia la animación si ya había un aviso en pantalla
+    toast.style.setProperty('--toast-ms', `${duration}ms`);
+    toast.setAttribute('role', error ? 'alert' : 'status');
+    toast.className = `toast${error ? ' error' : ''}`;
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(clearMessage, 4000);
+    toastTimer = setTimeout(clearMessage, duration);
   }
   function clearMessage() {
     $('toast').className = 'toast hidden';
