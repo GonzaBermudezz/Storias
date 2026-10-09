@@ -4,9 +4,12 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 import logging
 import re
+import secrets
 
 import requests
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from authlib.integrations.httpx_client import AsyncOAuth2Client
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -19,6 +22,7 @@ from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
 from app.services import content_jobs, drive, uploads
 from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config
+from app.services.encryption import decrypt, encrypt
 
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
@@ -33,7 +37,7 @@ _CLIENT_DETAIL = (
     "avatar_url,avatar_public_id,instagram_profile_url,whatsapp_contact,"
     "contact_email,calendly_link,prob_link,generation_error,"
     "generation_error_at,publish_days,"
-    "publish_together,font_choice"
+    "publish_together,font_choice,drive_connected_email"
 )
 
 
@@ -140,8 +144,8 @@ class ReorderRequest(BaseModel):
     historias: list[StoryOrder] = Field(min_length=1)
 
 
-def _client_or_error(db, client_id: str, agency_id: str) -> dict:
-    result = db.table("clients").select(_CLIENT_DETAIL).eq("id", client_id).maybe_single().execute()
+def _client_or_error(db, client_id: str, agency_id: str, select_fields: str = _CLIENT_DETAIL) -> dict:
+    result = db.table("clients").select(select_fields).eq("id", client_id).maybe_single().execute()
     # postgrest-py's maybe_single() returns None outright (not a response with
     # data=None) when zero rows match — never assume `result` itself is set.
     if not result or not result.data:
@@ -149,6 +153,19 @@ def _client_or_error(db, client_id: str, agency_id: str) -> dict:
     if result.data["agency_id"] != agency_id:
         raise HTTPException(status_code=403, detail="Cliente fuera de la agencia")
     return result.data
+
+
+# drive_refresh_token_encrypted is deliberately left out of _CLIENT_DETAIL
+# (same as meta_access_token_encrypted) so the encrypted secret never ships
+# in a normal client-detail response — the few endpoints that actually need
+# it to call Drive ask for this extended select instead, on the condition
+# they never return the raw client dict as their JSON response.
+_CLIENT_DETAIL_WITH_DRIVE_SECRET = _CLIENT_DETAIL + ",drive_refresh_token_encrypted"
+
+
+def _pop_drive_refresh_token(client: dict) -> str | None:
+    encrypted = client.pop("drive_refresh_token_encrypted", None)
+    return decrypt(encrypted) if encrypted else None
 
 
 @router.get("/me")
@@ -508,17 +525,106 @@ def patch_client_pm(client_id: str, body: ClientPmPatch, employee: EmployeeDep):
 def get_drive_info(client_id: str, employee: EmployeeDep):
     """Metadata-only count of images in the client's Drive folder.
 
-    Best-effort: Drive access needs a service account file that isn't
-    always configured in every environment, so failures return count=None
-    instead of a 500 — this is informational, not a required feature."""
-    client = _client_or_error(get_admin_client(), client_id, employee.agency_id)
+    Best-effort: Drive access needs either a connected per-client OAuth
+    account or the shared service account configured, and neither is a
+    given in every environment, so failures return count=None instead of
+    a 500 — this is informational, not a required feature."""
+    db = get_admin_client()
+    client = _client_or_error(db, client_id, employee.agency_id, _CLIENT_DETAIL_WITH_DRIVE_SECRET)
     folder_id = client.get("drive_folder_id")
     if not folder_id:
         return {"count": None}
     try:
-        return {"count": drive.count_images(folder_id)}
+        refresh_token = _pop_drive_refresh_token(client)
+        return {"count": drive.count_images(folder_id, refresh_token)}
     except Exception:
         return {"count": None}
+
+
+_DRIVE_OAUTH_SCOPE = "openid email https://www.googleapis.com/auth/drive.readonly"
+
+
+@router.get("/clientes/{client_id}/drive/conectar")
+async def start_drive_oauth(client_id: str, request: Request, employee: EmployeeDep):
+    """Connect a client's Google Drive the easy way — the employee (or
+    whoever owns the client's Drive) signs in with Google and grants
+    read-only access, same consent screen as everywhere else. Replaces the
+    old setup, which required manually sharing the Drive folder with the
+    shared service account's email (a technical step non-technical staff
+    shouldn't have to do per client).
+
+    Reuses the SAME Google OAuth client already configured for employee
+    login (GOOGLE_CLIENT_ID/SECRET) — Google allows one OAuth client to have
+    several "Authorized redirect URIs", so going live needs exactly ONE
+    change in Google Cloud Console: add GOOGLE_DRIVE_REDIRECT_URI (see
+    app/config.py) to that list. No new OAuth client, no new credentials."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    s = get_settings()
+    state = secrets.token_urlsafe(32)
+    request.session["drive_oauth_state"] = state
+    request.session["drive_oauth_client_id"] = client_id
+    oauth_client = AsyncOAuth2Client(
+        client_id=s.google_client_id, client_secret=s.google_client_secret,
+        redirect_uri=s.google_drive_redirect_uri, scope=_DRIVE_OAUTH_SCOPE,
+    )
+    uri, _ = oauth_client.create_authorization_url(
+        "https://accounts.google.com/o/oauth2/auth", state=state,
+        access_type="offline", prompt="consent",
+        # prompt=consent (not select_account like employee login) forces
+        # Google to reissue a refresh_token every time — without it, a
+        # reconnect for an account that already granted access once before
+        # can silently come back with no refresh_token at all.
+    )
+    return RedirectResponse(uri)
+
+
+@router.get("/drive/callback")
+async def drive_oauth_callback(request: Request, code: str, state: str, employee: EmployeeDep):
+    """Google redirects here with the authorization code. Stores the
+    resulting refresh token, encrypted the same way meta_access_token_encrypted
+    already is — see app/services/encryption.py."""
+    s = get_settings()
+    oauth_state = request.session.get("drive_oauth_state")
+    client_id = request.session.get("drive_oauth_client_id")
+    if not client_id or state != oauth_state:
+        raise HTTPException(status_code=400, detail="State inválido — posible CSRF o sesión vencida. Probá conectar de nuevo.")
+    request.session.pop("drive_oauth_state", None)
+    request.session.pop("drive_oauth_client_id", None)
+
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+
+    async with AsyncOAuth2Client(
+        client_id=s.google_client_id, client_secret=s.google_client_secret,
+        redirect_uri=s.google_drive_redirect_uri,
+    ) as oauth_client:
+        token_data = await oauth_client.fetch_token("https://oauth2.googleapis.com/token", code=code)
+        userinfo = (await oauth_client.get("https://www.googleapis.com/oauth2/v3/userinfo")).json()
+
+    refresh_token = token_data.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=422,
+            detail="Google no devolvió acceso de larga duración. Probá conectar de nuevo.",
+        )
+
+    db.table("clients").update({
+        "drive_refresh_token_encrypted": encrypt(refresh_token),
+        "drive_connected_email": userinfo.get("email"),
+    }).eq("id", client_id).execute()
+
+    return RedirectResponse(url="/portal", status_code=302)
+
+
+@router.delete("/clientes/{client_id}/drive/conectar")
+def disconnect_drive(client_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    updated = db.table("clients").update({
+        "drive_refresh_token_encrypted": None, "drive_connected_email": None,
+    }).eq("id", client_id).execute().data
+    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, "drive_connected_email": None}
 
 
 @router.patch("/clientes/{client_id}")
@@ -694,8 +800,12 @@ def generar_semana(client_id: str, employee: EmployeeDep):
 @router.post("/clientes/{client_id}/probar-prompt")
 def try_prompt(client_id: str, employee: EmployeeDep):
     db = get_admin_client()
-    client = _client_or_error(db, client_id, employee.agency_id)
-    image = drive.first_image(client.get("drive_folder_id"))
+    client = _client_or_error(db, client_id, employee.agency_id, _CLIENT_DETAIL_WITH_DRIVE_SECRET)
+    try:
+        refresh_token = _pop_drive_refresh_token(client)
+        image = drive.first_image(client.get("drive_folder_id"), refresh_token)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"No se pudo acceder a Google Drive: {exc}") from exc
     if not image:
         raise HTTPException(status_code=422, detail="El cliente no tiene imágenes disponibles")
     image_id, image_name, image_bytes = image
@@ -828,7 +938,7 @@ def generate_story_for_day(client_id: str, body: GenerateStoryRequest, employee:
     concurrent requests cannot spend resources for the same slot.
     """
     db = get_admin_client()
-    client = _client_or_error(db, client_id, employee.agency_id)
+    client = _client_or_error(db, client_id, employee.agency_id, _CLIENT_DETAIL_WITH_DRIVE_SECRET)
     try:
         parsed_date = date.fromisoformat(body.fecha_publicacion)
     except ValueError:
@@ -904,12 +1014,22 @@ def generate_story_for_day(client_id: str, body: GenerateStoryRequest, employee:
         history = db.table("client_images").select("drive_file_id,last_used_at").eq(
             "client_id", client_id
         ).execute().data or []
-        available = drive.list_image_metadata(client.get("drive_folder_id"))
+        refresh_token = _pop_drive_refresh_token(client)
+        try:
+            available = drive.list_image_metadata(client.get("drive_folder_id"), refresh_token)
+        except Exception as exc:
+            # Missing/invalid service-account credentials, an unreachable
+            # Drive API, etc. — a real but expected failure mode, not a bug;
+            # EngineError below turns it into a clean 422 instead of a 500.
+            raise EngineError(f"No se pudo acceder a Google Drive: {exc}") from exc
         if not available:
             raise HTTPException(status_code=422, detail="El cliente no tiene imágenes disponibles en Drive")
         now = datetime.now(timezone.utc)
         ranked, _ = content_jobs.seleccionar_imagenes(available, history, now, limite=None)
-        downloaded = drive.download_images(ranked, limit=1)
+        try:
+            downloaded = drive.download_images(ranked, limit=1, refresh_token=refresh_token)
+        except Exception as exc:
+            raise EngineError(f"No se pudo acceder a Google Drive: {exc}") from exc
         if not downloaded:
             raise HTTPException(status_code=422, detail="No se pudo descargar ninguna imagen legible de Drive")
         image_id, image_name, image_bytes = downloaded[0]

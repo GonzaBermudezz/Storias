@@ -187,7 +187,9 @@ def generate_for_client(db, row: dict, today: date) -> dict:
         db.table("story_groups").delete().eq("id", group_id).execute()
 
     config = build_content_config(row)
-    available = drive.list_image_metadata(row.get("drive_folder_id"))
+    encrypted_refresh_token = row.get("drive_refresh_token_encrypted")
+    refresh_token = decrypt(encrypted_refresh_token) if encrypted_refresh_token else None
+    available = drive.list_image_metadata(row.get("drive_folder_id"), refresh_token)
     if len(available) < 4:
         raise ValueError(f"sin imágenes suficientes: {len(available)} disponibles; se requieren 4")
     try:
@@ -199,7 +201,7 @@ def generate_for_client(db, row: dict, today: date) -> dict:
         raise RuntimeError("No se pudo leer el historial de imágenes usadas") from exc
     now = datetime.now(timezone.utc)
     ranked, _ = seleccionar_imagenes(available, history, now, limite=None)
-    selected_rows = drive.download_images(ranked, limit=4)
+    selected_rows = drive.download_images(ranked, limit=4, refresh_token=refresh_token)
     if len(selected_rows) < 4:
         raise ValueError(
             f"sin imágenes legibles suficientes: {len(selected_rows)} disponibles; se requieren 4"

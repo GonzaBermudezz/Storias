@@ -917,8 +917,8 @@ def test_generate_story_for_day_creates_story_from_drive_pick(monkeypatch, clien
         {"id": "s1", "order": 1, "text": "Un texto generado", "image_url": "https://cdn/compuesta.jpg"},
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
-    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None, *a, **k: [("f1", "foto.jpg", b"bytes")])
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Un texto generado")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
                         SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/s1"))
@@ -949,7 +949,7 @@ def test_generate_story_for_day_rejects_when_drive_pool_is_empty(monkeypatch, cl
         [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [], None, None,
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [])
 
     response = client.post("/portal/clientes/c1/historias/generar",
         json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00"})
@@ -966,8 +966,8 @@ def test_generate_story_for_day_surfaces_claude_errors(monkeypatch, client):
         [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [], None, None,
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
-    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None, *a, **k: [("f1", "foto.jpg", b"bytes")])
     def boom(config, image_bytes):
         raise ClaudeGenerationError("Claude no pudo generar el texto.")
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", boom)
@@ -988,8 +988,8 @@ def test_generate_story_for_day_releases_reservation_on_image_composition_error(
         [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [], None, None,
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
-    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None, *a, **k: [("f1", "foto.jpg", b"bytes")])
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Texto")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *args, **kwargs:
                         (_ for _ in ()).throw(ImageProcessingError("No se pudo componer")))
@@ -1017,8 +1017,8 @@ def test_generate_story_for_day_reserves_before_spending_generation_resources(mo
         {"id": "s4", "order": 4},
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
-    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None, *a, **k: [("f1", "foto.jpg", b"bytes")])
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes:
                         events.append("generate_text") or "Texto")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *args, **kwargs:
@@ -1044,8 +1044,8 @@ def test_generate_story_for_day_cleans_up_composed_image_when_original_upload_fa
         [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [], None, None,
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
-    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None, *a, **k: [("f1", "foto.jpg", b"bytes")])
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Un texto generado")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
                         SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/orphan"))
@@ -1087,8 +1087,8 @@ def test_generate_story_for_day_cleans_up_both_assets_when_group_is_scheduled_du
         None, None,
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
-    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None, *a, **k: [("f1", "foto.jpg", b"bytes")])
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Un texto generado")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
                         SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/orphan"))
@@ -1124,8 +1124,8 @@ def test_generate_story_for_day_keeps_assets_when_finalize_transport_fails_after
          "image_original_url": "https://cdn/original.jpg"},
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
-    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None, *a, **k: [("f1", "foto.jpg", b"bytes")])
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Texto")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *args, **kwargs:
                         SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/kept"))
@@ -1151,8 +1151,8 @@ def test_generate_story_for_day_adds_to_existing_manual_group(monkeypatch, clien
         {"id": "s2", "order": 3},
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id: [("f1", "foto.jpg")])
-    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None: [("f1", "foto.jpg", b"bytes")])
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k: [("f1", "foto.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.download_images", lambda images, limit=None, *a, **k: [("f1", "foto.jpg", b"bytes")])
     monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", lambda config, image_bytes: "Otro texto")
     monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
                         SimpleNamespace(url="https://cdn/compuesta2.jpg", public_id="edit/s2"))
@@ -1490,7 +1490,7 @@ def test_publish_day_now_requires_stories_for_that_date(monkeypatch, client):
 def test_drive_info_reports_image_count(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1", "drive_folder_id": "folder-1"}])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.count_images", lambda folder_id: 42 if folder_id == "folder-1" else 0)
+    monkeypatch.setattr("app.routers.portal.drive.count_images", lambda folder_id, *a, **k: 42 if folder_id == "folder-1" else 0)
     response = client.get("/portal/clientes/c1/drive-info")
     assert response.status_code == 200
     assert response.json() == {"count": 42}
@@ -1507,11 +1507,143 @@ def test_drive_info_is_null_without_a_folder(monkeypatch, client):
 def test_drive_info_is_null_on_drive_failure(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1", "drive_folder_id": "folder-1"}])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    def boom(folder_id): raise ValueError("no service account")
+    def boom(folder_id, *a, **k): raise ValueError("no service account")
     monkeypatch.setattr("app.routers.portal.drive.count_images", boom)
     response = client.get("/portal/clientes/c1/drive-info")
     assert response.status_code == 200
     assert response.json() == {"count": None}
+
+
+class _FakeStartOAuthClient:
+    """Mirrors the pattern already used in tests/routers/test_auth.py for
+    the employee-login flow — this is the Drive-connection flow's equivalent."""
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def create_authorization_url(self, url, **kwargs):
+        return "https://accounts.google.test/authorize", kwargs["state"]
+
+
+def test_start_drive_oauth_redirects_with_drive_scope_and_consent_prompt(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    captured = {}
+
+    class CapturingOAuthClient(_FakeStartOAuthClient):
+        def create_authorization_url(self, url, **kwargs):
+            captured.update(self.kwargs); captured.update(kwargs)
+            return super().create_authorization_url(url, **kwargs)
+    monkeypatch.setattr("app.routers.portal.AsyncOAuth2Client", CapturingOAuthClient)
+
+    response = client.get("/portal/clientes/c1/drive/conectar", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "https://accounts.google.test/authorize"
+    assert "drive.readonly" in captured["scope"]
+    assert captured["access_type"] == "offline"
+    # Unlike employee login's select_account, this must force a fresh consent
+    # every time — otherwise a reconnect for an account that already granted
+    # access once can silently come back with no refresh_token at all.
+    assert captured["prompt"] == "consent"
+    assert captured["state"]
+
+
+def test_start_drive_oauth_rejects_client_outside_agency(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "other-agency"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.AsyncOAuth2Client", _FakeStartOAuthClient)
+    response = client.get("/portal/clientes/c1/drive/conectar", follow_redirects=False)
+    assert response.status_code == 403
+
+
+class _FakeCallbackOAuthClient:
+    token_response: dict = {"refresh_token": "refresh-xyz"}
+    userinfo_response: dict = {"email": "owner@example.com"}
+
+    def __init__(self, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def fetch_token(self, url, code):
+        return self.token_response
+
+    async def get(self, url):
+        return SimpleNamespace(json=lambda: self.userinfo_response)
+
+
+def _start_drive_oauth_session(monkeypatch, client, client_id="c1"):
+    """Primes the session the same way the real /conectar redirect does, so
+    the callback test below has a matching, predictable state value."""
+    monkeypatch.setattr("app.routers.portal.secrets.token_urlsafe", lambda n: "fixed-state")
+    monkeypatch.setattr("app.routers.portal.AsyncOAuth2Client", _FakeStartOAuthClient)
+    client.get(f"/portal/clientes/{client_id}/drive/conectar", follow_redirects=False)
+
+
+def test_drive_oauth_callback_stores_encrypted_refresh_token(monkeypatch, client):
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1"},  # start_drive_oauth's _client_or_error
+        {"id": "c1", "agency_id": "agency-1"},  # callback's _client_or_error
+        None,                                    # clients update
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    _start_drive_oauth_session(monkeypatch, client)
+    monkeypatch.setattr("app.routers.portal.AsyncOAuth2Client", _FakeCallbackOAuthClient)
+    monkeypatch.setattr("app.routers.portal.encrypt", lambda value: f"encrypted:{value}")
+
+    response = client.get("/portal/drive/callback?code=abc&state=fixed-state", follow_redirects=False)
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/portal"
+    assert db.updates == [("clients", {
+        "drive_refresh_token_encrypted": "encrypted:refresh-xyz",
+        "drive_connected_email": "owner@example.com",
+    }, [("id", "c1")])]
+
+
+def test_drive_oauth_callback_rejects_state_mismatch(monkeypatch, client):
+    db = DB([])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.get("/portal/drive/callback?code=abc&state=never-set")
+    assert response.status_code == 400
+    assert db.updates == []
+
+
+def test_drive_oauth_callback_rejects_missing_refresh_token(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, {"id": "c1", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    _start_drive_oauth_session(monkeypatch, client)
+
+    class NoRefreshTokenClient(_FakeCallbackOAuthClient):
+        token_response = {}
+    monkeypatch.setattr("app.routers.portal.AsyncOAuth2Client", NoRefreshTokenClient)
+
+    response = client.get("/portal/drive/callback?code=abc&state=fixed-state")
+
+    assert response.status_code == 422
+    assert db.updates == []
+
+
+def test_disconnect_drive_clears_connection(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.delete("/portal/clientes/c1/drive/conectar")
+    assert response.status_code == 200
+    assert db.updates == [("clients", {
+        "drive_refresh_token_encrypted": None, "drive_connected_email": None,
+    }, [("id", "c1")])]
+
+
+def test_disconnect_drive_rejects_client_outside_agency(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "other-agency"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.delete("/portal/clientes/c1/drive/conectar")
+    assert response.status_code == 403
+    assert db.updates == []
 
 
 def test_list_clients_defaults_to_entire_agency(monkeypatch, client):
@@ -1625,8 +1757,8 @@ def test_try_prompt_reads_first_drive_image_without_database_writes(monkeypatch,
            "calendly_link": None, "prob_link": 0, "drive_folder_id": "folder"}
     db = DB([row])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    monkeypatch.setattr("app.routers.portal.drive.list_images", lambda _: pytest.fail("must not download full pool"))
-    monkeypatch.setattr("app.routers.portal.drive.first_image", lambda _: ("f1", "one.jpg", b"image"))
+    monkeypatch.setattr("app.routers.portal.drive.list_images", lambda _, *a, **k: pytest.fail("must not download full pool"))
+    monkeypatch.setattr("app.routers.portal.drive.first_image", lambda _, *a, **k: ("f1", "one.jpg", b"image"))
     seen = {}
     def generate(config, image):
         seen["id"] = image.drive_file_id

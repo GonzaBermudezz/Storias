@@ -17,6 +17,22 @@ def _png(color: tuple[int, int, int]) -> bytes:
 _ONE, _TWO, _FIRST = _png((255, 0, 0)), _png((0, 255, 0)), _png((0, 0, 255))
 
 
+def test_drive_client_uses_service_account_when_no_refresh_token(monkeypatch):
+    monkeypatch.setattr(drive, "_service_account_credentials", lambda: "service-account-creds")
+    captured = {}
+    monkeypatch.setattr(drive, "build", lambda *a, http, **k: captured.setdefault("http", http))
+    drive._drive_client()
+    assert captured["http"].credentials == "service-account-creds"
+
+
+def test_drive_client_uses_oauth_credentials_when_refresh_token_given(monkeypatch):
+    monkeypatch.setattr(drive, "_oauth_credentials", lambda token: f"oauth-creds-for-{token}")
+    captured = {}
+    monkeypatch.setattr(drive, "build", lambda *a, http, **k: captured.setdefault("http", http))
+    drive._drive_client(refresh_token="rt-123")
+    assert captured["http"].credentials == "oauth-creds-for-rt-123"
+
+
 def test_shared_drive_paginates_downloads_and_preserves_order(monkeypatch):
     files = Mock()
     files.list.return_value.execute.side_effect = [
@@ -24,7 +40,7 @@ def test_shared_drive_paginates_downloads_and_preserves_order(monkeypatch):
         {"files": [{"id": "two", "name": "two.png"}]},
     ]
     files.get_media.return_value.execute.side_effect = [_ONE, _TWO]
-    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+    monkeypatch.setattr(drive, "_drive_client", lambda *a, **k: SimpleNamespace(files=lambda: files))
     assert drive.list_images("folder") == [("one", "one.jpg", _ONE), ("two", "two.png", _TWO)]
     calls = files.list.call_args_list
     assert len(calls) == 2
@@ -40,7 +56,7 @@ def test_shared_drive_paginates_downloads_and_preserves_order(monkeypatch):
 def test_empty_folder_returns_no_images(monkeypatch):
     files = Mock()
     files.list.return_value.execute.return_value = {"files": []}
-    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+    monkeypatch.setattr(drive, "_drive_client", lambda *a, **k: SimpleNamespace(files=lambda: files))
     assert drive.list_images("empty") == []
     files.get_media.assert_not_called()
 
@@ -50,7 +66,7 @@ def test_list_image_metadata_does_not_download_file_contents(monkeypatch):
     files.list.return_value.execute.return_value = {"files": [
         {"id": "two", "name": "two.png"}, {"id": "one", "name": "one.jpg"},
     ]}
-    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+    monkeypatch.setattr(drive, "_drive_client", lambda *a, **k: SimpleNamespace(files=lambda: files))
 
     assert drive.list_image_metadata("folder") == [("one", "one.jpg"), ("two", "two.png")]
     files.get_media.assert_not_called()
@@ -59,7 +75,7 @@ def test_list_image_metadata_does_not_download_file_contents(monkeypatch):
 def test_download_images_stops_after_requested_readable_limit(monkeypatch):
     files = Mock()
     files.get_media.return_value.execute.side_effect = [b"not-an-image", _ONE, _TWO]
-    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+    monkeypatch.setattr(drive, "_drive_client", lambda *a, **k: SimpleNamespace(files=lambda: files))
 
     result = drive.download_images(
         [("bad", "bad.heic"), ("one", "one.jpg"), ("two", "two.png"),
@@ -85,7 +101,7 @@ def test_first_image_downloads_only_first_sorted_file(monkeypatch):
         {"id": "z", "name": "z.jpg"}, {"id": "a", "name": "a.jpg"},
     ]}
     files.get_media.return_value.execute.return_value = _FIRST
-    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+    monkeypatch.setattr(drive, "_drive_client", lambda *a, **k: SimpleNamespace(files=lambda: files))
 
     assert drive.first_image("folder") == ("a", "a.jpg", _FIRST)
     files.get_media.assert_called_once_with(fileId="a", supportsAllDrives=True)
@@ -97,7 +113,7 @@ def test_unreadable_image_is_skipped_not_fatal(monkeypatch):
         {"id": "bad", "name": "corrupt.heic"}, {"id": "good", "name": "good.png"},
     ]}
     files.get_media.return_value.execute.side_effect = [b"not-a-real-image", _FIRST]
-    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+    monkeypatch.setattr(drive, "_drive_client", lambda *a, **k: SimpleNamespace(files=lambda: files))
 
     assert drive.list_images("folder") == [("good", "good.png", _FIRST)]
 
@@ -108,6 +124,6 @@ def test_first_image_skips_unreadable_files_until_one_decodes(monkeypatch):
         {"id": "bad", "name": "corrupt.heic"}, {"id": "good", "name": "good.png"},
     ]}
     files.get_media.return_value.execute.side_effect = [b"not-a-real-image", _FIRST]
-    monkeypatch.setattr(drive, "_drive_client", lambda: SimpleNamespace(files=lambda: files))
+    monkeypatch.setattr(drive, "_drive_client", lambda *a, **k: SimpleNamespace(files=lambda: files))
 
     assert drive.first_image("folder") == ("good", "good.png", _FIRST)

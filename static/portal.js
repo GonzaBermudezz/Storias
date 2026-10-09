@@ -608,6 +608,7 @@
     $('client-whatsapp').value = state.client.whatsapp_contact || '';
     $('client-email').value = state.client.contact_email || '';
     updateContactLinks();
+    renderDriveConnectStatus();
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     const url = driveUrl(state.client.drive_folder_id);
     if (url) { $('drive-link').href = url; $('drive-link').classList.remove('hidden'); }
@@ -633,6 +634,29 @@
     const email = state.client?.contact_email;
     $('client-email-open').href = email ? `mailto:${encodeURIComponent(email)}` : '#';
     $('client-email-open').classList.toggle('hidden', !email);
+  }
+  function renderDriveConnectStatus() {
+    const clientId = state.client?.id; if (!clientId) return;
+    const email = state.client?.drive_connected_email;
+    $('drive-connect-status').textContent = email ? `Conectado como ${email}` : 'No conectado todavía';
+    $('drive-connect-btn').href = `/portal/clientes/${encodeURIComponent(clientId)}/drive/conectar`;
+    $('drive-connect-btn').classList.toggle('hidden', !!email);
+    $('drive-disconnect-btn').classList.toggle('hidden', !email);
+  }
+  async function disconnectDrive() {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    const confirmed = await confirmDialog('¿Desconectar Google Drive de este cliente? La generación con IA dejará de poder traer imágenes hasta que lo conectes de nuevo.', {okLabel:'Sí, desconectar', danger:true});
+    if (!confirmed) return;
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/drive/conectar`, {method:'DELETE'});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.drive_connected_email = updated.drive_connected_email;
+      renderDriveConnectStatus();
+      showMessage('Drive desconectado.');
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion) showMessage(error.message, true);
+    }
   }
   function dayLabel(isoDate) {
     return isoDate ? new Intl.DateTimeFormat('es-AR', {weekday:'short', day:'numeric', timeZone:'UTC'}).format(new Date(`${isoDate}T00:00:00Z`)) : '';
@@ -1717,6 +1741,7 @@
   $('client-pm').addEventListener('change',saveClientPm);
   $('client-font').addEventListener('change',saveClientFont);
   $('client-focus').addEventListener('change',saveClientFocus);
+  $('drive-disconnect-btn').addEventListener('click',disconnectDrive);
   $('client-instagram').addEventListener('change',()=>saveClientContact('instagram_profile_url','client-instagram'));
   $('client-whatsapp').addEventListener('change',()=>saveClientContact('whatsapp_contact','client-whatsapp'));
   $('client-email').addEventListener('change',()=>saveClientContact('contact_email','client-email'));

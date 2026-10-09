@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     # En desarrollo, este host debe coincidir con el usado para entrar al portal;
     # /auth/google redirige al host canónico para conservar la cookie de sesión.
     google_redirect_uri: str = "http://localhost:5001/auth/callback"
+    # Segundo flujo OAuth, mismo client_id/secret de arriba (Google permite
+    # varias redirect URIs por client): conecta el Drive DE UN CLIENTE sin
+    # compartir carpetas con la cuenta de servicio — ver
+    # app/routers/portal.py::start_drive_oauth. Para activarlo en producción
+    # solo hace falta agregar esta URL a "Authorized redirect URIs" en
+    # Google Cloud Console; no requiere un client OAuth nuevo.
+    google_drive_redirect_uri: str = "http://localhost:5001/portal/drive/callback"
 
     # ── Claude API ─────────────────────────────────────────────────────────────
     anthropic_api_key: str

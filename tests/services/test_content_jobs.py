@@ -118,7 +118,7 @@ def generated(cta_agregado=True):
 @pytest.fixture
 def generation(monkeypatch):
     drive = Mock(return_value=image_metadata())
-    download = Mock(side_effect=lambda rows, limit: [(*row, b"image") for row in rows[:limit]])
+    download = Mock(side_effect=lambda rows, limit=None, **k: [(*row, b"image") for row in rows[:limit]])
     engine = Mock(return_value=generated())
     monkeypatch.setattr(jobs.drive, "list_image_metadata", drive)
     monkeypatch.setattr(jobs.drive, "download_images", download)
@@ -285,7 +285,7 @@ def test_weekly_does_not_crash_for_client_with_no_business_description_yet(gener
 
 def test_weekly_continues_after_insufficient_images_and_saves_complete_thread(generation):
     drive, engine = generation
-    drive.side_effect = lambda folder: image_metadata(2 if folder == "a-short" else 5)
+    drive.side_effect = lambda folder, *a, **k: image_metadata(2 if folder == "a-short" else 5)
     db = Database([client("a-short"), client()])
     jobs.generate_weekly(db, date(2026, 9, 18))
     assert "sin imágenes suficientes" in db.rows["clients"][0]["generation_error"]
