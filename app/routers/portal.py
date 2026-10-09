@@ -397,6 +397,80 @@ def list_employees(employee: EmployeeDep):
     ).order("name").execute().data or []
 
 
+class FocusPresetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(min_length=1, max_length=500)
+
+
+class FocusPresetPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    description: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+def _focus_preset_or_error(db, preset_id: str, agency_id: str) -> dict:
+    result = db.table("focus_presets").select("id,agency_id,name,description").eq(
+        "id", preset_id
+    ).maybe_single().execute()
+    if not result or not result.data:
+        raise HTTPException(status_code=404, detail="Enfoque no encontrado")
+    if result.data["agency_id"] != agency_id:
+        raise HTTPException(status_code=403, detail="Enfoque fuera de la agencia")
+    return result.data
+
+
+@router.get("/enfoques")
+def list_focus_presets(employee: EmployeeDep):
+    """Reusable focus templates an employee picks from for a client's
+    weekly_focus instead of typing it by hand — see patch_client below for
+    how selecting one plugs into the existing one-shot-consume behavior."""
+    db = get_admin_client()
+    return db.table("focus_presets").select("id,name,description").eq(
+        "agency_id", employee.agency_id
+    ).order("name").execute().data or []
+
+
+@router.post("/enfoques")
+def create_focus_preset(body: FocusPresetCreate, employee: EmployeeDep):
+    db = get_admin_client()
+    try:
+        created = db.table("focus_presets").insert({
+            "agency_id": employee.agency_id,
+            "name": body.name.strip(),
+            "description": body.description.strip(),
+        }).execute().data
+    except APIError:
+        raise HTTPException(status_code=409, detail="Ya existe un enfoque con ese nombre")
+    return created[0] if isinstance(created, list) and created else {}
+
+
+@router.patch("/enfoques/{preset_id}")
+def patch_focus_preset(preset_id: str, body: FocusPresetPatch, employee: EmployeeDep):
+    db = get_admin_client()
+    _focus_preset_or_error(db, preset_id, employee.agency_id)
+    changes = {
+        key: value.strip() for key, value in body.model_dump(exclude_unset=True).items()
+        if value is not None
+    }
+    if not changes:
+        raise HTTPException(status_code=422, detail="Nada para actualizar")
+    try:
+        updated = db.table("focus_presets").update(changes).eq("id", preset_id).execute().data
+    except APIError:
+        raise HTTPException(status_code=409, detail="Ya existe un enfoque con ese nombre")
+    return updated[0] if isinstance(updated, list) and updated else {"id": preset_id, **changes}
+
+
+@router.delete("/enfoques/{preset_id}")
+def delete_focus_preset(preset_id: str, employee: EmployeeDep):
+    """Presets are only a reusable SOURCE for clients.weekly_focus text —
+    selecting one copies its description, it's never referenced by id — so
+    deleting a preset can't orphan or break any client that already used it."""
+    db = get_admin_client()
+    _focus_preset_or_error(db, preset_id, employee.agency_id)
+    db.table("focus_presets").delete().eq("id", preset_id).execute()
+    return {"detail": "Enfoque eliminado"}
+
+
 @router.get("/clientes/{client_id}")
 def get_client(client_id: str, employee: EmployeeDep):
     db = get_admin_client()

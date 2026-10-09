@@ -516,6 +516,97 @@ def test_list_employees_is_scoped_to_current_agency(monkeypatch, client):
     assert response.json() == [{"id": "emp-1", "name": "PM", "email": "pm@example.com"}]
 
 
+def test_list_focus_presets_is_scoped_to_current_agency(monkeypatch, client):
+    db = DB([[{"id": "f1", "name": "Venta", "description": "Destacá la promo activa."}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/enfoques")
+
+    assert response.status_code == 200
+    assert response.json() == [{"id": "f1", "name": "Venta", "description": "Destacá la promo activa."}]
+
+
+def test_create_focus_preset_inserts_scoped_to_agency(monkeypatch, client):
+    db = DB([[{"id": "f1", "name": "Venta", "description": "Destacá la promo activa."}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.post("/portal/enfoques", json={"name": "Venta", "description": "Destacá la promo activa."})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Venta"
+    assert db.inserts == [("focus_presets", {
+        "agency_id": "agency-1", "name": "Venta", "description": "Destacá la promo activa.",
+    })]
+
+
+def test_create_focus_preset_rejects_duplicate_name(monkeypatch, client):
+    class ConflictingDB:
+        def table(self, name):
+            class Q:
+                def insert(self, payload):
+                    def execute():
+                        raise APIError({"message": "duplicate", "code": "23505", "details": None, "hint": None})
+                    return SimpleNamespace(execute=execute)
+            return Q()
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: ConflictingDB())
+
+    response = client.post("/portal/enfoques", json={"name": "Venta", "description": "x"})
+
+    assert response.status_code == 409
+
+
+def test_patch_focus_preset_updates_description(monkeypatch, client):
+    db = DB([
+        {"id": "f1", "agency_id": "agency-1", "name": "Venta", "description": "old"},
+        [{"id": "f1", "name": "Venta", "description": "new"}],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/enfoques/f1", json={"description": "new"})
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "new"
+    assert db.updates == [("focus_presets", {"description": "new"}, [("id", "f1")])]
+
+
+def test_patch_focus_preset_not_found(monkeypatch, client):
+    db = DB([None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/enfoques/missing", json={"name": "New"})
+
+    assert response.status_code == 404
+
+
+def test_patch_focus_preset_rejects_other_agency(monkeypatch, client):
+    db = DB([{"id": "f1", "agency_id": "other-agency", "name": "Venta", "description": "x"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/enfoques/f1", json={"name": "New"})
+
+    assert response.status_code == 403
+
+
+def test_delete_focus_preset_removes_it(monkeypatch, client):
+    db = DB([{"id": "f1", "agency_id": "agency-1", "name": "Venta", "description": "x"}, None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.delete("/portal/enfoques/f1")
+
+    assert response.status_code == 200
+    assert db.deletes == [("focus_presets", [("id", "f1")])]
+
+
+def test_delete_focus_preset_not_found(monkeypatch, client):
+    db = DB([None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.delete("/portal/enfoques/missing")
+
+    assert response.status_code == 404
+    assert db.deletes == []
+
+
 def test_get_client_includes_assigned_employee_id(monkeypatch, client):
     db = DB([{"id": "c1", "agency_id": "agency-1"}, {"employee_id": "emp-2"}])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)

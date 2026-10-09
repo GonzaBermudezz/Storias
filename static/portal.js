@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, me: null, employees: [], clientSearch: '' };
+  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, me: null, employees: [], clientSearch: '', focusPresets: [], editingFocusPresetId: null };
   const LOCKED_STORY_STATES = new Set(['publicando', 'publicado', 'cancelada']);
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
@@ -28,6 +28,8 @@
     'check-check': '<path d="M18 6 7 17l-5-5"/> <path d="m22 10-7.5 7.5L13 16"/>',
     sparkles: '<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/> <path d="M20 2v4"/> <path d="M22 4h-4"/> <circle cx="4" cy="20" r="2"/>',
     'grip-vertical': '<circle cx="9" cy="12" r="1"/> <circle cx="9" cy="5" r="1"/> <circle cx="9" cy="19" r="1"/> <circle cx="15" cy="12" r="1"/> <circle cx="15" cy="5" r="1"/> <circle cx="15" cy="19" r="1"/>',
+    target: '<circle cx="12" cy="12" r="10"/> <circle cx="12" cy="12" r="6"/> <circle cx="12" cy="12" r="2"/>',
+    plus: '<path d="M5 12h14"/> <path d="M12 5v14"/>',
   };
   function icon(name, size = 16) {
     return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -104,7 +106,7 @@
     return client.avatar_url ? `<img src="${escapeHtml(client.avatar_url)}" alt="">` : escapeHtml(initials(client.name));
   }
   function setControlsDisabled(disabled) {
-    ['save-description','save-focus','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-instagram','client-whatsapp','client-email','client-avatar-upload'].forEach((id) => { $(id).disabled = disabled; });
+    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-instagram','client-whatsapp','client-email','client-avatar-upload'].forEach((id) => { $(id).disabled = disabled; });
     $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating;
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
@@ -113,6 +115,7 @@
     $('client-view').classList.add('hidden'); $('empty').classList.remove('hidden'); $('empty').textContent = 'Seleccioná un cliente para gestionar su contenido.';
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
+    $('enfoques-view').classList.add('hidden'); $('nav-enfoques').classList.remove('active');
   }
   function homeAvatar(clientId, name) {
     const client = state.clients.find((item) => item.id === clientId) || {id: clientId, name};
@@ -241,15 +244,15 @@
     renderHomeHero({summary, problems: problemIds.size, healthKnown: !!health});
   }
   function showHome() {
-    $('nav-home').classList.add('active'); $('nav-clients').classList.remove('active');
-    $('home-view').classList.remove('hidden'); $('empty').classList.add('hidden'); $('client-view').classList.add('hidden');
+    $('nav-home').classList.add('active'); $('nav-clients').classList.remove('active'); $('nav-enfoques').classList.remove('active');
+    $('home-view').classList.remove('hidden'); $('enfoques-view').classList.add('hidden'); $('empty').classList.add('hidden'); $('client-view').classList.add('hidden');
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     renderClients();
     loadHomeSummary();
   }
   function showClients() {
-    $('nav-clients').classList.add('active'); $('nav-home').classList.remove('active');
-    $('home-view').classList.add('hidden');
+    $('nav-clients').classList.add('active'); $('nav-home').classList.remove('active'); $('nav-enfoques').classList.remove('active');
+    $('home-view').classList.add('hidden'); $('enfoques-view').classList.add('hidden');
     renderClients();
     if (state.client) {
       $('client-view').classList.remove('hidden'); $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
@@ -258,11 +261,115 @@
       $('empty').classList.remove('hidden');
     }
   }
+  function showEnfoques() {
+    $('nav-enfoques').classList.add('active'); $('nav-home').classList.remove('active'); $('nav-clients').classList.remove('active');
+    $('enfoques-view').classList.remove('hidden'); $('home-view').classList.add('hidden'); $('empty').classList.add('hidden'); $('client-view').classList.add('hidden');
+    $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
+    renderFocusPresetsList();
+  }
+  function renderFocusPresetsList() {
+    const presets = state.focusPresets || [];
+    $('focus-presets-count').textContent = `${presets.length} enfoque${presets.length === 1 ? '' : 's'}`;
+    $('focus-presets-list').innerHTML = presets.length ? presets.map((preset) => `
+      <div class="home-row" data-focus-preset-id="${escapeHtml(preset.id)}">
+        <div class="home-row-text"><strong>${escapeHtml(preset.name)}</strong><span title="${escapeHtml(preset.description)}">${escapeHtml(preset.description)}</span></div>
+        <div class="focus-row-actions">
+          <button type="button" class="icon-btn" data-edit-focus-preset aria-label="Editar enfoque">${icon('pencil', 14)}</button>
+          <button type="button" class="icon-btn" data-delete-focus-preset aria-label="Eliminar enfoque">${icon('trash', 14)}</button>
+        </div>
+      </div>`).join('')
+      : listEmptyMarkup('Todavía no hay enfoques', 'Creá el primero para que tus clientes puedan elegirlo.');
+  }
+  function openFocusPresetDialog(preset) {
+    state.editingFocusPresetId = preset ? preset.id : null;
+    $('focus-preset-dialog-title').textContent = preset ? 'Editar enfoque' : 'Nuevo enfoque';
+    $('focus-preset-name').value = preset ? preset.name : '';
+    $('focus-preset-description').value = preset ? preset.description : '';
+    $('focus-preset-desc-count').textContent = String($('focus-preset-description').value.length);
+    $('focus-preset-feedback').classList.add('hidden');
+    $('focus-preset-dialog').showModal();
+  }
+  async function saveFocusPreset() {
+    const name = $('focus-preset-name').value.trim();
+    const description = $('focus-preset-description').value.trim();
+    const feedback = $('focus-preset-feedback');
+    feedback.classList.add('hidden');
+    if (!name || !description) {
+      feedback.textContent = 'Completá el nombre y la descripción.'; feedback.classList.remove('hidden'); return;
+    }
+    const button = $('save-focus-preset'); button.disabled = true;
+    try {
+      const editingId = state.editingFocusPresetId;
+      if (editingId) {
+        await api(`/portal/enfoques/${encodeURIComponent(editingId)}`, {method:'PATCH', body:JSON.stringify({name, description})});
+      } else {
+        await api('/portal/enfoques', {method:'POST', body:JSON.stringify({name, description})});
+      }
+      state.focusPresets = await api('/portal/enfoques');
+      renderFocusPresetsList();
+      if (state.client) renderFocusSelect();
+      $('focus-preset-dialog').close();
+      showMessage(editingId ? 'Enfoque actualizado.' : 'Enfoque creado.');
+    } catch (error) {
+      feedback.textContent = error.message; feedback.classList.remove('hidden');
+    } finally {
+      button.disabled = false;
+    }
+  }
+  async function deleteFocusPresetAction(presetId, name) {
+    const confirmed = await confirmDialog(`¿Eliminar el enfoque "${name}"? Los clientes que ya lo hayan elegido no se ven afectados.`, {okLabel: 'Sí, eliminar', danger: true});
+    if (!confirmed) return;
+    try {
+      await api(`/portal/enfoques/${encodeURIComponent(presetId)}`, {method:'DELETE'});
+      state.focusPresets = await api('/portal/enfoques');
+      renderFocusPresetsList();
+      if (state.client) renderFocusSelect();
+      showMessage('Enfoque eliminado.');
+    } catch (error) {
+      showMessage(error.message, true);
+    }
+  }
+  function renderFocusSelect() {
+    const select = $('client-focus');
+    const presets = state.focusPresets || [];
+    const current = state.client?.weekly_focus || '';
+    const matched = current ? presets.find((preset) => preset.description === current) : null;
+    let options = '<option value="">Sin enfoque</option>' +
+      presets.map((preset) => `<option value="${escapeHtml(preset.id)}">${escapeHtml(preset.name)}</option>`).join('');
+    if (current && !matched) {
+      options += '<option value="__custom__" disabled>Texto personalizado (no coincide con un enfoque guardado)</option>';
+    }
+    select.innerHTML = options;
+    select.value = matched ? matched.id : (current ? '__custom__' : '');
+  }
+  async function saveClientFocus() {
+    const select = $('client-focus'), clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId || select.value === '__custom__') return;
+    const preset = select.value ? (state.focusPresets || []).find((item) => item.id === select.value) : null;
+    const value = preset ? preset.description : null;
+    if (value === (state.client?.weekly_focus || null)) return;
+    select.disabled = true;
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}`, {method:'PATCH', body:JSON.stringify({weekly_focus: value})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client = updated;
+      $('client-workspace-subtitle').textContent = state.client.weekly_focus
+        ? 'La dirección semanal está cargada. Revisá las historias y dejalas listas para publicar.'
+        : 'Definí una dirección, revisá las historias y dejalas listas para publicar.';
+      showMessage(value ? 'Enfoque aplicado — se usa en la próxima generación y después se limpia solo.' : 'Enfoque quitado.');
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message, true); renderFocusSelect(); }
+    } finally {
+      if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled = false;
+    }
+  }
 
   async function loadMeAndOptions() {
     try {
-      const [me, fonts, employees] = await Promise.all([api('/portal/me'), api('/portal/tipografias'), api('/portal/empleados')]);
-      state.me = me; state.fontChoices = fonts; state.employees = employees;
+      const [me, fonts, employees, focusPresets] = await Promise.all([
+        api('/portal/me'), api('/portal/tipografias'), api('/portal/empleados'), api('/portal/enfoques'),
+      ]);
+      state.me = me; state.fontChoices = fonts; state.employees = employees; state.focusPresets = focusPresets;
       injectFontFaces(fonts);
       const fontOptions = fonts.map((font) => `<option value="${escapeHtml(font.key)}" style="font-family:'sf-${escapeHtml(font.key)}',sans-serif">${escapeHtml(font.label)}</option>`).join('');
       $('client-pm').innerHTML = '<option value="">Sin asignar</option>' + employees.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name || person.email)}</option>`).join('');
@@ -389,6 +496,7 @@
     if ($('story-dialog').open) $('story-dialog').close();
     clearMessage(); $('empty').classList.add('hidden'); $('client-view').classList.remove('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
+    $('enfoques-view').classList.add('hidden'); $('nav-enfoques').classList.remove('active');
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
     $('client-name').textContent = 'Cargando...'; $('stories').innerHTML = loadingMarkup('Cargando historias...'); $('week-badge').classList.add('hidden');
     $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; updateContactLinks(); $('drive-link').classList.add('hidden');
@@ -456,12 +564,12 @@
     $('client-workspace-subtitle').textContent = state.client.weekly_focus
       ? 'La dirección semanal está cargada. Revisá las historias y dejalas listas para publicar.'
       : 'Definí una dirección, revisá las historias y dejalas listas para publicar.';
-    $('business-description').value = state.client.business_description || ''; $('weekly-focus').value = state.client.weekly_focus || ''; $('client-topics').value = (state.client.topics || []).join('\n');
-    $('desc-count').textContent = String($('business-description').value.length); $('focus-count').textContent = String($('weekly-focus').value.length); $('topics-count').textContent = String((state.client.topics || []).length);
+    $('business-description').value = state.client.business_description || ''; $('client-topics').value = (state.client.topics || []).join('\n');
+    $('desc-count').textContent = String($('business-description').value.length); $('topics-count').textContent = String((state.client.topics || []).length);
     updateFieldView('description', state.client.business_description, 'Todavía no hay descripción. Hacé click acá para agregarla.');
-    updateFieldView('focus', state.client.weekly_focus, 'Sin enfoque puntual para esta semana.');
     renderTopicsView(state.client.topics);
-    setFieldMode('description', false); setFieldMode('focus', false); setFieldMode('topics', false);
+    setFieldMode('description', false); setFieldMode('topics', false);
+    renderFocusSelect();
     $('client-pm').value = state.client.assigned_employee_id || '';
     $('client-font').value = state.client.font_choice || '';
     $('client-instagram').value = state.client.instagram_profile_url || '';
@@ -736,8 +844,8 @@
     return `<article class="story${approvedClass}${locked ? ' read-only' : ''}" draggable="${reorderable ? 'true' : 'false'}" data-reorderable="${reorderable ? 'true' : 'false'}" data-story-id="${escapeHtml(story.id)}" data-story-group-id="${escapeHtml(groupId)}">${story.image_url ? `<img src="${escapeHtml(story.image_url)}" alt="Historia ${index+1}">` : ''}<span class="story-num">${index+1}</span>${dateBadge}${approvedBadge}<div class="story-actions"><button class="icon-btn" data-action="preview" aria-label="Ver en grande">${icon('eye', 14)}</button>${mutationActions}</div><div class="story-overlay"><p class="story-text">${escapeHtml(story.text || 'Sin texto todavía')}</p></div></article>`;
   }
   async function saveClientField(field, buttonId) {
-    const name = field === 'weekly_focus' ? 'focus' : field === 'topics' ? 'topics' : 'description';
-    const button=$(buttonId), input=$(field==='business_description'?'business-description':field==='weekly_focus'?'weekly-focus':'client-topics'), value=field === 'topics' ? input.value.split(/\r?\n/).map((topic) => topic.trim()).filter(Boolean) : input.value.trim(), clientId=state.client?.id, selectionVersion=state.selectionVersion;
+    const name = field === 'topics' ? 'topics' : 'description';
+    const button=$(buttonId), input=$(field==='business_description'?'business-description':'client-topics'), value=field === 'topics' ? input.value.split(/\r?\n/).map((topic) => topic.trim()).filter(Boolean) : input.value.trim(), clientId=state.client?.id, selectionVersion=state.selectionVersion;
     if (!clientId) return; button.disabled=true;
     try {
       const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}`, {method:'PATCH', body:JSON.stringify({[field]:field === 'topics' ? value : value || null})});
@@ -748,11 +856,10 @@
         $('topics-count').textContent = String((updated.topics || []).length);
         renderTopicsView(updated.topics);
       } else {
-        updateFieldView(name, field==='weekly_focus'?updated.weekly_focus:updated.business_description,
-          field==='weekly_focus'?'Sin enfoque puntual para esta semana.':'Todavía no hay descripción. Hacé click acá para agregarla.');
+        updateFieldView(name, updated.business_description, 'Todavía no hay descripción. Hacé click acá para agregarla.');
       }
       exitFieldEdit(name);
-      showMessage(field==='weekly_focus'?'Enfoque semanal guardado.':field==='topics'?'Temas guardados.':'Descripción guardada.');
+      showMessage(field==='topics'?'Temas guardados.':'Descripción guardada.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message,true); }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled=false; }
   }
@@ -1528,6 +1635,18 @@
   }
   $('nav-home').addEventListener('click',showHome);
   $('nav-clients').addEventListener('click',showClients);
+  $('nav-enfoques').addEventListener('click',showEnfoques);
+  $('new-focus-preset').addEventListener('click',()=>openFocusPresetDialog(null));
+  $('close-focus-preset').addEventListener('click',()=>$('focus-preset-dialog').close());
+  $('close-focus-preset-2').addEventListener('click',()=>$('focus-preset-dialog').close());
+  $('save-focus-preset').addEventListener('click',saveFocusPreset);
+  $('focus-preset-description').addEventListener('input',()=>{$('focus-preset-desc-count').textContent=String($('focus-preset-description').value.length);});
+  $('focus-presets-list').addEventListener('click',(event)=>{
+    const row = event.target.closest('[data-focus-preset-id]'); if (!row) return;
+    const preset = (state.focusPresets || []).find((item) => item.id === row.dataset.focusPresetId); if (!preset) return;
+    if (event.target.closest('[data-edit-focus-preset]')) openFocusPresetDialog(preset);
+    else if (event.target.closest('[data-delete-focus-preset]')) deleteFocusPresetAction(preset.id, preset.name);
+  });
   $('home-view').addEventListener('click',(event)=>{
     const generate = event.target.closest('[data-home-generate]');
     if (generate) {
@@ -1559,11 +1678,11 @@
   $('client-search').addEventListener('input',()=>{state.clientSearch=$('client-search').value;$('client-search-clear').classList.toggle('hidden',!$('client-search').value);renderClients();});
   $('client-search-clear').addEventListener('click',()=>{$('client-search').value='';state.clientSearch='';$('client-search-clear').classList.add('hidden');renderClients();$('client-search').focus();});
   $('save-description').addEventListener('click',()=>saveClientField('business_description','save-description'));
-  $('save-focus').addEventListener('click',()=>saveClientField('weekly_focus','save-focus'));
   $('save-topics').addEventListener('click',()=>saveClientField('topics','save-topics'));
   $('try-prompt').addEventListener('click',tryPrompt);
   $('client-pm').addEventListener('change',saveClientPm);
   $('client-font').addEventListener('change',saveClientFont);
+  $('client-focus').addEventListener('change',saveClientFocus);
   $('client-instagram').addEventListener('change',()=>saveClientContact('instagram_profile_url','client-instagram'));
   $('client-whatsapp').addEventListener('change',()=>saveClientContact('whatsapp_contact','client-whatsapp'));
   $('client-email').addEventListener('change',()=>saveClientContact('contact_email','client-email'));
@@ -1580,12 +1699,9 @@
   $('close-bulk-clients-2').addEventListener('click', () => $('bulk-clients-dialog').close());
   $('submit-bulk-clients').addEventListener('click', submitBulkClients);
   $('business-description').addEventListener('input',()=>{$('desc-count').textContent=String($('business-description').value.length);});
-  $('weekly-focus').addEventListener('input',()=>{$('focus-count').textContent=String($('weekly-focus').value.length);});
   $('client-topics').addEventListener('input',()=>{$('topics-count').textContent=String($('client-topics').value.split(/\r?\n/).map((topic) => topic.trim()).filter(Boolean).length);});
   $('cancel-description').addEventListener('click',()=>{$('business-description').value=state.client?.business_description || ''; $('desc-count').textContent=String($('business-description').value.length); exitFieldEdit('description');});
-  $('cancel-focus').addEventListener('click',()=>{$('weekly-focus').value=state.client?.weekly_focus || ''; $('focus-count').textContent=String($('weekly-focus').value.length); exitFieldEdit('focus');});
   bindFieldViewEdit('description-view', 'description', 'business-description');
-  bindFieldViewEdit('focus-view', 'focus', 'weekly-focus');
   bindFieldViewEdit('topics-view', 'topics', 'client-topics');
   $('cancel-topics').addEventListener('click',()=>{$('client-topics').value=(state.client?.topics || []).join('\n'); $('topics-count').textContent=String((state.client?.topics || []).length); exitFieldEdit('topics');});
   $('content-panel-toggle').addEventListener('click',()=>$('content-panel').classList.toggle('collapsed'));
@@ -1735,6 +1851,7 @@
   $('client-list').addEventListener('click', () => setMobileMenu(false));
   $('nav-home').addEventListener('click', () => setMobileMenu(false));
   $('nav-clients').addEventListener('click', () => setMobileMenu(false));
+  $('nav-enfoques').addEventListener('click', () => setMobileMenu(false));
   $('me-card').addEventListener('click', (event) => {
     event.stopPropagation();
     const open = !$('me-menu').classList.toggle('hidden');

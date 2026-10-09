@@ -111,11 +111,11 @@
     .field{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
     .field-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
     .field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
-    .field-head .info{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:14px;height:14px;border-radius:50%;border:1.3px solid var(--muted);color:var(--muted);font-size:9.5px;font-style:italic;font-weight:700;line-height:1;cursor:help;transition:border-color .12s,color .12s}
-    .field-head .info:hover,.field-head .info:focus-visible{border-color:var(--accent);color:var(--accent)}
-    .field-head .info[data-tooltip]::after{content:attr(data-tooltip);position:absolute;z-index:10;bottom:calc(100% + 9px);left:50%;width:max-content;max-width:220px;padding:8px 10px;border-radius:7px;background:var(--fg);color:#fff;font-size:11px;font-weight:400;line-height:1.4;text-align:center;box-shadow:0 7px 18px rgba(0,0,0,.18);opacity:0;pointer-events:none;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
-    .field-head .info[data-tooltip]::before{content:"";position:absolute;z-index:11;bottom:calc(100% + 4px);left:50%;border:5px solid transparent;border-top-color:var(--fg);opacity:0;pointer-events:none;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
-    .field-head .info[data-tooltip]:hover::after,.field-head .info[data-tooltip]:hover::before,.field-head .info[data-tooltip]:focus-visible::after,.field-head .info[data-tooltip]:focus-visible::before{opacity:1;transform:translate(-50%,0)}
+    .field-head .info,.team-field .info{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:14px;height:14px;border-radius:50%;border:1.3px solid var(--muted);color:var(--muted);font-size:9.5px;font-style:italic;font-weight:700;line-height:1;cursor:help;transition:border-color .12s,color .12s}
+    .field-head .info:hover,.field-head .info:focus-visible,.team-field .info:hover,.team-field .info:focus-visible{border-color:var(--accent);color:var(--accent)}
+    .field-head .info[data-tooltip]::after,.team-field .info[data-tooltip]::after{content:attr(data-tooltip);position:absolute;z-index:10;bottom:calc(100% + 9px);left:50%;width:max-content;max-width:220px;padding:8px 10px;border-radius:7px;background:var(--fg);color:#fff;font-size:11px;font-weight:400;line-height:1.4;text-align:center;box-shadow:0 7px 18px rgba(0,0,0,.18);opacity:0;pointer-events:none;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
+    .field-head .info[data-tooltip]::before,.team-field .info[data-tooltip]::before{content:"";position:absolute;z-index:11;bottom:calc(100% + 4px);left:50%;border:5px solid transparent;border-top-color:var(--fg);opacity:0;pointer-events:none;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
+    .field-head .info[data-tooltip]:hover::after,.field-head .info[data-tooltip]:hover::before,.field-head .info[data-tooltip]:focus-visible::after,.field-head .info[data-tooltip]:focus-visible::before,.team-field .info[data-tooltip]:hover::after,.team-field .info[data-tooltip]:hover::before,.team-field .info[data-tooltip]:focus-visible::after,.team-field .info[data-tooltip]:focus-visible::before{opacity:1;transform:translate(-50%,0)}
     .field-view{min-height:90px;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);font-size:13px;line-height:1.55;flex:1;cursor:pointer;transition:border-color .16s ease}
     .field-view:hover,.field-view:focus-visible{border-color:var(--accent)}
     .field-view:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 35%,transparent);outline-offset:2px}
@@ -298,6 +298,7 @@
     .modal-body{padding:19px;max-height:60vh;overflow:auto}
     .modal-body textarea{min-height:130px}
     .modal-body .team-field:first-child{margin-top:0;padding-top:0;border-top:0}
+    .focus-preset-desc-label{display:block;margin-top:14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
     .modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:0 19px 19px}
     .modal-feedback{margin:12px 0 0;padding:9px 11px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:12px;line-height:1.45}
     dialog.story-edit{width:min(860px,calc(100% - 32px))}
@@ -577,6 +578,9 @@
     .home-row-btn{flex:none;padding:6px 11px;font-size:12px}
     .home-row-go{display:inline-flex;flex:none;color:var(--muted)}
     .home-row:hover .home-row-go{color:var(--accent-strong)}
+    .focus-row-actions{display:flex;gap:6px;flex-shrink:0}
+    .focus-row-actions .icon-btn{background:var(--surface);border:1px solid var(--border);color:var(--fg)}
+    .focus-row-actions .icon-btn:hover{border-color:var(--accent);color:var(--accent)}
     .home-section+.home-ok-list{margin-top:4px;padding-top:14px;border-top:1px solid var(--border)}
     .home-ok-list{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 8px 2px}
     .home-ok{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
@@ -622,6 +626,7 @@
     <nav class="main-nav">
       <span class="nav-item" id="nav-home" title="Inicio"><span class="icon" data-icon="house" data-size="16"></span><span class="nav-label">Inicio</span></span>
       <span class="nav-item active" id="nav-clients" title="Clientes"><span class="icon" data-icon="users" data-size="16"></span><span class="nav-label">Clientes</span></span>
+      <span class="nav-item" id="nav-enfoques" title="Enfoque"><span class="icon" data-icon="target" data-size="16"></span><span class="nav-label">Enfoque</span></span>
       <span class="nav-item disabled hidden" title="Próximamente"><span class="icon" data-icon="settings" data-size="16"></span>Ajustes</span>
     </nav>
     <div class="nav-divider"></div>
@@ -689,6 +694,20 @@
           <div class="home-panel-body" id="home-idle"></div>
         </div>
       </section>
+      <section id="enfoques-view" class="hidden">
+        <div class="client-hero home-hero">
+          <div>
+            <p class="eyebrow">Biblioteca</p>
+            <h2>Enfoques</h2>
+            <p>Plantillas reutilizables de enfoque semanal. Un cliente elige una desde su panel y esa descripción se usa en la próxima generación.</p>
+          </div>
+          <button type="button" id="new-focus-preset" class="btn primary"><span data-icon="plus" data-size="16"></span>Nuevo enfoque</button>
+        </div>
+        <div class="panel home-panel" id="focus-presets-panel">
+          <div class="home-panel-head"><h2>Enfoques guardados</h2><span id="focus-presets-count" class="home-pill neutral"></span></div>
+          <div class="home-panel-body" id="focus-presets-list"></div>
+        </div>
+      </section>
       <section id="client-view" class="hidden">
         <div class="client-hero">
           <div>
@@ -713,16 +732,6 @@
                 <div class="actions hidden" id="description-edit-actions"><button id="save-description" class="btn primary">Guardar</button><button id="cancel-description" class="btn">Cancelar</button></div>
                 <div id="prompt-preview" class="preview hidden"></div>
               </div>
-              <div class="field" id="focus-field">
-                <div class="field-head"><label for="weekly-focus">Enfoque semanal</label><span class="info" tabindex="0" aria-label="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual." data-tooltip="Pedido puntual para las próximas historias. Se aplica al cliente durante esta semana, no a una historia individual.">i</span></div>
-                <div class="field-view" id="focus-view" role="button" tabindex="0" aria-label="Editar enfoque semanal"><p class="field-text" id="focus-text"></p></div>
-                <div class="field-edit hidden" id="focus-edit">
-                  <textarea id="weekly-focus" maxlength="300" placeholder="Ej.: destacar la venta cerrada esta semana"></textarea>
-                  <div class="char-count"><span id="focus-count">0</span>/300</div>
-                </div>
-                <div class="actions" id="focus-view-actions"></div>
-                <div class="actions hidden" id="focus-edit-actions"><button id="save-focus" class="btn primary">Guardar</button><button id="cancel-focus" class="btn">Cancelar</button></div>
-              </div>
               <div class="field" id="topics-field">
                 <div class="field-head"><label for="client-topics">Temas</label><span class="info" tabindex="0" aria-label="Un tema por línea. La IA usa esta lista como punto de partida para elegir el enfoque de las historias.">i</span></div>
                 <div class="field-view" id="topics-view" role="button" tabindex="0" aria-label="Editar temas"><div class="tags-view" id="topics-text"></div></div>
@@ -733,6 +742,11 @@
                 <div class="actions" id="topics-view-actions"></div>
                 <div class="actions hidden" id="topics-edit-actions"><button id="save-topics" class="btn primary">Guardar</button><button id="cancel-topics" class="btn">Cancelar</button></div>
               </div>
+            </div>
+            <div class="team-field">
+              <label for="client-focus">Enfoque semanal</label>
+              <select id="client-focus"><option value="">Sin enfoque</option></select>
+              <span class="info" tabindex="0" aria-label="Se usa en la próxima generación semanal y después se limpia solo, como antes. Los enfoques se crean y editan en la pestaña Enfoque del menú." data-tooltip="Se usa en la próxima generación semanal y después se limpia solo, como antes. Los enfoques se crean y editan en la pestaña Enfoque del menú.">i</span>
             </div>
             <div class="team-field"><label for="client-pm">PM asignado</label><select id="client-pm"><option value="">Sin asignar</option></select></div>
             <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Default</option></select></div>
@@ -813,6 +827,17 @@
     </div>
   </div><div class="modal-foot"><button id="close-settings-2" class="btn">Cerrar</button></div></dialog>
   <dialog id="ritmo-dialog"><div class="modal-head"><strong>Días y horarios de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días y definí cuántas de las 4 historias se publican cada día.</p><div id="ritmo-chips" class="ritmo-chips"></div><div id="ritmo-days-detail" class="ritmo-days-detail"></div><p id="ritmo-count-total" class="hint"></p><p id="ritmo-detail-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p><button id="save-ritmo-detail" class="btn">Guardar días y horarios</button><p id="ritmo-generation-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button><button id="generate-weekly" class="btn primary">Generar historias para la semana que viene</button></div></dialog>
+  <dialog id="focus-preset-dialog">
+    <div class="modal-head"><strong id="focus-preset-dialog-title">Nuevo enfoque</strong><button id="close-focus-preset" class="icon-btn" aria-label="Cerrar">×</button></div>
+    <div class="modal-body">
+      <div class="team-field"><label for="focus-preset-name">Nombre</label><input type="text" id="focus-preset-name" maxlength="80" placeholder="Ej.: Venta"></div>
+      <label for="focus-preset-description" class="focus-preset-desc-label">Descripción</label>
+      <textarea id="focus-preset-description" maxlength="500" placeholder="Ej.: destacá la promo activa y generá urgencia de compra"></textarea>
+      <div class="char-count"><span id="focus-preset-desc-count">0</span>/500</div>
+      <p id="focus-preset-feedback" class="modal-feedback hidden" role="alert" aria-live="polite"></p>
+    </div>
+    <div class="modal-foot"><button id="close-focus-preset-2" class="btn">Cancelar</button><button id="save-focus-preset" class="btn primary">Guardar</button></div>
+  </dialog>
   <dialog id="bulk-clients-dialog" class="wide">
     <div class="modal-head"><strong>Alta masiva de clientes</strong><button id="close-bulk-clients" class="icon-btn" aria-label="Cerrar">×</button></div>
     <div class="modal-body">
