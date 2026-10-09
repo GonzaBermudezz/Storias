@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from datetime import date, timedelta
 from types import SimpleNamespace
@@ -893,6 +894,19 @@ def test_create_manual_story_cleans_reserved_group_when_story_insert_fails(monke
 
     assert destroyed == ["manual/failed"]
     assert ("rpc:delete_empty_manual_group", {"p_group_id": "g1"}) in db.inserts
+
+
+def test_upload_endpoints_are_sync_not_async():
+    # Both endpoints proxy a blocking Cloudinary upload (app.services.uploads
+    # calls cloudinary.uploader.upload(), a synchronous network call). FastAPI
+    # runs a plain `def` endpoint in a worker threadpool automatically, so
+    # that block doesn't matter — but if either of these were ever declared
+    # `async def` again, the blocking upload would run directly on the event
+    # loop and freeze every other request in the app, for every other user,
+    # for as long as the upload takes. This guards against that regression.
+    import app.routers.portal as portal_module
+    assert not inspect.iscoroutinefunction(portal_module.upload_client_avatar)
+    assert not inspect.iscoroutinefunction(portal_module.create_manual_story)
 
 
 

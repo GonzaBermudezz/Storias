@@ -38,6 +38,31 @@
     document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon, Number(el.dataset.size) || 16); });
   }
   function avatarColor(id) { let hash = 0; for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0; return hash % 12; }
+  async function resizeImageForUpload(file, maxDimension = 1600, quality = 0.85) {
+    // A phone photo is routinely 4000+ px / several MB, but Instagram Stories
+    // render at 1080x1920 — anything bigger is pure upload-time waste, and the
+    // server proxies this same file on to Cloudinary, so it pays that cost
+    // twice. Downscaling here (not the server) is what actually shortens the
+    // upload the person is staring at. Falls back to the original file on
+    // any failure (unsupported type, canvas error, etc.) — never blocks the
+    // upload over a resize that didn't work.
+    if (!file.type || !file.type.startsWith('image/') || file.type === 'image/gif') return file;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+      if (scale >= 1) { bitmap.close?.(); return file; }
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close?.();
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+      if (!blob) return file;
+      return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', {type: 'image/jpeg'});
+    } catch (error) {
+      return file;
+    }
+  }
   let fontFacesInjected = false;
   function injectFontFaces(fonts) {
     // Lets the <option> list below render each font's name IN that font,
@@ -911,6 +936,7 @@
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
     const button = $('client-avatar-upload'); button.disabled = true;
+    file = await resizeImageForUpload(file, 800, 0.85); // an avatar renders tiny — no need for Story resolution
     const formData = new FormData(); formData.append('image', file);
     try {
       const response = await fetch(`/portal/clientes/${encodeURIComponent(clientId)}/avatar`, {method:'POST', credentials:'same-origin', body: formData});
@@ -1178,6 +1204,7 @@
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
     if (!clientId) return;
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) { showMessage('Hora inválida. Usá el formato HH:MM.', true); return; }
+    file = await resizeImageForUpload(file); // Instagram Stories render at 1080x1920 — a bigger upload is pure wasted time
     const formData = new FormData();
     formData.append('fecha_publicacion', iso); formData.append('hora_publicacion', hora); formData.append('image', file);
     try {

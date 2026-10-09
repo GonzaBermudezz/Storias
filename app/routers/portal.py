@@ -603,11 +603,19 @@ def patch_client_contact(client_id: str, body: ClientContactPatch, employee: Emp
 
 
 @router.post("/clientes/{client_id}/avatar")
-async def upload_client_avatar(client_id: str, employee: EmployeeDep, image: UploadFile = File(...)):
-    """Upload a portal-only avatar; it remains separate from the content logo."""
+def upload_client_avatar(client_id: str, employee: EmployeeDep, image: UploadFile = File(...)):
+    """Upload a portal-only avatar; it remains separate from the content logo.
+
+    A plain `def` endpoint, not `async def`: FastAPI runs sync endpoints in
+    a worker threadpool automatically, so the blocking Cloudinary upload
+    inside uploads.upload_image() below doesn't tie up the event loop.
+    An `async def` version of this would stall the ENTIRE app — every other
+    request, for every other user — for as long as the upload takes, since
+    nothing here used real async I/O to begin with. image.file.read() is
+    the sync equivalent of `await image.read()`."""
     db = get_admin_client()
     current = _client_or_error(db, client_id, employee.agency_id)
-    data = await image.read()
+    data = image.file.read()
     try:
         uploaded = uploads.upload_image(data, client_id, "avatar")
     except uploads.UploadError as exc:
@@ -718,13 +726,18 @@ def _valid_hhmm(value: str) -> bool:
 
 
 @router.post("/clientes/{client_id}/historias/manual")
-async def create_manual_story(client_id: str, employee: EmployeeDep,
+def create_manual_story(client_id: str, employee: EmployeeDep,
     fecha_publicacion: str = Form(...), hora_publicacion: str = Form(...),
     image: UploadFile = File(...)):
     """Manually schedule one image as a Story on a specific date — independent
     of the AI weekly generation. Adding a second image to a date that already
     has one just adds another story alongside it (each still publishes as its
-    own separate Instagram Story; the platform has no multi-image Story)."""
+    own separate Instagram Story; the platform has no multi-image Story).
+
+    A plain `def` endpoint, not `async def` — see upload_client_avatar's
+    docstring above: this also proxies a blocking Cloudinary upload, and an
+    `async def` here would freeze every other request in the app for as
+    long as that upload takes."""
     db = get_admin_client()
     _client_or_error(db, client_id, employee.agency_id)
     try:
@@ -769,7 +782,7 @@ async def create_manual_story(client_id: str, employee: EmployeeDep,
         next_order = 1
         created_group = True
 
-    data = await image.read()
+    data = image.file.read()
     try:
         uploaded = uploads.upload_image(data, client_id, f"{fecha_publicacion}-{parsed_date.toordinal()}-{hora_publicacion.replace(':','')}")
     except uploads.UploadError as exc:
