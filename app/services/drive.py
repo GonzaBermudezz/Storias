@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import io
 import logging
+from functools import lru_cache
 
+import google_auth_httplib2
+import httplib2
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from PIL import Image
@@ -11,6 +14,25 @@ from PIL import Image
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# httplib2 (what googleapiclient uses under the hood) has no default socket
+# timeout, so a slow or unreachable Drive API can otherwise hang a request
+# indefinitely — this is a best-effort feature (see get_drive_info/count_images),
+# never worth blocking the rest of the page on.
+_REQUEST_TIMEOUT_SECONDS = 10
+
+
+@lru_cache
+def _drive_credentials():
+    # Parsing the service account file is the expensive part of building a
+    # client — cache it per-process so every Drive call doesn't re-read and
+    # re-parse the same JSON key file from disk.
+    path = get_settings().google_service_account_file
+    if not path:
+        raise ValueError("GOOGLE_SERVICE_ACCOUNT_FILE is required for Drive access")
+    return service_account.Credentials.from_service_account_file(
+        path, scopes=["https://www.googleapis.com/auth/drive.readonly"],
+    )
 
 
 def _is_readable_image(data: bytes) -> bool:
@@ -22,13 +44,13 @@ def _is_readable_image(data: bytes) -> bool:
 
 
 def _drive_client():
-    path = get_settings().google_service_account_file
-    if not path:
-        raise ValueError("GOOGLE_SERVICE_ACCOUNT_FILE is required for Drive access")
-    credentials = service_account.Credentials.from_service_account_file(
-        path, scopes=["https://www.googleapis.com/auth/drive.readonly"],
+    # A fresh httplib2.Http() per call keeps this safe to use from
+    # FastAPI's threadpool — googleapiclient Resource/http objects aren't
+    # documented as thread-safe, only the cached credentials are shared.
+    http = google_auth_httplib2.AuthorizedHttp(
+        _drive_credentials(), http=httplib2.Http(timeout=_REQUEST_TIMEOUT_SECONDS)
     )
-    return build("drive", "v3", credentials=credentials, cache_discovery=False)
+    return build("drive", "v3", http=http, cache_discovery=False)
 
 
 def _image_files(drive_folder_id: str):

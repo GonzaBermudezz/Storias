@@ -502,14 +502,21 @@
     $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; updateContactLinks(); $('drive-link').classList.add('hidden');
     $('plan-panel').classList.add('hidden'); $('historico-panel').classList.add('hidden'); $('historico-list').innerHTML = ''; state.driveCount = undefined;
     try {
-      const [client, groups, driveInfo] = await Promise.all([
+      const [client, groups] = await Promise.all([
         api(`/portal/clientes/${encodeURIComponent(clientId)}`),
         api(`/portal/clientes/${encodeURIComponent(clientId)}/historias`),
-        api(`/portal/clientes/${encodeURIComponent(clientId)}/drive-info`).catch(() => ({count: null})),
       ]);
       if (selectionVersion !== state.selectionVersion || clientId !== state.selectedClientId) return;
-      state.client = client; state.groups = groups; state.driveCount = driveInfo?.count ?? null;
+      state.client = client; state.groups = groups;
       renderClients(); renderClient();
+      // Drive's folder listing is an external Google API call with its own
+      // latency (and occasional slowness) — fetched separately so it never
+      // holds up rendering the client's own data, which is ready sooner.
+      api(`/portal/clientes/${encodeURIComponent(clientId)}/drive-info`).then((driveInfo) => {
+        if (selectionVersion !== state.selectionVersion || clientId !== state.selectedClientId) return;
+        state.driveCount = driveInfo?.count ?? null;
+        renderActivity();
+      }).catch(() => {});
     } catch (error) {
       if (selectionVersion === state.selectionVersion) {
         $('stories').textContent = '';
