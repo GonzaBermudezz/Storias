@@ -631,7 +631,7 @@
     <nav class="main-nav">
       <span class="nav-item" id="nav-home" title="Inicio"><span class="icon" data-icon="house" data-size="16"></span><span class="nav-label">Inicio</span></span>
       <span class="nav-item active" id="nav-clients" title="Clientes"><span class="icon" data-icon="users" data-size="16"></span><span class="nav-label">Clientes</span></span>
-      <span class="nav-item" id="nav-enfoques" title="Enfoque"><span class="icon" data-icon="target" data-size="16"></span><span class="nav-label">Enfoque</span></span>
+      <span class="nav-item" id="nav-enfoques" title="Enfoques"><span class="icon" data-icon="target" data-size="16"></span><span class="nav-label">Enfoques</span></span>
       <span class="nav-item disabled hidden" title="Próximamente"><span class="icon" data-icon="settings" data-size="16"></span>Ajustes</span>
     </nav>
     <div class="nav-divider"></div>
@@ -704,7 +704,7 @@
           <div>
             <p class="eyebrow">Biblioteca</p>
             <h2>Enfoques</h2>
-            <p>Plantillas reutilizables de enfoque semanal. Un cliente elige una desde su panel y esa descripción se usa en la próxima generación.</p>
+            <p>Plantillas reutilizables de enfoque semanal. Elegí un enfoque desde el panel de cada cliente y su descripción se usa en la próxima generación semanal.</p>
           </div>
           <button type="button" id="new-focus-preset" class="btn primary"><span data-icon="plus" data-size="16"></span>Nuevo enfoque</button>
         </div>
@@ -721,10 +721,10 @@
             <p id="client-workspace-subtitle">Definí la dirección, revisá las historias y dejalas listas para publicar.</p>
             <p id="drive-missing-notice" class="drive-missing hidden">Falta la carpeta de Drive de este cliente, así que no se pueden generar historias. <button type="button" class="link-btn" id="drive-missing-settings">Cargarla en Ajustes</button></p>
           </div>
-          <button id="open-ritmo-hero" class="btn primary">Generar historias</button>
+          <button id="open-ritmo-hero" class="btn primary">Planificar semana</button>
         </div>
         <div class="panel" id="content-panel">
-          <div class="panel-head" id="content-panel-toggle"><div><p class="eyebrow">Prompt del cliente</p><h2>Dirección de contenido</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
+          <div class="panel-head" id="content-panel-toggle"><div><p class="eyebrow">Voz y temas</p><h2>Sobre este cliente</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
           <div class="panel-body">
             <div class="editor-grid">
               <div class="field" id="description-field">
@@ -752,7 +752,7 @@
             <div class="team-field">
               <label for="client-focus">Enfoque semanal</label>
               <select id="client-focus"><option value="">Sin enfoque</option></select>
-              <span class="info" tabindex="0" aria-label="Se usa en la próxima generación semanal y después se limpia solo, como antes. Los enfoques se crean y editan en la pestaña Enfoque del menú." data-tooltip="Se usa en la próxima generación semanal y después se limpia solo, como antes. Los enfoques se crean y editan en la pestaña Enfoque del menú.">i</span>
+              <span class="info" tabindex="0" aria-label="Se usa en la próxima generación semanal y después se limpia solo. Los enfoques se crean y editan en la pestaña Enfoques del menú." data-tooltip="Se usa en la próxima generación semanal y después se limpia solo. Los enfoques se crean y editan en la pestaña Enfoques del menú.">i</span>
             </div>
             <div class="team-field"><label for="client-pm">PM asignado</label><select id="client-pm"><option value="">Sin asignar</option></select></div>
             <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Default</option></select></div>
@@ -764,7 +764,7 @@
         </div>
         <div class="workspace">
           <div class="stories-panel">
-            <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Historias generadas</span><p class="section-hint">Aprobá una historia haciendo click sobre su tarjeta. Podés editar el texto o la tipografía cuando lo necesites.</p></div><span id="week-badge" class="week-badge hidden"></span></div>
+            <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Para revisar y aprobar</span><p class="section-hint">Aprobá una historia haciendo click sobre su tarjeta. Podés editar el texto o la tipografía cuando lo necesites.</p></div><span id="week-badge" class="week-badge hidden"></span></div>
             <div id="stories" aria-live="polite"><div class="loading-state" role="status" aria-label="Cargando historias"><span class="spinner"></span><p>Cargando historias...</p></div></div>
             <div class="panel hidden" id="historico-panel">
               <div class="panel-head" id="historico-panel-toggle"><div><p class="eyebrow">Historial</p><h2>Historias subidas</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
@@ -789,7 +789,7 @@
               <h3>Acciones rápidas</h3>
               <div class="quick-actions">
                 <button id="qa-history" class="btn"><span data-icon="clock" data-size="15"></span>Ver historial</button>
-                <button id="qa-focus" class="btn"><span data-icon="pencil" data-size="15"></span>Editar dirección de contenido</button>
+                <button id="qa-focus" class="btn"><span data-icon="pencil" data-size="15"></span>Editar voz y temas</button>
                 <button id="qa-settings" class="btn"><span data-icon="settings" data-size="15"></span>Ajustes del cliente</button>
               </div>
             </aside>

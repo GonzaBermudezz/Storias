@@ -257,7 +257,7 @@
     $('home-idle-count').textContent = String(idle.length);
     $('home-idle').innerHTML = idle.map((client) => homeRow({
       id: client.id, name: client.name, sub: 'Sin historias próximas',
-      action: `<button type="button" class="btn home-row-btn" data-home-generate="${escapeHtml(client.id)}">${icon('sparkles', 13)}Generar semana</button>`,
+      action: `<button type="button" class="btn home-row-btn" data-home-generate="${escapeHtml(client.id)}">${icon('sparkles', 13)}Planificar semana</button>`,
     })).join('');
   }
   async function loadHomeSummary() {
@@ -326,7 +326,7 @@
           <button type="button" class="icon-btn" data-delete-focus-preset aria-label="Eliminar enfoque">${icon('trash', 14)}</button>
         </div>
       </div>`).join('')
-      : listEmptyMarkup('Todavía no hay enfoques', 'Creá el primero para que tus clientes puedan elegirlo.');
+      : listEmptyMarkup('Todavía no hay enfoques', 'Creá el primero para poder elegirlo desde el panel de cada cliente.');
   }
   function openFocusPresetDialog(preset) {
     state.editingFocusPresetId = preset ? preset.id : null;
@@ -844,7 +844,7 @@
     const dates = [...byDate.keys()].sort();
     renderHistorico(historicoItemsByDate());
     if (!dates.length) {
-      $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">' + icon('image', 34) + '</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Clickeá un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>' + icon('sparkles', 14) + 'Generar historias para este cliente</button></div>';
+      $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">' + icon('image', 34) + '</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Clickeá un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>' + icon('sparkles', 14) + 'Planificar la semana de este cliente</button></div>';
       $('week-badge').classList.add('hidden');
       return;
     }
@@ -905,7 +905,7 @@
       rows.push(`<div class="activity-item"><span class="dot">–</span><div><div>Sin historias programadas</div><div class="sub">Todavía no se generó contenido para este cliente</div></div></div>`);
     }
     if (state.driveCount !== null && state.driveCount !== undefined) {
-      rows.push(`<div class="activity-item"><span class="dot">${icon('folder', 12)}</span><div><div>${state.driveCount} imagen${state.driveCount===1?'':'es'} disponible${state.driveCount===1?'':'s'} en Drive</div><div class="sub">De la carpeta del cliente</div></div></div>`);
+      rows.push(`<div class="activity-item"><span class="dot">${icon('folder', 12)}</span><div><div>${state.driveCount} ${state.driveCount===1?'imagen':'imágenes'} disponible${state.driveCount===1?'':'s'} en Drive</div><div class="sub">De la carpeta del cliente</div></div></div>`);
     }
     // Solo mostrar esto si hay una historia REALMENTE agendada en algún lado —
     // antes aparecía con cualquier lote recién generado sin agendar nada,
@@ -1595,12 +1595,20 @@
       showMessage('Descripción guardada.');
     } catch(error) { showMessage(error.message, true); }
   }
+  const HISTORY_FIELD_LABELS = {
+    business_description: 'Voz de marca',
+    weekly_focus: 'Enfoque semanal',
+    topics: 'Temas',
+    tone_examples: 'Ejemplos de tono',
+  };
+  function historyFieldLabel(field) { return HISTORY_FIELD_LABELS[field] || String(field || ''); }
+
   async function openHistory() {
     const clientId = state.client?.id; if (!clientId) return;
     $('history-list').innerHTML = loadingMarkup('Cargando historial...', {compact: true}); $('history-dialog').showModal();
     try {
       const rows = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historial`);
-      $('history-list').innerHTML = rows.length ? rows.map((row) => `<div class="history-row"><div class="field">${escapeHtml(row.field)}</div><div class="meta">${row.changed_by_name ? escapeHtml(row.changed_by_name)+' · ' : ''}${new Date(row.changed_at).toLocaleString('es-AR')}</div><div class="diff"><span class="old">${escapeHtml(row.old_value || '(vacío)')}</span><span>${escapeHtml(row.new_value || '(vacío)')}</span></div></div>`).join('') : '<div class="empty">Todavía no hay cambios registrados para este cliente.</div>';
+      $('history-list').innerHTML = rows.length ? rows.map((row) => `<div class="history-row"><div class="field">${escapeHtml(historyFieldLabel(row.field))}</div><div class="meta">${row.changed_by_name ? escapeHtml(row.changed_by_name)+' · ' : ''}${new Date(row.changed_at).toLocaleString('es-AR')}</div><div class="diff"><span class="old">${escapeHtml(row.old_value || '(vacío)')}</span><span>${escapeHtml(row.new_value || '(vacío)')}</span></div></div>`).join('') : '<div class="empty">Todavía no hay cambios registrados para este cliente.</div>';
     } catch (error) { $('history-list').textContent = error.message; }
   }
   function openSettings() {
