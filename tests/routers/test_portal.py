@@ -19,6 +19,7 @@ from app.routers import portal
 @dataclass
 class Result:
     data: object
+    count: int | None = None
 
 
 class Query:
@@ -27,8 +28,9 @@ class Query:
         self.filters = []
         self.payload = None
         self.is_maybe_single = False
+        self.count_requested = False
 
-    def select(self, *args, **kwargs): return self
+    def select(self, *args, **kwargs): self.count_requested = kwargs.get("count") is not None; return self
     def eq(self, key, value): self.filters.append((key, value)); return self
     def is_(self, key, value): self.filters.append((key, value)); return self
     def in_(self, key, values): self.filters.append((key, list(values))); return self
@@ -42,13 +44,15 @@ class Query:
     def insert(self, payload): self.payload = payload; self.db.inserts.append((self.table, payload)); return self
     def upsert(self, payload, on_conflict=None): self.payload = payload; self.db.upserts.append((self.table, payload, on_conflict)); return self
     def delete(self): self.db.deletes.append((self.table, self.filters)); return self
+    def _result(self, value):
+        return Result(value, count=len(value) if self.count_requested and isinstance(value, list) else None)
     def execute(self):
         value = self.db.responses.pop(0)
         # Real postgrest-py's maybe_single() returns None outright (not a
         # response with data=None) on zero rows — let tests simulate that.
         if self.is_maybe_single and value is None:
             return None
-        return Result(value)
+        return self._result(value)
 
 
 class DB:
@@ -84,7 +88,7 @@ class FutureStoryStateQuery(Query):
             value = [row for row in value if row.get("estado") not in self.excluded_states]
         if self.is_maybe_single and value is None:
             return None
-        return Result(value)
+        return self._result(value)
 
 
 class FutureStoryStateDB(DB):
@@ -233,6 +237,51 @@ def test_summary_aggregates_published_and_upcoming_totals(monkeypatch, client):
     assert body["clientes_sin_actividad"] == [{"id": "c3", "name": "Cliente Tres"}]
 
 
+def test_summary_published_count_comes_from_exact_count_not_rows(monkeypatch, client):
+    class CountingQuery(Query):
+        def execute(self):
+            value = self.db.responses.pop(0)
+            if isinstance(value, dict) and "count" in value:
+                return Result([], count=value["count"])
+            return self._result(value)
+
+    class CountingDB(DB):
+        def table(self, name): return CountingQuery(self, name)
+
+    db = CountingDB([[{"id": "c1", "name": "Uno"}], {"count": 1234}, []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/resumen")
+
+    assert response.status_code == 200
+    assert response.json()["historias_publicadas"] == 1234
+
+
+def test_summary_published_count_sums_id_chunks(monkeypatch, client):
+    clients = [{"id": f"c{i}", "name": f"Cliente {i}"} for i in range(150)]
+    # 150 ids -> 2 published chunks, then 2 upcoming chunks
+    db = DB([clients, [{"id": "s"}] * 3, [{"id": "s"}] * 4, [], []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/resumen")
+
+    assert response.status_code == 200
+    assert response.json()["historias_publicadas"] == 7
+    assert db.responses == []
+
+
+def test_summary_counts_upcoming_stories_beyond_one_page(monkeypatch, client):
+    story = {"client_id": "c1", "aprobado": True, "fecha_publicacion": "2099-01-01", "hora_publicacion": None}
+    db = DB([[{"id": "c1", "name": "Uno"}], [], [story] * 500, [story] * 100])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/resumen")
+
+    assert response.status_code == 200
+    assert response.json()["historias_agendadas"] == 600
+    assert db.responses == []
+
+
 def test_summary_excludes_future_published_stories_but_retains_active_states(monkeypatch, client):
     today = date.today().isoformat()
     clients = [{"id": "c1", "name": "Cliente Uno"}]
@@ -370,6 +419,26 @@ def test_health_aggregates_generation_pool_and_story_errors_by_agency(monkeypatc
             "fecha_mas_antigua": "2026-10-03",
         }],
     }
+
+
+def test_health_reads_story_errors_in_id_chunks(monkeypatch, client):
+    clients = [
+        {"id": f"c{i}", "name": f"Cliente {i}", "generation_error": None,
+         "generation_error_at": None, "pool_bajo_at": None}
+        for i in range(150)
+    ]
+    db = DB([
+        clients,
+        [{"client_id": "c1", "fecha_publicacion": "2026-10-03"}],
+        [{"client_id": "c120", "fecha_publicacion": "2026-10-04"}],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/salud")
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()["clientes_con_historias_en_error"]] == ["c1", "c120"]
+    assert db.responses == []
 
 
 def test_patch_client_ritmo_saves_four_distinct_days(monkeypatch, client):
@@ -1946,14 +2015,6 @@ def test_list_clients_excludes_future_published_stories_but_retains_active_state
         "id": "c1", "agency_id": "agency-1", "stories_count": 4, "pending_count": 2,
         "next_pending_date": None, "assigned_employee_id": None,
     }]
-
-
-def test_list_clients_can_filter_to_employee_assignments(monkeypatch, client):
-    db = DB([[{"client_id": "c2"}], [{"id": "c2", "agency_id": "agency-1"}], [], []])
-    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
-    response = client.get("/portal/clientes?solo_mios=true")
-    assert response.status_code == 200
-    assert response.json() == [{"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "next_pending_date": None, "assigned_employee_id": None}]
 
 
 def test_list_clients_reports_assigned_employee(monkeypatch, client):

@@ -187,6 +187,25 @@
       ? `<details class="error-detail"><summary>Detalle técnico</summary><code>${escapeHtml(raw)}</code></details>` : '';
     return {text, detail};
   }
+  const HOME_LIST_LIMIT = 5;
+  const homeExpanded = new Set();
+  // Long agency-wide lists (health problems, idle clients) show the first rows
+  // and a "ver los N restantes" toggle, so one bad day or a fresh agency with
+  // hundreds of clients never turns Inicio into an endless scroll.
+  function capHomeRows(rows, key, limit = HOME_LIST_LIMIT) {
+    if (rows.length <= limit) return rows.join('');
+    if (homeExpanded.has(key)) {
+      return rows.join('') + `<button type="button" class="btn home-more" data-home-collapse="${escapeHtml(key)}">Ver menos</button>`;
+    }
+    return rows.slice(0, limit).join('') + `<button type="button" class="btn home-more" data-home-expand="${escapeHtml(key)}">Ver los ${rows.length - limit} restantes</button>`;
+  }
+  function rerenderHomeLists() {
+    const last = state.homeLast;
+    if (!last) return;
+    let problemIds = new Set();
+    if (last.health) problemIds = renderHomeHealth(last.health);
+    renderHomeIdle(last.summary, problemIds);
+  }
   function renderHomeHealth(health) {
     const checks = [
       {
@@ -205,7 +224,7 @@
     const problemIds = new Set();
     checks.forEach((check) => check.items.forEach((item) => problemIds.add(item.id)));
     const sections = checks.filter((check) => check.items.length).map((check) =>
-      `<div class="home-section"><div class="home-section-head"><span>${escapeHtml(check.title)}</span><span class="home-count">${check.items.length}</span></div>${check.items.map(check.row).join('')}</div>`);
+      `<div class="home-section"><div class="home-section-head"><span>${escapeHtml(check.title)}</span><span class="home-count">${check.items.length}</span></div>${capHomeRows(check.items.map(check.row), check.title)}</div>`);
     const okChecks = checks.filter((check) => !check.items.length);
     const okList = okChecks.length
       ? `<div class="home-ok-list">${okChecks.map((check) => `<span class="home-ok">${icon('check', 14)}${escapeHtml(check.okText)}</span>`).join('')}</div>`
@@ -255,10 +274,10 @@
     const idle = (summary?.clientes_sin_actividad || []).filter((client) => !problemIds.has(client.id));
     $('home-idle-panel').classList.toggle('hidden', !idle.length);
     $('home-idle-count').textContent = String(idle.length);
-    $('home-idle').innerHTML = idle.map((client) => homeRow({
+    $('home-idle').innerHTML = capHomeRows(idle.map((client) => homeRow({
       id: client.id, name: client.name, sub: 'Sin historias próximas',
       action: `<button type="button" class="btn home-row-btn" data-home-generate="${escapeHtml(client.id)}">${icon('sparkles', 13)}Planificar semana</button>`,
-    })).join('');
+    })), 'idle', 10);
   }
   async function loadHomeSummary() {
     const summaryVersion = ++state.homeSummaryVersion;
@@ -286,6 +305,7 @@
       const error = summaryResult.reason;
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
+    state.homeLast = {summary, health};
     let problemIds = new Set();
     if (health) problemIds = renderHomeHealth(health); else renderHealthUnavailable();
     renderHomeIdle(summary, problemIds);
@@ -1964,6 +1984,13 @@
     if (generate) {
       const clientId = generate.dataset.homeGenerate;
       selectClient(clientId).then(() => { if (state.client?.id === clientId) openRitmoDialog(); });
+      return;
+    }
+    const toggle = event.target.closest('[data-home-expand], [data-home-collapse]');
+    if (toggle) {
+      if (toggle.dataset.homeExpand) homeExpanded.add(toggle.dataset.homeExpand);
+      else homeExpanded.delete(toggle.dataset.homeCollapse);
+      rerenderHomeLists();
       return;
     }
     if (event.target.closest('[data-home-pending-all]')) {

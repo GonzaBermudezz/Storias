@@ -252,6 +252,14 @@ def test_engine_fonts_are_served_read_only_for_the_font_previews():
     assert response.headers["content-type"] in ("font/ttf", "application/font-sfnt", "application/octet-stream")
 
 
+
+def test_portal_frontend_caps_long_home_health_and_idle_lists():
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "capHomeRows" in source
+    assert "data-home-expand" in source
+    assert "rerenderHomeLists" in source
+
 def test_portal_client_filters_are_local_and_expose_status_chips():
     page = Path("templates/portal.html").read_text(encoding="utf-8")
     source = TestClient(app).get("/static/portal.js").text

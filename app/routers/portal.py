@@ -270,24 +270,13 @@ def create_clients_bulk(body: BulkClientsRequest, employee: AdminDep):
 
 
 @router.get("/clientes")
-def list_clients(employee: EmployeeDep, solo_mios: bool = False):
+def list_clients(employee: EmployeeDep):
+    """Whole agency, in one shape. "Míos" is resolved in the browser from
+    assigned_employee_id, so there is no server-side per-PM variant."""
     db = get_admin_client()
-    mine_ids: list[str] = []
-    if solo_mios:
-        assignments = db.table("employee_clients").select("client_id").eq(
-            "employee_id", employee.id
-        ).execute().data or []
-        mine_ids = [row["client_id"] for row in assignments]
-        if not mine_ids:
-            return []
-
-    def clients_query():
-        query = db.table("clients").select(_CLIENT_LIST).eq("agency_id", employee.agency_id)
-        if solo_mios:
-            query = query.in_("id", mine_ids)
-        return query.order("name").order("id")
-
-    clients = _select_all(clients_query)
+    clients = _select_all(lambda: db.table("clients").select(_CLIENT_LIST).eq(
+        "agency_id", employee.agency_id
+    ).order("name").order("id"))
     if not clients:
         return clients
     ids = [c["id"] for c in clients]
@@ -358,9 +347,13 @@ def get_summary(employee: EmployeeDep):
         }
 
     client_ids = [c["id"] for c in clients]
-    published = db.table("stories").select("id").in_("client_id", client_ids).eq(
-        "estado", "publicado"
-    ).execute().data or []
+    # Exact server-side count: never download (or silently truncate at the
+    # 1000-row cap) every published story just to count them.
+    published_count = 0
+    for chunk in _chunks(client_ids):
+        published_count += db.table("stories").select("id", count="exact").in_(
+            "client_id", chunk
+        ).eq("estado", "publicado").limit(1).execute().count or 0
     upcoming: list[dict] = []
     for chunk in _chunks(client_ids):
         upcoming.extend(_select_all(lambda chunk=chunk: db.table("stories").select(
@@ -404,7 +397,7 @@ def get_summary(employee: EmployeeDep):
     )[:_UPCOMING_LIMIT]
 
     return {
-        "historias_publicadas": len(published),
+        "historias_publicadas": published_count,
         "historias_en_edicion": total_en_edicion,
         "historias_agendadas": total_agendadas,
         "clientes_count": len(clients),
@@ -423,9 +416,9 @@ def get_summary(employee: EmployeeDep):
 def get_health(employee: EmployeeDep):
     """Return agency-wide signals that otherwise require inspecting clients one by one."""
     db = get_admin_client()
-    clients = db.table("clients").select(
+    clients = _select_all(lambda: db.table("clients").select(
         "id,name,generation_error,generation_error_at,pool_bajo_at"
-    ).eq("agency_id", employee.agency_id).execute().data or []
+    ).eq("agency_id", employee.agency_id).order("id"))
     if not clients:
         return {
             "clientes_con_error_generacion": [],
@@ -457,9 +450,11 @@ def get_health(employee: EmployeeDep):
 
     client_ids = [client["id"] for client in clients]
     names_by_id = {client["id"]: client["name"] for client in clients}
-    failed_stories = db.table("stories").select("client_id,fecha_publicacion").in_(
-        "client_id", client_ids
-    ).eq("estado", "error").execute().data or []
+    failed_stories: list[dict] = []
+    for chunk in _chunks(client_ids):
+        failed_stories.extend(_select_all(lambda chunk=chunk: db.table("stories").select(
+            "client_id,fecha_publicacion"
+        ).in_("client_id", chunk).eq("estado", "error").order("id")))
     by_client: dict[str, list[str]] = {}
     for row in failed_stories:
         by_client.setdefault(row["client_id"], []).append(row.get("fecha_publicacion") or "")
