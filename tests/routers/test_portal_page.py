@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -233,3 +235,13 @@ def test_engine_fonts_are_served_read_only_for_the_font_previews():
 
     assert response.status_code == 200
     assert response.headers["content-type"] in ("font/ttf", "application/font-sfnt", "application/octet-stream")
+
+
+def test_portal_client_filters_are_local_and_expose_status_chips():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert 'id="client-status-filter"' in page
+    assert "solo_mios" not in source
+    assert "data-client-reset" in source
+    assert "computeClientList" in source

@@ -36,6 +36,7 @@ class Query:
     def neq(self, key, value): self.filters.append((key, value)); return self
     def order(self, *args, **kwargs): return self
     def limit(self, *args, **kwargs): return self
+    def range(self, *args, **kwargs): return self
     def maybe_single(self): self.is_maybe_single = True; return self
     def update(self, payload): self.payload = payload; self.db.updates.append((self.table, payload, self.filters)); return self
     def insert(self, payload): self.payload = payload; self.db.inserts.append((self.table, payload)); return self
@@ -1801,7 +1802,7 @@ def test_disconnect_drive_rejects_client_outside_agency(monkeypatch, client):
 
 def test_list_clients_defaults_to_entire_agency(monkeypatch, client):
     db = DB([[{"id": "c1", "agency_id": "agency-1"}, {"id": "c2", "agency_id": "agency-1"}],
-              [{"client_id": "c1"}, {"client_id": "c1"}]])
+              [{"client_id": "c1"}, {"client_id": "c1"}], []])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.get("/portal/clientes")
     assert response.status_code == 200
@@ -1818,6 +1819,7 @@ def test_list_clients_reports_pending_count_for_upcoming_stories(monkeypatch, cl
             {"client_id": "c1", "aprobado": True, "estado": "pendiente"},
             {"client_id": "c1", "aprobado": False, "estado": "pendiente"},
         ],
+        [],
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
 
@@ -1825,8 +1827,8 @@ def test_list_clients_reports_pending_count_for_upcoming_stories(monkeypatch, cl
 
     assert response.status_code == 200
     assert response.json() == [
-        {"id": "c1", "agency_id": "agency-1", "stories_count": 2, "pending_count": 1},
-        {"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0},
+        {"id": "c1", "agency_id": "agency-1", "stories_count": 2, "pending_count": 1, "assigned_employee_id": None},
+        {"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "assigned_employee_id": None},
     ]
 
 
@@ -1840,6 +1842,7 @@ def test_list_clients_excludes_future_published_stories_but_retains_active_state
             {"client_id": "c1", "aprobado": False, "estado": "pendiente"},
             {"client_id": "c1", "aprobado": False, "estado": "error"},
         ],
+        [],
     ])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
 
@@ -1848,15 +1851,85 @@ def test_list_clients_excludes_future_published_stories_but_retains_active_state
     assert response.status_code == 200
     assert response.json() == [{
         "id": "c1", "agency_id": "agency-1", "stories_count": 4, "pending_count": 2,
+        "assigned_employee_id": None,
     }]
 
 
 def test_list_clients_can_filter_to_employee_assignments(monkeypatch, client):
-    db = DB([[{"client_id": "c2"}], [{"id": "c2", "agency_id": "agency-1"}], []])
+    db = DB([[{"client_id": "c2"}], [{"id": "c2", "agency_id": "agency-1"}], [], []])
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.get("/portal/clientes?solo_mios=true")
     assert response.status_code == 200
-    assert response.json() == [{"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0}]
+    assert response.json() == [{"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "assigned_employee_id": None}]
+
+
+def test_list_clients_reports_assigned_employee(monkeypatch, client):
+    db = DB([
+        [{"id": "c1"}, {"id": "c2"}],
+        [],
+        [{"client_id": "c1", "employee_id": "e1"}],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes")
+
+    assert response.status_code == 200
+    assert {row["id"]: row["assigned_employee_id"] for row in response.json()} == {"c1": "e1", "c2": None}
+
+
+def test_list_clients_selects_only_list_columns(monkeypatch, client):
+    class SelectRecordingQuery(Query):
+        def select(self, *args, **kwargs):
+            self.db.selects.append((self.table, args))
+            return self
+
+    class SelectRecordingDB(DB):
+        def __init__(self, responses):
+            super().__init__(responses)
+            self.selects = []
+
+        def table(self, name):
+            return SelectRecordingQuery(self, name)
+
+    db = SelectRecordingDB([[{"id": "c1"}], [], []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes")
+
+    assert response.status_code == 200
+    first_select = [args[0] for table, args in db.selects if table == "clients"][0]
+    assert first_select == "id,name,avatar_url,generation_error,generation_error_at"
+    assert "business_description" not in first_select and "encrypted" not in first_select
+
+
+def test_list_clients_counts_stories_beyond_one_page(monkeypatch, client):
+    story = {"client_id": "c1", "aprobado": True, "estado": "pendiente"}
+    db = DB([
+        [{"id": "c1"}],
+        [story] * 500,
+        [story] * 3,
+        [],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes")
+
+    assert response.status_code == 200
+    assert response.json()[0]["stories_count"] == 503
+    assert db.responses == []
+
+
+def test_list_clients_queries_ids_in_chunks(monkeypatch, client):
+    clients = [{"id": f"c{i}"} for i in range(150)]
+    # 150 ids -> 2 chunks of stories, then 2 chunks of assignments
+    db = DB([clients, [], [], [], []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 150
+    assert db.responses == []
 
 
 def test_missing_client_is_404_not_a_crash_when_postgrest_returns_none(monkeypatch, client):

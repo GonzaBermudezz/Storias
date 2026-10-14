@@ -40,6 +40,32 @@ _CLIENT_DETAIL = (
     "publish_together,font_choice,drive_connected_email"
 )
 
+# The sidebar list only needs identity + status; the full _CLIENT_DETAIL
+# (voice, topics, tone examples, links…) is loaded per client on selection.
+_CLIENT_LIST = "id,name,avatar_url,generation_error,generation_error_at"
+# PostgREST silently truncates a response at its max-rows (1000 by default)
+# and long in_(...) URLs fail, so bulk reads go through small id chunks and
+# paged queries instead of one unbounded call.
+_IN_CHUNK = 100
+_PAGE_SIZE = 500
+
+
+def _chunks(values, size=_IN_CHUNK):
+    for start in range(0, len(values), size):
+        yield values[start:start + size]
+
+
+def _select_all(build_query):
+    """Read every row of a query, page by page. `build_query` must return a
+    FRESH, ordered query each call (a builder can't be reused after execute)."""
+    rows, offset = [], 0
+    while True:
+        page = build_query().range(offset, offset + _PAGE_SIZE - 1).execute().data or []
+        rows.extend(page)
+        if len(page) < _PAGE_SIZE:
+            return rows
+        offset += _PAGE_SIZE
+
 
 class ClientPatch(BaseModel):
     business_description: str | None = None
@@ -241,19 +267,31 @@ def create_clients_bulk(body: BulkClientsRequest, employee: AdminDep):
 @router.get("/clientes")
 def list_clients(employee: EmployeeDep, solo_mios: bool = False):
     db = get_admin_client()
-    query = db.table("clients").select(_CLIENT_DETAIL).eq("agency_id", employee.agency_id)
+    mine_ids: list[str] = []
     if solo_mios:
         assignments = db.table("employee_clients").select("client_id").eq(
             "employee_id", employee.id
         ).execute().data or []
-        client_ids = [row["client_id"] for row in assignments]
-        if not client_ids:
+        mine_ids = [row["client_id"] for row in assignments]
+        if not mine_ids:
             return []
-        query = query.in_("id", client_ids)
-    clients = query.order("name").execute().data or []
-    if clients:
-        ids = [c["id"] for c in clients]
-        rows = db.table("stories").select("client_id,aprobado,estado").in_("client_id", ids).neq(
+
+    def clients_query():
+        query = db.table("clients").select(_CLIENT_LIST).eq("agency_id", employee.agency_id)
+        if solo_mios:
+            query = query.in_("id", mine_ids)
+        return query.order("name").order("id")
+
+    clients = _select_all(clients_query)
+    if not clients:
+        return clients
+    ids = [c["id"] for c in clients]
+
+    rows: list[dict] = []
+    for chunk in _chunks(ids):
+        rows.extend(_select_all(lambda chunk=chunk: db.table("stories").select(
+            "client_id,aprobado,estado"
+        ).in_("client_id", chunk).neq(
             "estado", "cancelada"
         ).neq(
             "estado", "generando"
@@ -261,16 +299,27 @@ def list_clients(employee: EmployeeDep, solo_mios: bool = False):
             # A manually published Story can still retain a future scheduled
             # date; it belongs to history, never to the upcoming workload.
             "estado", "publicado"
-        ).gte("fecha_publicacion", date.today().isoformat()).execute().data or []
-        counts: dict[str, int] = {}
-        pending: dict[str, int] = {}
-        for row in rows:
-            counts[row["client_id"]] = counts.get(row["client_id"], 0) + 1
-            if not row.get("aprobado") and row.get("estado") not in ("publicando", "publicado"):
-                pending[row["client_id"]] = pending.get(row["client_id"], 0) + 1
-        for c in clients:
-            c["stories_count"] = counts.get(c["id"], 0)
-            c["pending_count"] = pending.get(c["id"], 0)
+        ).gte("fecha_publicacion", date.today().isoformat()).order("id")))
+    counts: dict[str, int] = {}
+    pending: dict[str, int] = {}
+    for row in rows:
+        counts[row["client_id"]] = counts.get(row["client_id"], 0) + 1
+        if not row.get("aprobado") and row.get("estado") not in ("publicando", "publicado"):
+            pending[row["client_id"]] = pending.get(row["client_id"], 0) + 1
+
+    # Which PM runs each client, so the browser can filter "Míos" locally.
+    # Always the LAST query of this function.
+    assigned: dict[str, str] = {}
+    for chunk in _chunks(ids):
+        for row in _select_all(lambda chunk=chunk: db.table("employee_clients").select(
+            "client_id,employee_id"
+        ).in_("client_id", chunk).order("client_id")):
+            assigned[row["client_id"]] = row["employee_id"]
+
+    for c in clients:
+        c["stories_count"] = counts.get(c["id"], 0)
+        c["pending_count"] = pending.get(c["id"], 0)
+        c["assigned_employee_id"] = assigned.get(c["id"])
     return clients
 
 
@@ -288,9 +337,9 @@ def get_summary(employee: EmployeeDep):
     aprobado into "en edición" vs "agendadas" so these numbers always agree
     with what an employee sees per-client — no separate metric to drift."""
     db = get_admin_client()
-    clients = db.table("clients").select("id,name").eq(
+    clients = _select_all(lambda: db.table("clients").select("id,name").eq(
         "agency_id", employee.agency_id
-    ).execute().data or []
+    ).order("id"))
     if not clients:
         return {
             "historias_publicadas": 0, "historias_en_edicion": 0, "historias_agendadas": 0,
@@ -302,15 +351,17 @@ def get_summary(employee: EmployeeDep):
     published = db.table("stories").select("id").in_("client_id", client_ids).eq(
         "estado", "publicado"
     ).execute().data or []
-    upcoming = db.table("stories").select("client_id,aprobado,fecha_publicacion,hora_publicacion").in_(
-        "client_id", client_ids
-    ).neq("estado", "cancelada").neq("estado", "generando").neq(
-        # A manually published Story can still retain a future scheduled
-        # date; it belongs to history, never to the upcoming workload.
-        "estado", "publicado"
-    ).gte(
-        "fecha_publicacion", date.today().isoformat()
-    ).execute().data or []
+    upcoming: list[dict] = []
+    for chunk in _chunks(client_ids):
+        upcoming.extend(_select_all(lambda chunk=chunk: db.table("stories").select(
+            "client_id,aprobado,fecha_publicacion,hora_publicacion"
+        ).in_("client_id", chunk).neq("estado", "cancelada").neq("estado", "generando").neq(
+            # A manually published Story can still retain a future scheduled
+            # date; it belongs to history, never to the upcoming workload.
+            "estado", "publicado"
+        ).gte(
+            "fecha_publicacion", date.today().isoformat()
+        ).order("id")))
 
     by_client: dict[str, list[bool]] = {}
     for row in upcoming:

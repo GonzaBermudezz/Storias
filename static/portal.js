@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, me: null, employees: [], clientSearch: '', focusPresets: [], editingFocusPresetId: null };
+  const state = { clients: [], client: null, groups: [], driveCount: undefined, editingStory: null, selectedClientId: null, selectionVersion: 0, clientListVersion: 0, homeSummaryVersion: 0, me: null, employees: [], clientSearch: '', clientScope: 'all', clientStatus: 'all', clientsLoadedOnce: false, focusPresets: [], editingFocusPresetId: null };
   const LOCKED_STORY_STATES = new Set(['publicando', 'publicado', 'cancelada']);
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
@@ -487,21 +487,25 @@
     const text = label ? `<p>${escapeHtml(label)}</p>` : '';
     return `<div class="loading-state${options.compact ? ' compact' : ''}" role="status" aria-label="${escapeHtml(options.aria || label || 'Cargando')}"><span class="spinner"></span>${text}</div>`;
   }
-  function listEmptyMarkup(title, hint, withRetry) {
-    return `<div class="list-empty"><span class="list-empty-icon">${icon('users', 18)}</span><p class="list-empty-title">${escapeHtml(title)}</p>${hint ? `<p class="list-empty-hint">${escapeHtml(hint)}</p>` : ''}${withRetry ? '<button type="button" class="btn list-empty-retry" data-client-retry>Reintentar</button>' : ''}</div>`;
+  function listEmptyMarkup(title, hint, withRetry, withReset) {
+    return `<div class="list-empty"><span class="list-empty-icon">${icon('users', 18)}</span><p class="list-empty-title">${escapeHtml(title)}</p>${hint ? `<p class="list-empty-hint">${escapeHtml(hint)}</p>` : ''}${withRetry ? '<button type="button" class="btn list-empty-retry" data-client-retry>Reintentar</button>' : ''}${withReset ? '<button type="button" class="btn list-empty-retry" data-client-reset>Quitar filtros</button>' : ''}</div>`;
   }
   async function loadClients() {
     clearMessage(); $('client-list').innerHTML = loadingMarkup('', {compact: true, aria: 'Cargando clientes'});
     const listVersion = ++state.clientListVersion;
-    const suffix = $('client-filter').dataset.value === 'mine' ? '?solo_mios=true' : '';
     try {
-      const clients = await api(`/portal/clientes${suffix}`);
+      const clients = await api('/portal/clientes');
       if (listVersion !== state.clientListVersion) return;
-      state.clients = clients; renderClients();
+      state.clients = clients;
+      // A saved "Míos" scope is only kept on the first load if it has something to show.
+      if (!state.clientsLoadedOnce && state.clientScope === 'mine' && !clientScopeList().length) setClientScope('all', false);
+      state.clientsLoadedOnce = true;
+      renderClients();
       const selectionStillVisible = state.selectedClientId && clients.some((client) => client.id === state.selectedClientId);
       if (!selectionStillVisible) {
         clearSelection(); renderClients();
-        if (clients.length) await selectClient(clients[0].id);
+        const first = computeClientList().shown[0];
+        if (first) await selectClient(first.client.id);
       }
     } catch (error) {
       if (listVersion !== state.clientListVersion) return;
@@ -519,21 +523,62 @@
     return {key: 'idle', label: 'Sin historias'};
   }
   const STATUS_ORDER = {error: 0, pending: 1, ready: 2, idle: 3};
+  function clientScopeList() {
+    return state.clientScope === 'mine'
+      ? state.clients.filter((client) => client.assigned_employee_id && client.assigned_employee_id === state.me?.id)
+      : state.clients;
+  }
+  // `matched`: scope + search (what the status counters describe).
+  // `shown`: matched + the chosen status chip, sorted worst-first then by name.
+  function computeClientList() {
+    const query = (state.clientSearch || '').trim().toLocaleLowerCase('es');
+    const matched = clientScopeList()
+      .filter((client) => !query || client.name.toLocaleLowerCase('es').includes(query))
+      .map((client) => ({client, status: clientStatus(client)}));
+    const shown = matched
+      .filter(({status}) => state.clientStatus === 'all' || status.key === state.clientStatus)
+      .sort((a, b) => STATUS_ORDER[a.status.key] - STATUS_ORDER[b.status.key] || a.client.name.localeCompare(b.client.name, 'es'));
+    return {matched, shown, query};
+  }
+  const STATUS_CHIPS = [['all', 'Todos'], ['error', 'Con error'], ['pending', 'Sin aprobar'], ['idle', 'Sin historias']];
+  function renderStatusChips(matched) {
+    const counts = {all: matched.length, error: 0, pending: 0, ready: 0, idle: 0};
+    matched.forEach(({status}) => { counts[status.key] += 1; });
+    $('client-status-filter').classList.toggle('hidden', !state.clients.length);
+    $('client-status-filter').innerHTML = STATUS_CHIPS.map(([key, label]) => {
+      const active = state.clientStatus === key;
+      return `<button type="button" class="status-chip${active ? ' active' : ''}" data-status="${key}" aria-pressed="${active}">${label} <span class="chip-count">${counts[key]}</span></button>`;
+    }).join('');
+  }
+  function setClientScope(scope, persist) {
+    state.clientScope = scope === 'mine' ? 'mine' : 'all';
+    $('client-filter').dataset.value = state.clientScope;
+    $('client-filter').querySelectorAll('.seg-btn').forEach((el) => {
+      const selected = el.dataset.filter === state.clientScope;
+      el.classList.toggle('active', selected);
+      el.setAttribute('aria-pressed', String(selected));
+    });
+    if (persist) { try { localStorage.setItem('storias.clientScope', state.clientScope); } catch (_) {} }
+  }
   function renderClients() {
-    $('client-count').textContent = 'Clientes';
-    if (!state.clients.length) {
-      $('client-list').innerHTML = $('client-filter').dataset.value === 'mine'
-        ? listEmptyMarkup('Sin clientes asignados', 'Cuando te asignen uno, aparece acá.')
-        : listEmptyMarkup('Todavía no hay clientes', 'Cuando se den de alta, aparecen acá.');
+    const total = state.clients.length;
+    if (!total) {
+      $('client-count').textContent = 'Clientes';
+      $('client-status-filter').classList.add('hidden');
+      $('client-list').innerHTML = listEmptyMarkup('Todavía no hay clientes', 'Cuando se den de alta, aparecen acá.');
       return;
     }
-    const query = (state.clientSearch || '').trim().toLocaleLowerCase('es');
-    const visibleClients = query ? state.clients.filter((client) => client.name.toLocaleLowerCase('es').includes(query)) : state.clients;
-    $('client-count').textContent = `${visibleClients.length} cliente${visibleClients.length === 1 ? '' : 's'}`;
-    if (!visibleClients.length) { $('client-list').innerHTML = listEmptyMarkup('Sin resultados', 'Probá con otro nombre.'); return; }
-    const sorted = visibleClients.map((client) => ({client, status: clientStatus(client)}))
-      .sort((a, b) => STATUS_ORDER[a.status.key] - STATUS_ORDER[b.status.key] || a.client.name.localeCompare(b.client.name, 'es'));
-    $('client-list').innerHTML = sorted.map(({client, status}) => {
+    const {matched, shown, query} = computeClientList();
+    renderStatusChips(matched);
+    const filtering = state.clientScope !== 'all' || state.clientStatus !== 'all' || !!query;
+    $('client-count').textContent = filtering ? `${shown.length} de ${total} clientes` : `${total} cliente${total === 1 ? '' : 's'}`;
+    if (!shown.length) {
+      $('client-list').innerHTML = state.clientScope === 'mine' && state.clientStatus === 'all' && !query && !clientScopeList().length
+        ? listEmptyMarkup('Sin clientes asignados', 'Cuando te asignen uno, aparece acá.', false, true)
+        : listEmptyMarkup('Sin resultados', 'Probá con otros filtros o con otro nombre.', false, true);
+      return;
+    }
+    $('client-list').innerHTML = shown.map(({client, status}) => {
       const active = $('home-view').classList.contains('hidden') && state.client?.id === client.id;
       return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}" title="${escapeHtml(client.name)}"><span class="avatar${client.avatar_url ? ' has-avatar' : ' avatar-' + avatarColor(client.id)}">${avatarContent(client)}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count is-${status.key}">${escapeHtml(status.label)}</span></span><span class="status-dot is-${status.key}" aria-hidden="true"></span></button>`;
     }).join('');
@@ -962,7 +1007,10 @@
     try {
       const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/pm`, {method:'PATCH', body:JSON.stringify({employee_id:employeeId})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
-      state.client.assigned_employee_id = updated.employee_id; showMessage(updated.employee_id ? 'PM asignado.' : 'Cliente sin PM asignado.');
+      state.client.assigned_employee_id = updated.employee_id;
+      const listedForPm = state.clients.find((item) => item.id === clientId);
+      if (listedForPm) { listedForPm.assigned_employee_id = updated.employee_id; renderClients(); }
+      showMessage(updated.employee_id ? 'PM asignado.' : 'Cliente sin PM asignado.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message,true); select.value = state.client?.assigned_employee_id || ''; } }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled=false; }
   }
@@ -1800,17 +1848,25 @@
     if (!row || event.target !== row) return;
     event.preventDefault(); row.click();
   });
-  $('client-list').addEventListener('click',(event)=>{const item=event.target.closest('[data-client-id]');if(item)selectClient(item.dataset.clientId);});
   $('client-filter').addEventListener('click',(event)=>{
     const btn = event.target.closest('[data-filter]');
-    if (!btn || btn.dataset.filter === $('client-filter').dataset.value) return;
-    $('client-filter').dataset.value = btn.dataset.filter;
-    $('client-filter').querySelectorAll('.seg-btn').forEach((el)=>{
-      const selected = el === btn;
-      el.classList.toggle('active', selected);
-      el.setAttribute('aria-pressed', String(selected));
-    });
-    loadClients();
+    if (!btn || btn.dataset.filter === state.clientScope) return;
+    setClientScope(btn.dataset.filter, true);
+    renderClients();   // filtering never reloads or changes the open screen
+  });
+  $('client-status-filter').addEventListener('click',(event)=>{
+    const btn = event.target.closest('[data-status]');
+    if (!btn) return;
+    const key = btn.dataset.status;
+    state.clientStatus = key !== 'all' && state.clientStatus === key ? 'all' : key;
+    renderClients();
+  });
+  $('client-list').addEventListener('click',(event)=>{
+    if (event.target.closest('[data-client-reset]')) {
+      state.clientSearch = ''; $('client-search').value = ''; $('client-search-clear').classList.add('hidden');
+      state.clientStatus = 'all'; setClientScope('all', true); renderClients(); return;
+    }
+    const item=event.target.closest('[data-client-id]');if(item)selectClient(item.dataset.clientId);
   });
   $('client-search').addEventListener('input',()=>{state.clientSearch=$('client-search').value;$('client-search-clear').classList.toggle('hidden',!$('client-search').value);renderClients();});
   $('client-search-clear').addEventListener('click',()=>{$('client-search').value='';state.clientSearch='';$('client-search-clear').classList.add('hidden');renderClients();$('client-search').focus();});
@@ -2001,5 +2057,6 @@
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closeUserMenu(); setMobileMenu(false); } });
   setSidebarCollapsed(document.documentElement.classList.contains('sidebar-collapsed'));
   hydrateIcons();
+  try { setClientScope(localStorage.getItem('storias.clientScope') === 'mine' ? 'mine' : 'all', false); } catch (_) {}
   loadMeAndOptions().finally(loadClients);
 })();
