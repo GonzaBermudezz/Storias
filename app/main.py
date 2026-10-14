@@ -28,6 +28,7 @@ from slowapi.util import get_remote_address
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
+from app.observability import init_sentry
 from app.routers import auth, aprobar, demo, portal
 
 s = get_settings()
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
+init_sentry()
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{s.rate_limit_per_minute}/minute"])
 
 app = FastAPI(

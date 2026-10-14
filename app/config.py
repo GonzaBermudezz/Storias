@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     publication_minute: int = Field(default=0, ge=0, le=59)
     google_service_account_file: str = ""
 
+    # ── Monitoreo de errores (opcional) ────────────────────────────────────────
+    # Vacío = Sentry desactivado (desarrollo, tests). En Railway se carga el DSN
+    # en los tres servicios (web, worker, beat).
+    sentry_dsn: str = ""
+
     # ── Tokens ─────────────────────────────────────────────────────────────────
     approval_token_ttl_hours: int = 48   # cuánto dura el link de aprobación
     magic_link_ttl_minutes: int = 15     # cuánto dura el link de login cliente

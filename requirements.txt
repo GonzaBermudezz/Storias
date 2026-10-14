@@ -40,3 +40,6 @@ pydantic[email]>=2.9.2
 anthropic>=0.40.0
 cloudinary>=1.41.0
 Pillow>=11.0.0
+
+# ── Monitoreo de errores ───────────────────────────────────
+sentry-sdk>=2.20.0                 # inactivo si SENTRY_DSN está vacío (ver app/observability.py)

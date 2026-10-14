@@ -5,6 +5,7 @@ from __future__ import annotations
 from celery import Celery
 from celery.schedules import crontab
 from app.config import get_settings
+from app.observability import init_sentry
 
 TIMEZONE = "America/Argentina/Buenos_Aires"
 
@@ -30,6 +31,7 @@ def _make_celery(settings=None) -> Celery:
     return app
 
 celery_app = _make_celery()
+init_sentry()
 
 
 @celery_app.task(name="app.services.scheduler.generar_hilos_semanales")
