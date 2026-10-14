@@ -249,6 +249,10 @@ def list_clients(employee: EmployeeDep, solo_mios: bool = False):
             "estado", "cancelada"
         ).neq(
             "estado", "generando"
+        ).neq(
+            # A manually published Story can still retain a future scheduled
+            # date; it belongs to history, never to the upcoming workload.
+            "estado", "publicado"
         ).gte("fecha_publicacion", date.today().isoformat()).execute().data or []
         counts: dict[str, int] = {}
         pending: dict[str, int] = {}
@@ -271,7 +275,7 @@ def get_summary(employee: EmployeeDep):
     """Agency-wide snapshot for the Inicio tab: a publish funnel — en edición
     (not approved yet) → agendadas (approved, ready to go out) → publicadas —
     plus workload and coverage stats. The upcoming-stories query (active,
-    non-cancelled, fecha_publicacion >= today) is the same definition
+    non-cancelled/non-published, fecha_publicacion >= today) is the same definition
     list_clients already uses for its per-client counter, split here by
     aprobado into "en edición" vs "agendadas" so these numbers always agree
     with what an employee sees per-client — no separate metric to drift."""
@@ -292,7 +296,11 @@ def get_summary(employee: EmployeeDep):
     ).execute().data or []
     upcoming = db.table("stories").select("client_id,aprobado,fecha_publicacion,hora_publicacion").in_(
         "client_id", client_ids
-    ).neq("estado", "cancelada").neq("estado", "generando").gte(
+    ).neq("estado", "cancelada").neq("estado", "generando").neq(
+        # A manually published Story can still retain a future scheduled
+        # date; it belongs to history, never to the upcoming workload.
+        "estado", "publicado"
+    ).gte(
         "fecha_publicacion", date.today().isoformat()
     ).execute().data or []
 

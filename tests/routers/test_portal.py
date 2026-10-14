@@ -65,6 +65,32 @@ class DB:
         return Query(self, f"rpc:{name}")
 
 
+class FutureStoryStateQuery(Query):
+    """Apply story-state exclusions so these route tests exercise the query."""
+
+    def __init__(self, db, table):
+        super().__init__(db, table)
+        self.excluded_states = []
+
+    def neq(self, key, value):
+        if key == "estado":
+            self.excluded_states.append(value)
+        return super().neq(key, value)
+
+    def execute(self):
+        value = self.db.responses.pop(0)
+        if self.table == "stories" and isinstance(value, list) and self.excluded_states:
+            value = [row for row in value if row.get("estado") not in self.excluded_states]
+        if self.is_maybe_single and value is None:
+            return None
+        return Result(value)
+
+
+class FutureStoryStateDB(DB):
+    def table(self, name):
+        return FutureStoryStateQuery(self, name)
+
+
 @pytest.fixture
 def employee():
     return Employee(id="emp-1", email="pm@example.com", name="PM", agency_id="agency-1", role="employee")
@@ -204,6 +230,38 @@ def test_summary_aggregates_published_and_upcoming_totals(monkeypatch, client):
     assert body["promedio_por_cliente"] == 1.0
     assert body["aprobacion_pct"] == 66.7
     assert body["clientes_sin_actividad"] == [{"id": "c3", "name": "Cliente Tres"}]
+
+
+def test_summary_excludes_future_published_stories_but_retains_active_states(monkeypatch, client):
+    today = date.today().isoformat()
+    clients = [{"id": "c1", "name": "Cliente Uno"}]
+    published = [{"id": "already-live"}]
+    stories = [
+        {"client_id": "c1", "aprobado": True, "estado": "publicado",
+         "fecha_publicacion": today, "hora_publicacion": "09:00:00"},
+        {"client_id": "c1", "aprobado": True, "estado": "publicando",
+         "fecha_publicacion": today, "hora_publicacion": "09:30:00"},
+        {"client_id": "c1", "aprobado": True, "estado": "pendiente",
+         "fecha_publicacion": today, "hora_publicacion": "10:00:00"},
+        {"client_id": "c1", "aprobado": False, "estado": "pendiente",
+         "fecha_publicacion": today, "hora_publicacion": "11:00:00"},
+        {"client_id": "c1", "aprobado": False, "estado": "error",
+         "fecha_publicacion": today, "hora_publicacion": "12:00:00"},
+    ]
+    db = FutureStoryStateDB([clients, published, stories])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/resumen")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["historias_publicadas"] == 1
+    assert body["historias_agendadas"] == 2
+    assert body["historias_en_edicion"] == 2
+    assert body["proximas_publicaciones"] == [{
+        "client_id": "c1", "client_name": "Cliente Uno", "fecha": today,
+        "hora": "09:30", "total": 4, "aprobadas": 2,
+    }]
 
 
 def test_summary_groups_upcoming_publications_within_horizon(monkeypatch, client):
@@ -1675,6 +1733,27 @@ def test_list_clients_reports_pending_count_for_upcoming_stories(monkeypatch, cl
         {"id": "c1", "agency_id": "agency-1", "stories_count": 2, "pending_count": 1},
         {"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0},
     ]
+
+
+def test_list_clients_excludes_future_published_stories_but_retains_active_states(monkeypatch, client):
+    db = FutureStoryStateDB([
+        [{"id": "c1", "agency_id": "agency-1"}],
+        [
+            {"client_id": "c1", "aprobado": True, "estado": "publicado"},
+            {"client_id": "c1", "aprobado": True, "estado": "publicando"},
+            {"client_id": "c1", "aprobado": True, "estado": "pendiente"},
+            {"client_id": "c1", "aprobado": False, "estado": "pendiente"},
+            {"client_id": "c1", "aprobado": False, "estado": "error"},
+        ],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes")
+
+    assert response.status_code == 200
+    assert response.json() == [{
+        "id": "c1", "agency_id": "agency-1", "stories_count": 4, "pending_count": 2,
+    }]
 
 
 def test_list_clients_can_filter_to_employee_assignments(monkeypatch, client):
