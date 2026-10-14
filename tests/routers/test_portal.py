@@ -507,6 +507,46 @@ def test_generate_weekly_for_client_returns_created(monkeypatch, client):
     generated.assert_called_once_with(db, row, date(2026, 9, 18))
 
 
+def test_generate_weekly_for_client_loads_drive_refresh_token(monkeypatch, client):
+    class SelectRecordingQuery(Query):
+        def select(self, fields, *args, **kwargs):
+            self.select_fields = fields
+            self.db.selected_fields.append((self.table, fields))
+            return self
+
+        def execute(self):
+            if self.table == "clients" and self.is_maybe_single:
+                row = dict(self.db.client)
+                if "drive_refresh_token_encrypted" not in self.select_fields:
+                    row.pop("drive_refresh_token_encrypted")
+                return Result(row)
+            return super().execute()
+
+    class SelectRecordingDB(DB):
+        def __init__(self, client_row):
+            super().__init__([])
+            self.client = client_row
+            self.selected_fields = []
+
+        def table(self, name):
+            return SelectRecordingQuery(self, name)
+
+    row = {
+        "id": "c1", "agency_id": "agency-1",
+        "drive_refresh_token_encrypted": "encrypted-drive-refresh-token",
+    }
+    db = SelectRecordingDB(row)
+    generated = Mock(return_value={"created": True, "group_id": "g1", "recycled": False})
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.content_jobs.generate_for_client", generated)
+
+    response = client.post("/portal/clientes/c1/generar-semana")
+
+    assert ("clients", portal._CLIENT_DETAIL_WITH_DRIVE_SECRET) in db.selected_fields
+    assert generated.call_args.args[1]["drive_refresh_token_encrypted"] == "encrypted-drive-refresh-token"
+    assert "encrypted-drive-refresh-token" not in response.text
+
+
 def test_generate_weekly_for_client_reports_existing_as_normal_state(monkeypatch, client):
     row = {"id": "c1", "agency_id": "agency-1"}
     db = DB([row])

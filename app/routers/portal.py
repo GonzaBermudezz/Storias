@@ -783,7 +783,9 @@ def get_default_ritmo(employee: EmployeeDep):
 def generar_semana(client_id: str, employee: EmployeeDep):
     """Generate this client's upcoming weekly thread immediately."""
     db = get_admin_client()
-    client = _client_or_error(db, client_id, employee.agency_id)
+    # generate_for_client needs the encrypted token from this row to select
+    # the client's Drive; the response is constructed by hand, so it is never exposed.
+    client = _client_or_error(db, client_id, employee.agency_id, _CLIENT_DETAIL_WITH_DRIVE_SECRET)
     try:
         result = content_jobs.generate_for_client(db, client, content_jobs.local_today())
     except Exception as exc:
