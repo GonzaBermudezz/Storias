@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Valores de mentira, solo para que Settings() pueda instanciarse.
+      # El CI no usa ningún secreto real ni el .env.
+      ENVIRONMENT: development
+      SECRET_KEY: ci-only-not-a-secret
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_ANON_KEY: ci-only
+      SUPABASE_SERVICE_ROLE_KEY: ci-only
+      GOOGLE_CLIENT_ID: ci-only
+      GOOGLE_CLIENT_SECRET: ci-only
+      ANTHROPIC_API_KEY: ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: Generate a throwaway encryption key
+        run: echo "ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Frontend syntax check
+        run: node --check static/portal.js
+      - name: Tests
+        run: python -m pytest -q
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install PGlite
+        run: npm install --prefix /tmp/storias-sql-validation --no-package-lock --no-save @electric-sql/pglite@0.5.8
+      - name: Verify SQL migrations
+        env:
+          PGLITE_PACKAGE_ROOT: /tmp/storias-sql-validation/node_modules/@electric-sql/pglite
+        run: |
+          node tests/sql/verify.mjs
+          node tests/sql/verify_portal.mjs
+          node tests/sql/verify_a5.mjs
