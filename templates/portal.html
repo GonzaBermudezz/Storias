@@ -620,6 +620,23 @@
     .status-chip.active{background:var(--accent-soft);color:var(--accent-strong);border-color:transparent}
     .status-chip .chip-count{font-variant-numeric:tabular-nums;opacity:.8}
     html.sidebar-collapsed .status-chips{display:none}
+    .assign-pm-link{display:block;margin:0 14px 10px;font-size:11.5px;font-weight:600;color:var(--accent-strong);text-align:left}
+    html.sidebar-collapsed .assign-pm-link{display:none}
+    .pm-assign-tools{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+    .pm-assign-tools .client-search{margin:0;flex:1}
+    .pm-assign-check{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg);cursor:pointer;white-space:nowrap}
+    .pm-assign-all{margin:0 0 6px 2px;color:var(--muted)}
+    .pm-assign-list{max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:10px}
+    .pm-assign-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer}
+    .pm-assign-row:last-child{border-bottom:0}
+    .pm-assign-row:hover{background:var(--bg)}
+    .pm-assign-row .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .pm-assign-row .pm-current{flex:none;font-size:12px;color:var(--muted)}
+    .pm-assign-row .pm-current.is-none{color:var(--warn);font-weight:650}
+    .pm-assign-target{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13px}
+    .pm-assign-target select{flex:1}
+    .modal-feedback.ok{background:var(--success-soft);color:var(--success)}
+    .home-more{margin:6px 10px 2px}
   </style>
   <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
@@ -649,6 +666,7 @@
     </div>
     <div class="seg" id="client-filter" role="group" aria-label="Filtrar clientes" data-value="all"><button type="button" class="seg-btn active" data-filter="all" aria-pressed="true">Todos</button><button type="button" class="seg-btn" data-filter="mine" aria-pressed="false">Míos</button></div>
     <div class="status-chips hidden" id="client-status-filter" role="group" aria-label="Filtrar por estado"></div>
+    <button type="button" id="assign-pm-open" class="link-btn assign-pm-link hidden"></button>
     <div id="client-list" class="client-list" aria-live="polite"><div class="loading-state compact" role="status" aria-label="Cargando clientes"><span class="spinner"></span></div></div>
     <button type="button" id="me-card" class="me-card hidden" aria-haspopup="menu" aria-expanded="false"><span class="avatar" id="me-avatar"></span><span class="me-text"><strong id="me-name"></strong><span id="me-role" class="me-role"></span></span><span class="chev"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg></span></button>
     <div id="me-menu" class="me-menu hidden" role="menu">
@@ -692,6 +710,10 @@
           <div class="stat-card" data-tone="ok"><span class="stat-icon" data-icon="send" data-size="16"></span><div class="stat-value" id="stat-publicadas">–</div><div class="stat-label">Publicadas</div><div class="stat-hint">Historias ya subidas</div></div>
           <div class="stat-card" data-tone="neutral"><span class="stat-icon" data-icon="users" data-size="16"></span><div class="stat-value" id="stat-promedio">–</div><div class="stat-label">Promedio por cliente</div><div class="stat-hint">Historias próximas</div></div>
           <div class="stat-card" data-tone="accent"><span class="stat-icon" data-icon="check-check" data-size="16"></span><div class="stat-value" id="stat-aprobacion">–</div><div class="stat-label">Aprobación</div><div class="stat-hint">De las próximas</div></div>
+        </div>
+        <div class="panel home-panel hidden" id="home-pending-panel">
+          <div class="home-panel-head"><h2>Para aprobar</h2><span id="home-pending-count" class="home-pill neutral"></span></div>
+          <div class="home-panel-body" id="home-pending"></div>
         </div>
         <div class="panel home-panel hidden" id="home-upcoming-panel">
           <div class="home-panel-head"><h2>Próximas publicaciones</h2><span id="home-upcoming-count" class="home-pill neutral"></span></div>
@@ -872,6 +894,21 @@
       <div id="bulk-clients-results"></div>
     </div>
     <div class="modal-foot"><button id="close-bulk-clients-2" class="btn">Cerrar</button><button id="submit-bulk-clients" class="btn primary">Crear clientes</button></div>
+  </dialog>
+  <dialog id="assign-pm-dialog" class="wide">
+    <div class="modal-head"><strong>Asignar PMs</strong><button id="close-assign-pm" class="icon-btn" aria-label="Cerrar">×</button></div>
+    <div class="modal-body">
+      <p class="hint">Elegí los clientes y a qué PM se los asignás. Reemplaza al PM actual de cada uno.</p>
+      <div class="pm-assign-tools">
+        <input id="assign-pm-search" class="client-search" type="search" placeholder="Buscar cliente..." aria-label="Buscar cliente">
+        <label class="pm-assign-check"><input type="checkbox" id="assign-pm-unassigned"> Solo sin PM</label>
+      </div>
+      <label class="pm-assign-check pm-assign-all"><input type="checkbox" id="assign-pm-all"> <span id="assign-pm-all-label">Seleccionar los visibles</span></label>
+      <div id="assign-pm-list" class="pm-assign-list"></div>
+      <div class="pm-assign-target"><label for="assign-pm-target">Asignar a</label><select id="assign-pm-target"></select></div>
+      <p id="assign-pm-feedback" class="modal-feedback hidden" role="alert" aria-live="polite"></p>
+    </div>
+    <div class="modal-foot"><button id="close-assign-pm-2" class="btn">Cerrar</button><button id="submit-assign-pm" class="btn primary" disabled>Asignar</button></div>
   </dialog>
   <dialog id="confirm-dialog"><div class="modal-head"><strong>Confirmar</strong><button id="confirm-close" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p id="confirm-text"></p></div><div class="modal-foot"><button id="confirm-cancel" class="btn">Volver</button><button id="confirm-ok" class="btn primary">Confirmar</button></div></dialog>
   <dialog id="ig-preview-dialog" class="ig-preview">

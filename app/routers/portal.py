@@ -86,6 +86,11 @@ class ClientPmPatch(BaseModel):
     employee_id: str | None
 
 
+class BulkPmAssign(BaseModel):
+    client_ids: list[str] = Field(min_length=1, max_length=500)
+    employee_id: str | None
+
+
 class ScheduleEntry(BaseModel):
     day: int = Field(ge=0, le=6)
     time: str
@@ -290,7 +295,7 @@ def list_clients(employee: EmployeeDep, solo_mios: bool = False):
     rows: list[dict] = []
     for chunk in _chunks(ids):
         rows.extend(_select_all(lambda chunk=chunk: db.table("stories").select(
-            "client_id,aprobado,estado"
+            "client_id,aprobado,estado,fecha_publicacion"
         ).in_("client_id", chunk).neq(
             "estado", "cancelada"
         ).neq(
@@ -302,10 +307,14 @@ def list_clients(employee: EmployeeDep, solo_mios: bool = False):
         ).gte("fecha_publicacion", date.today().isoformat()).order("id")))
     counts: dict[str, int] = {}
     pending: dict[str, int] = {}
+    next_pending: dict[str, str] = {}
     for row in rows:
         counts[row["client_id"]] = counts.get(row["client_id"], 0) + 1
         if not row.get("aprobado") and row.get("estado") not in ("publicando", "publicado"):
             pending[row["client_id"]] = pending.get(row["client_id"], 0) + 1
+            fecha = row.get("fecha_publicacion")
+            if fecha and (row["client_id"] not in next_pending or fecha < next_pending[row["client_id"]]):
+                next_pending[row["client_id"]] = fecha
 
     # Which PM runs each client, so the browser can filter "Míos" locally.
     # Always the LAST query of this function.
@@ -319,6 +328,7 @@ def list_clients(employee: EmployeeDep, solo_mios: bool = False):
     for c in clients:
         c["stories_count"] = counts.get(c["id"], 0)
         c["pending_count"] = pending.get(c["id"], 0)
+        c["next_pending_date"] = next_pending.get(c["id"])
         c["assigned_employee_id"] = assigned.get(c["id"])
     return clients
 
@@ -586,6 +596,40 @@ def patch_client_pm(client_id: str, body: ClientPmPatch, employee: EmployeeDep):
     else:
         db.table("employee_clients").delete().eq("client_id", client_id).execute()
     return {"client_id": client_id, "employee_id": body.employee_id}
+
+
+@router.post("/asignar-pm")
+def assign_pm_bulk(body: BulkPmAssign, employee: AdminDep):
+    """Asigna (o quita, con employee_id null) el PM de muchos clientes a la vez.
+    Solo admin. Mismo mecanismo que patch_client_pm — upsert sobre
+    employee_clients (UNIQUE en client_id) — pero por tandas, y validando
+    primero que TODOS los clientes y el PM sean de la agencia: o se aplica
+    todo o no se toca nada."""
+    db = get_admin_client()
+    client_ids = list(dict.fromkeys(body.client_ids))
+    found: set[str] = set()
+    for chunk in _chunks(client_ids):
+        rows = db.table("clients").select("id").eq(
+            "agency_id", employee.agency_id
+        ).in_("id", chunk).execute().data or []
+        found.update(row["id"] for row in rows)
+    if found != set(client_ids):
+        raise HTTPException(status_code=422, detail="Algunos clientes no existen en tu agencia")
+    if body.employee_id is not None:
+        target = db.table("employees").select("id").eq("id", body.employee_id).eq(
+            "agency_id", employee.agency_id
+        ).maybe_single().execute()
+        if not target or not target.data:
+            raise HTTPException(status_code=422, detail="Empleado no encontrado en tu agencia")
+        for chunk in _chunks(client_ids):
+            db.table("employee_clients").upsert(
+                [{"employee_id": body.employee_id, "client_id": client_id} for client_id in chunk],
+                on_conflict="client_id",
+            ).execute()
+    else:
+        for chunk in _chunks(client_ids):
+            db.table("employee_clients").delete().in_("client_id", chunk).execute()
+    return {"updated": len(client_ids), "employee_id": body.employee_id}
 
 
 @router.get("/clientes/{client_id}/drive-info")

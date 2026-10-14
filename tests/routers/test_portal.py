@@ -766,6 +766,99 @@ def test_patch_client_pm_allows_unassigning(monkeypatch, client):
     assert db.upserts == []
 
 
+
+def test_list_clients_reports_earliest_pending_date(monkeypatch, client):
+    db = DB([
+        [{"id": "c1"}, {"id": "c2"}],
+        [
+            {"client_id": "c1", "aprobado": False, "estado": "pendiente", "fecha_publicacion": "2026-10-12"},
+            {"client_id": "c1", "aprobado": False, "estado": "pendiente", "fecha_publicacion": "2026-10-10"},
+            {"client_id": "c1", "aprobado": True, "estado": "pendiente", "fecha_publicacion": "2026-10-08"},
+            {"client_id": "c2", "aprobado": True, "estado": "pendiente", "fecha_publicacion": "2026-10-09"},
+        ],
+        [],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes")
+
+    assert response.status_code == 200
+    assert {row["id"]: row["next_pending_date"] for row in response.json()} == {"c1": "2026-10-10", "c2": None}
+
+
+def test_assign_pm_bulk_requires_admin(monkeypatch, client):
+    response = client.post("/portal/asignar-pm", json={"client_ids": ["c1"], "employee_id": "e1"})
+    assert response.status_code == 403
+
+
+def test_assign_pm_bulk_upserts_every_client(monkeypatch, admin_client):
+    db = DB([[{"id": "c1"}, {"id": "c2"}], {"id": "e1"}, []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = admin_client.post("/portal/asignar-pm", json={"client_ids": ["c1", "c2", "c1"], "employee_id": "e1"})
+
+    assert response.status_code == 200
+    assert response.json() == {"updated": 2, "employee_id": "e1"}
+    assert db.upserts == [(
+        "employee_clients",
+        [{"employee_id": "e1", "client_id": "c1"}, {"employee_id": "e1", "client_id": "c2"}],
+        "client_id",
+    )]
+    assert db.deletes == []
+
+
+def test_assign_pm_bulk_unassigns(monkeypatch, admin_client):
+    db = DB([[{"id": "c1"}, {"id": "c2"}], []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = admin_client.post("/portal/asignar-pm", json={"client_ids": ["c1", "c2"], "employee_id": None})
+
+    assert response.status_code == 200
+    assert response.json() == {"updated": 2, "employee_id": None}
+    assert db.deletes == [("employee_clients", [("client_id", ["c1", "c2"])])]
+    assert db.upserts == []
+
+
+def test_assign_pm_bulk_rejects_client_from_another_agency_without_writing(monkeypatch, admin_client):
+    db = DB([[{"id": "c1"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = admin_client.post("/portal/asignar-pm", json={"client_ids": ["c1", "c2"], "employee_id": "e1"})
+
+    assert response.status_code == 422
+    assert db.upserts == [] and db.deletes == []
+
+
+def test_assign_pm_bulk_rejects_employee_from_another_agency_without_writing(monkeypatch, admin_client):
+    db = DB([[{"id": "c1"}], None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = admin_client.post("/portal/asignar-pm", json={"client_ids": ["c1"], "employee_id": "foreign"})
+
+    assert response.status_code == 422
+    assert db.upserts == [] and db.deletes == []
+
+
+def test_assign_pm_bulk_works_in_chunks_of_100(monkeypatch, admin_client):
+    ids = [f"c{i}" for i in range(150)]
+    db = DB([[{"id": i} for i in ids[:100]], [{"id": i} for i in ids[100:]], {"id": "e1"}, [], []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = admin_client.post("/portal/asignar-pm", json={"client_ids": ids, "employee_id": "e1"})
+
+    assert response.status_code == 200
+    assert response.json()["updated"] == 150
+    assert [len(payload) for _table, payload, _conflict in db.upserts] == [100, 50]
+    assert db.responses == []
+
+
+def test_assign_pm_bulk_limits_a_single_request_to_500_clients(monkeypatch, admin_client):
+    response = admin_client.post("/portal/asignar-pm", json={
+        "client_ids": [f"c{i}" for i in range(501)], "employee_id": "e1",
+    })
+    assert response.status_code == 422
+
+
 def test_client_pm_selector_is_reset_for_each_loaded_client():
     source = TestClient(app).get("/static/portal.js").text
 
@@ -1827,8 +1920,8 @@ def test_list_clients_reports_pending_count_for_upcoming_stories(monkeypatch, cl
 
     assert response.status_code == 200
     assert response.json() == [
-        {"id": "c1", "agency_id": "agency-1", "stories_count": 2, "pending_count": 1, "assigned_employee_id": None},
-        {"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "assigned_employee_id": None},
+        {"id": "c1", "agency_id": "agency-1", "stories_count": 2, "pending_count": 1, "next_pending_date": None, "assigned_employee_id": None},
+        {"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "next_pending_date": None, "assigned_employee_id": None},
     ]
 
 
@@ -1851,7 +1944,7 @@ def test_list_clients_excludes_future_published_stories_but_retains_active_state
     assert response.status_code == 200
     assert response.json() == [{
         "id": "c1", "agency_id": "agency-1", "stories_count": 4, "pending_count": 2,
-        "assigned_employee_id": None,
+        "next_pending_date": None, "assigned_employee_id": None,
     }]
 
 
@@ -1860,7 +1953,7 @@ def test_list_clients_can_filter_to_employee_assignments(monkeypatch, client):
     monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
     response = client.get("/portal/clientes?solo_mios=true")
     assert response.status_code == 200
-    assert response.json() == [{"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "assigned_employee_id": None}]
+    assert response.json() == [{"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "next_pending_date": None, "assigned_employee_id": None}]
 
 
 def test_list_clients_reports_assigned_employee(monkeypatch, client):

@@ -59,6 +59,21 @@ def test_portal_frontend_uses_real_api_without_prototype_data():
     assert "images.unsplash.com" not in source
 
 
+def test_portal_page_includes_bulk_pm_assignment_and_pending_approval_panel():
+    page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
+        "sub": "emp-1", "email": "pm@example.com", "name": "PM",
+        "agency_id": "agency-1", "role": "employee",
+    })})
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert 'id="assign-pm-dialog"' in page.text
+    assert 'id="assign-pm-open"' in page.text
+    assert 'id="home-pending-panel"' in page.text
+    assert "/portal/asignar-pm" in source
+    assert "renderHomePending" in source
+    assert "refreshClientList" in source
+
+
 def test_portal_frontend_keeps_health_dashboard_independent_and_latest_only():
     page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
         "sub": "emp-1", "email": "pm@example.com", "name": "PM",

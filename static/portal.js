@@ -291,11 +291,137 @@
     renderHomeIdle(summary, problemIds);
     renderHomeHero({summary, problems: problemIds.size, healthKnown: !!health});
   }
+  // ---- Inicio: "Para aprobar" (se arma con state.clients, sin pedido extra) ----
+  const HOME_PENDING_LIMIT = 8;
+  function renderHomePending() {
+    const panel = $('home-pending-panel');
+    const pending = clientScopeList()
+      .filter((client) => (client.pending_count || 0) > 0)
+      .sort((a, b) => (a.next_pending_date || '9999-12-31').localeCompare(b.next_pending_date || '9999-12-31') || a.name.localeCompare(b.name, 'es'));
+    panel.classList.toggle('hidden', !pending.length);
+    if (!pending.length) return;
+    const todayIso = isoDateInTimeZone(new Date());
+    const tomorrowIso = nextCalendarIso(todayIso);
+    const stories = pending.reduce((sum, client) => sum + client.pending_count, 0);
+    $('home-pending-count').textContent = `${pending.length} cliente${pending.length === 1 ? '' : 's'} · ${stories} historia${stories === 1 ? '' : 's'}${state.clientScope === 'mine' ? ' · tuyos' : ''}`;
+    const rows = pending.slice(0, HOME_PENDING_LIMIT).map((client) => {
+      const date = client.next_pending_date;
+      const when = !date ? '' : date === todayIso ? 'hoy' : date === tomorrowIso ? 'mañana' : dayLabel(date);
+      return homeRow({
+        id: client.id, name: client.name, tone: date && date <= tomorrowIso ? 'danger' : 'warn',
+        sub: `${client.pending_count} sin aprobar${when ? ' · publica ' + when : ''}`,
+      });
+    }).join('');
+    const more = pending.length > HOME_PENDING_LIMIT
+      ? `<button type="button" class="btn home-more" data-home-pending-all>Ver los ${pending.length} en Clientes</button>` : '';
+    $('home-pending').innerHTML = rows + more;
+  }
+  // Light refresh of the client list (no spinner, never touches the open screen).
+  async function refreshClientList() {
+    const listVersion = ++state.clientListVersion;
+    try {
+      const clients = await api('/portal/clientes');
+      if (listVersion !== state.clientListVersion) return;
+      state.clients = clients; renderClients();
+      if (!$('home-view').classList.contains('hidden')) renderHomePending();
+    } catch (_) { /* the cached list stays on screen */ }
+  }
+
+  // ---- Asignar PMs en bloque (solo admin) ----
+  const PM_ASSIGN_BATCH = 500;
+  const pmSelection = new Set();
+  function pmName(employeeId) {
+    if (!employeeId) return 'Sin PM';
+    const person = state.employees.find((item) => item.id === employeeId);
+    return person ? (person.name || person.email) : 'Otro PM';
+  }
+  function renderAssignPmLink() {
+    const link = $('assign-pm-open');
+    const visible = state.me?.role === 'admin' && state.clients.length > 0;
+    link.classList.toggle('hidden', !visible);
+    if (!visible) return;
+    const unassigned = state.clients.filter((client) => !client.assigned_employee_id).length;
+    link.textContent = unassigned ? `Asignar PMs · ${unassigned} sin PM` : 'Asignar PMs';
+  }
+  function updatePmAssignSubmit() {
+    const button = $('submit-assign-pm');
+    button.disabled = !pmSelection.size || !$('assign-pm-target').value;
+    button.textContent = pmSelection.size ? `Asignar ${pmSelection.size} cliente${pmSelection.size === 1 ? '' : 's'}` : 'Asignar';
+  }
+  function renderPmAssign() {
+    const query = $('assign-pm-search').value.trim().toLocaleLowerCase('es');
+    const onlyUnassigned = $('assign-pm-unassigned').checked;
+    const rows = state.clients
+      .filter((client) => (!query || client.name.toLocaleLowerCase('es').includes(query)) && (!onlyUnassigned || !client.assigned_employee_id))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    const shown = rows.slice(0, PM_ASSIGN_BATCH);
+    const list = $('assign-pm-list');
+    const scrollTop = list.scrollTop;
+    list.innerHTML = shown.length
+      ? shown.map((client) => `<label class="pm-assign-row"><input type="checkbox" data-pm-client="${escapeHtml(client.id)}"${pmSelection.has(client.id) ? ' checked' : ''}><span class="name">${escapeHtml(client.name)}</span><span class="pm-current${client.assigned_employee_id ? '' : ' is-none'}">${escapeHtml(pmName(client.assigned_employee_id))}</span></label>`).join('')
+        + (rows.length > shown.length ? `<div class="home-note">Mostrando ${shown.length} de ${rows.length}. Afiná la búsqueda para ver el resto.</div>` : '')
+      : '<div class="home-note">No hay clientes con ese filtro.</div>';
+    list.scrollTop = scrollTop;
+    const selectedVisible = shown.filter((client) => pmSelection.has(client.id)).length;
+    $('assign-pm-all').checked = shown.length > 0 && selectedVisible === shown.length;
+    $('assign-pm-all').indeterminate = selectedVisible > 0 && selectedVisible < shown.length;
+    $('assign-pm-all').disabled = !shown.length;
+    $('assign-pm-all-label').textContent = `Seleccionar los ${shown.length} visibles`;
+    updatePmAssignSubmit();
+  }
+  function openAssignPm() {
+    pmSelection.clear();
+    $('assign-pm-search').value = ''; $('assign-pm-unassigned').checked = false;
+    $('assign-pm-feedback').className = 'modal-feedback hidden';
+    $('assign-pm-target').innerHTML = '<option value="">Elegí un PM…</option>'
+      + state.employees.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name || person.email)}</option>`).join('')
+      + '<option value="__none__">Sin PM (quitar asignación)</option>';
+    renderPmAssign();
+    $('assign-pm-dialog').showModal();
+  }
+  async function submitAssignPm() {
+    const raw = $('assign-pm-target').value;
+    if (!pmSelection.size || !raw) return;
+    const employeeId = raw === '__none__' ? null : raw;
+    const ids = [...pmSelection];
+    const feedback = $('assign-pm-feedback');
+    $('submit-assign-pm').disabled = true; feedback.className = 'modal-feedback hidden';
+    let done = 0, failure = null;
+    try {
+      for (let start = 0; start < ids.length; start += PM_ASSIGN_BATCH) {
+        const slice = ids.slice(start, start + PM_ASSIGN_BATCH);
+        await api('/portal/asignar-pm', {method: 'POST', body: JSON.stringify({client_ids: slice, employee_id: employeeId})});
+        slice.forEach((id) => {
+          const listed = state.clients.find((client) => client.id === id);
+          if (listed) listed.assigned_employee_id = employeeId;
+          pmSelection.delete(id);
+        });
+        done += slice.length;
+      }
+    } catch (error) { failure = error; }
+    // Keep the open client's own PM selector consistent with the list.
+    const openListed = state.clients.find((client) => client.id === state.client?.id);
+    if (openListed && state.client) { state.client.assigned_employee_id = openListed.assigned_employee_id || null; $('client-pm').value = state.client.assigned_employee_id || ''; }
+    renderClients(); renderPmAssign();
+    if (!$('home-view').classList.contains('hidden')) renderHomePending();
+    if (failure) {
+      feedback.className = 'modal-feedback';
+      feedback.textContent = (done ? `Se asignaron ${done}, pero el resto falló: ` : '') + failure.message;
+    } else {
+      feedback.className = 'modal-feedback ok';
+      feedback.textContent = employeeId
+        ? `${done} cliente${done === 1 ? '' : 's'} asignado${done === 1 ? '' : 's'} a ${pmName(employeeId)}.`
+        : `${done} cliente${done === 1 ? '' : 's'} sin PM.`;
+    }
+  }
+
   function showHome() {
     $('nav-home').classList.add('active'); $('nav-clients').classList.remove('active'); $('nav-enfoques').classList.remove('active');
     $('home-view').classList.remove('hidden'); $('enfoques-view').classList.add('hidden'); $('empty').classList.add('hidden'); $('client-view').classList.add('hidden');
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     renderClients();
+    renderHomePending();
+    refreshClientList();
     loadHomeSummary();
   }
   function showClients() {
@@ -562,6 +688,7 @@
   }
   function renderClients() {
     const total = state.clients.length;
+    renderAssignPmLink();
     if (!total) {
       $('client-count').textContent = 'Clientes';
       $('client-status-filter').classList.add('hidden');
@@ -1839,6 +1966,10 @@
       selectClient(clientId).then(() => { if (state.client?.id === clientId) openRitmoDialog(); });
       return;
     }
+    if (event.target.closest('[data-home-pending-all]')) {
+      state.clientStatus = 'pending'; showClients();
+      return;
+    }
     const chip = event.target.closest('[data-client-id]'); if (!chip) return;
     selectClient(chip.dataset.clientId);
   });
@@ -1852,7 +1983,8 @@
     const btn = event.target.closest('[data-filter]');
     if (!btn || btn.dataset.filter === state.clientScope) return;
     setClientScope(btn.dataset.filter, true);
-    renderClients();   // filtering never reloads or changes the open screen
+    renderClients();
+    if (!$('home-view').classList.contains('hidden')) renderHomePending();
   });
   $('client-status-filter').addEventListener('click',(event)=>{
     const btn = event.target.closest('[data-status]');
@@ -1887,6 +2019,25 @@
     const file = $('client-avatar-input').files[0]; $('client-avatar-input').value = '';
     if (file) uploadClientAvatar(file);
   });
+  $('assign-pm-open').addEventListener('click', openAssignPm);
+  $('close-assign-pm').addEventListener('click', () => $('assign-pm-dialog').close());
+  $('close-assign-pm-2').addEventListener('click', () => $('assign-pm-dialog').close());
+  $('assign-pm-search').addEventListener('input', renderPmAssign);
+  $('assign-pm-unassigned').addEventListener('change', renderPmAssign);
+  $('assign-pm-target').addEventListener('change', updatePmAssignSubmit);
+  $('assign-pm-all').addEventListener('change', () => {
+    const checked = $('assign-pm-all').checked;
+    $('assign-pm-list').querySelectorAll('[data-pm-client]').forEach((box) => {
+      if (checked) pmSelection.add(box.dataset.pmClient); else pmSelection.delete(box.dataset.pmClient);
+    });
+    renderPmAssign();
+  });
+  $('assign-pm-list').addEventListener('change', (event) => {
+    const box = event.target.closest('[data-pm-client]'); if (!box) return;
+    if (box.checked) pmSelection.add(box.dataset.pmClient); else pmSelection.delete(box.dataset.pmClient);
+    renderPmAssign();
+  });
+  $('submit-assign-pm').addEventListener('click', submitAssignPm);
   $('add-clients-bulk').addEventListener('click', () => {
     $('bulk-clients-input').value = ''; $('bulk-clients-feedback').classList.add('hidden'); $('bulk-clients-results').innerHTML = '';
     $('bulk-clients-dialog').showModal();
