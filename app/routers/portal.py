@@ -168,6 +168,14 @@ def _pop_drive_refresh_token(client: dict) -> str | None:
     return decrypt(encrypted) if encrypted else None
 
 
+_CLIENT_SECRET_COLUMNS = ("drive_refresh_token_encrypted", "meta_access_token_encrypted")
+
+
+def _without_secrets(row: dict) -> dict:
+    """Drop encrypted credential columns before a clients row goes back to the browser."""
+    return {key: value for key, value in row.items() if key not in _CLIENT_SECRET_COLUMNS}
+
+
 @router.get("/me")
 def get_me(employee: EmployeeDep):
     return {"id": employee.id, "name": employee.name, "email": employee.email,
@@ -632,7 +640,7 @@ def disconnect_drive(client_id: str, employee: EmployeeDep):
     updated = db.table("clients").update({
         "drive_refresh_token_encrypted": None, "drive_connected_email": None,
     }).eq("id", client_id).execute().data
-    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, "drive_connected_email": None}
+    return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, "drive_connected_email": None}
 
 
 @router.patch("/clientes/{client_id}")
@@ -648,7 +656,11 @@ def patch_client(client_id: str, body: ClientPatch, employee: EmployeeDep):
         "p_client_id": client_id, "p_employee_id": employee.id,
         "p_agency_id": employee.agency_id, "p_patch": changes,
     }).execute().data
-    return updated or {**current, **changes}
+    if isinstance(updated, dict):
+        return _without_secrets(updated)
+    if isinstance(updated, list) and updated:
+        return _without_secrets(updated[0])
+    return {**current, **changes}
 
 
 @router.get("/clientes/{client_id}/historial")
@@ -681,6 +693,27 @@ class ClientContactPatch(BaseModel):
     contact_email: str | None = None
 
 
+class ClientDriveFolderPatch(BaseModel):
+    drive_folder_id: str
+
+    @field_validator("drive_folder_id", mode="before")
+    @classmethod
+    def extract_folder_id(cls, value):
+        """Accept a Drive folder ID or the complete folder URL."""
+        if not isinstance(value, str):
+            return value
+        value = value.strip()
+        match = _DRIVE_FOLDER_URL_RE.search(value)
+        return match.group(1) if match else value
+
+    @field_validator("drive_folder_id")
+    @classmethod
+    def plausible_folder_id(cls, value):
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{10,}", value):
+            raise ValueError("Carpeta de Drive no válida. Pegá el link o el ID de la carpeta.")
+        return value
+
+
 class ClientFontPatch(BaseModel):
     font_choice: str | None = None
 
@@ -701,7 +734,7 @@ def patch_client_font(client_id: str, body: ClientFontPatch, employee: EmployeeD
     updated = db.table("clients").update({"font_choice": body.font_choice}).eq(
         "id", client_id
     ).execute().data
-    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, "font_choice": body.font_choice}
+    return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, "font_choice": body.font_choice}
 
 
 @router.patch("/clientes/{client_id}/contacto")
@@ -713,7 +746,16 @@ def patch_client_contact(client_id: str, body: ClientContactPatch, employee: Emp
     if not changes:
         return {"id": client_id}
     updated = db.table("clients").update(changes).eq("id", client_id).execute().data
-    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, **changes}
+    return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, **changes}
+
+
+@router.patch("/clientes/{client_id}/drive-carpeta")
+def patch_client_drive_folder(client_id: str, body: ClientDriveFolderPatch, employee: EmployeeDep):
+    """Set the Drive folder the weekly generation reads images from."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    db.table("clients").update({"drive_folder_id": body.drive_folder_id}).eq("id", client_id).execute()
+    return {"id": client_id, "drive_folder_id": body.drive_folder_id}
 
 
 @router.post("/clientes/{client_id}/avatar")
@@ -752,7 +794,7 @@ def upload_client_avatar(client_id: str, employee: EmployeeDep, image: UploadFil
             uploads.delete_image(old_public_id)
         except uploads.UploadError:
             pass
-    return updated[0]
+    return _without_secrets(updated[0])
 
 
 @router.patch("/clientes/{client_id}/ritmo")
@@ -768,7 +810,7 @@ def patch_client_ritmo(client_id: str, body: ClientRitmoPatch, employee: Employe
     updated = db.table("clients").update(payload).eq(
         "id", client_id
     ).execute().data
-    return updated[0] if isinstance(updated, list) and updated else {"id": client_id, **payload}
+    return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, **payload}
 
 
 @router.get("/ritmo-default")

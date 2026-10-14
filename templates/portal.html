@@ -609,6 +609,11 @@
     @keyframes toast-bar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
     @media(max-width:480px){.toast{top:12px;left:12px;right:12px;width:auto;min-width:0;max-width:none}}
     @media(prefers-reduced-motion:reduce){.toast{animation:none}.toast::after{display:none}}
+    .error-detail{margin-top:6px;font-size:11px}
+    .error-detail summary{cursor:pointer;opacity:.8}
+    .error-detail code{display:block;margin-top:4px;padding:6px 8px;border-radius:6px;background:rgba(0,0,0,.05);word-break:break-all;white-space:pre-wrap;font-size:11px}
+    .drive-missing{margin-top:8px;font-size:12px;color:var(--danger)}
+    .link-btn{background:none;border:0;padding:0;color:inherit;font:inherit;text-decoration:underline;cursor:pointer}
   </style>
   <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
@@ -714,6 +719,7 @@
             <p class="eyebrow">Espacio de contenido</p>
             <h2 id="client-workspace-title">Prepará la próxima semana</h2>
             <p id="client-workspace-subtitle">Definí la dirección, revisá las historias y dejalas listas para publicar.</p>
+            <p id="drive-missing-notice" class="drive-missing hidden">Falta la carpeta de Drive de este cliente, así que no se pueden generar historias. <button type="button" class="link-btn" id="drive-missing-settings">Cargarla en Ajustes</button></p>
           </div>
           <button id="open-ritmo-hero" class="btn primary">Generar historias</button>
         </div>
@@ -805,7 +811,8 @@
     <div class="modal-foot"><button id="cancel-story-edit" class="btn">Cancelar</button><button id="save-story" class="btn primary">Guardar historia</button></div>
   </dialog>
   <dialog id="history-dialog" class="wide"><div class="modal-head"><strong>Historial de cambios</strong><button id="close-history" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body" id="history-list"></div><div class="modal-foot"><button id="close-history-2" class="btn">Cerrar</button></div></dialog>
-  <dialog id="settings-dialog"><div class="modal-head"><strong>Ajustes del cliente</strong><button id="close-settings" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body">
+  <dialog id="settings-dialog"><div class="modal-head"><strong id="settings-title">Ajustes del cliente</strong><button id="close-settings" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body">
+    <p class="hint">Los datos de contacto y la carpeta de Drive se guardan solos al salir de cada campo.</p>
     <div class="team-field">
       <label for="client-avatar-input">Avatar del portal</label>
       <span class="avatar avatar-sm" id="client-avatar-preview"></span>
@@ -817,6 +824,11 @@
       <span id="drive-connect-status">No conectado todavía</span>
       <a id="drive-connect-btn" class="btn" title="Lleva a iniciar sesión con Google — reemplaza compartir la carpeta con la cuenta de servicio">Conectar</a>
       <button type="button" id="drive-disconnect-btn" class="btn hidden">Desconectar</button>
+    </div>
+    <div class="team-field">
+      <label for="client-drive-folder">Carpeta de Drive</label>
+      <input type="text" id="client-drive-folder" placeholder="Pegá el link o el ID de la carpeta">
+      <a id="client-drive-folder-open" class="btn hidden" target="_blank" rel="noopener noreferrer">Abrir</a>
     </div>
     <div class="team-field">
       <label for="client-instagram">Instagram</label>

@@ -131,8 +131,8 @@
     return client.avatar_url ? `<img src="${escapeHtml(client.avatar_url)}" alt="">` : escapeHtml(initials(client.name));
   }
   function setControlsDisabled(disabled) {
-    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-instagram','client-whatsapp','client-email','client-avatar-upload'].forEach((id) => { $(id).disabled = disabled; });
-    $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating;
+    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload'].forEach((id) => { $(id).disabled = disabled; });
+    $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating || !state.client?.drive_folder_id;
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
   function clearSelection() {
@@ -164,11 +164,34 @@
       $('home-subtitle').textContent = 'Resumen de tus clientes.';
     }
   }
+  // Generation errors are stored raw (often English, sometimes with internal
+  // paths). Show PMs a short Spanish message with what to do; admins can still
+  // expand the raw detail.
+  function friendlyGenerationError(raw) {
+    const text = String(raw || '').trim();
+    if (/drive_folder_id is required/i.test(text)) {
+      return {message: 'Falta la carpeta de Drive de este cliente.', hint: 'Cargala en Ajustes del cliente.'};
+    }
+    if (/GOOGLE_SERVICE_ACCOUNT_FILE|service_account|No such file or directory|invalid_grant|expired|revoked|insufficientPermissions|File not found/i.test(text)) {
+      return {message: 'No se pudo acceder al Drive del cliente.', hint: 'Revisá que su cuenta de Google esté conectada en Ajustes del cliente.'};
+    }
+    if (/sin im[aá]genes (suficientes|legibles)/i.test(text)) {
+      return {message: text.charAt(0).toUpperCase() + text.slice(1) + '.', hint: 'Sumá imágenes a la carpeta de Drive del cliente.'};
+    }
+    return null;
+  }
+  function generationErrorParts(raw) {
+    const info = friendlyGenerationError(raw) || {message: 'La última generación falló.', hint: null};
+    const text = info.hint ? `${info.message} ${info.hint}` : info.message;
+    const detail = state.me?.role === 'admin' && raw
+      ? `<details class="error-detail"><summary>Detalle técnico</summary><code>${escapeHtml(raw)}</code></details>` : '';
+    return {text, detail};
+  }
   function renderHomeHealth(health) {
     const checks = [
       {
         title: 'Error de generación', okText: 'Sin errores de generación', items: health.clientes_con_error_generacion || [],
-        row: (c) => homeRow({id: c.id, name: c.name, tone: 'danger', sub: `${safeHealthDayLabel(c.generation_error_at, 'Reciente')} · ${c.generation_error || 'Falló la generación'}`}),
+        row: (c) => homeRow({id: c.id, name: c.name, tone: 'danger', sub: `${safeHealthDayLabel(c.generation_error_at, 'Reciente')} · ${generationErrorParts(c.generation_error).text}`}),
       },
       {
         title: 'Pool de imágenes bajo', okText: 'Pool de imágenes al día', items: health.clientes_con_pool_bajo || [],
@@ -537,8 +560,9 @@
       // Drive's folder listing is an external Google API call with its own
       // latency (and occasional slowness) — fetched separately so it never
       // holds up rendering the client's own data, which is ready sooner.
+      const folderId = client.drive_folder_id;
       api(`/portal/clientes/${encodeURIComponent(clientId)}/drive-info`).then((driveInfo) => {
-        if (selectionVersion !== state.selectionVersion || clientId !== state.selectedClientId) return;
+        if (selectionVersion !== state.selectionVersion || clientId !== state.selectedClientId || folderId !== state.client?.drive_folder_id) return;
         state.driveCount = driveInfo?.count ?? null;
         renderActivity();
       }).catch(() => {});
@@ -609,6 +633,7 @@
     $('client-email').value = state.client.contact_email || '';
     updateContactLinks();
     renderDriveConnectStatus();
+    renderDriveFolderState();
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     const url = driveUrl(state.client.drive_folder_id);
     if (url) { $('drive-link').href = url; $('drive-link').classList.remove('hidden'); }
@@ -642,6 +667,18 @@
     $('drive-connect-btn').href = `/portal/clientes/${encodeURIComponent(clientId)}/drive/conectar`;
     $('drive-connect-btn').classList.toggle('hidden', !!email);
     $('drive-disconnect-btn').classList.toggle('hidden', !email);
+  }
+  function renderDriveFolderState() {
+    const client = state.client; if (!client) return;
+    const folderId = client.drive_folder_id || '';
+    $('client-drive-folder').value = folderId;
+    const url = driveUrl(folderId);
+    $('client-drive-folder-open').classList.toggle('hidden', !url);
+    if (url) $('client-drive-folder-open').href = url;
+    $('drive-link').classList.toggle('hidden', !url);
+    if (url) $('drive-link').href = url;
+    $('drive-missing-notice').classList.toggle('hidden', !!folderId);
+    refreshRitmoControls();
   }
   async function disconnectDrive() {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
@@ -887,7 +924,7 @@
     }
     $('activity-list').innerHTML = rows.join('');
     $('activity-summary').innerHTML = state.client.generation_error
-      ? `<div class="status-card warn"><span>${icon('triangle-alert', 16)}</span><div><strong>Necesita atención</strong><p>${escapeHtml(state.client.generation_error)}</p></div></div>`
+      ? (() => { const parts = generationErrorParts(state.client.generation_error); return `<div class="status-card warn"><span>${icon('triangle-alert', 16)}</span><div><strong>Necesita atención</strong><p>${escapeHtml(parts.text)}</p>${parts.detail}</div></div>`; })()
       : `<div class="status-card ok"><span>${icon('check', 16)}</span><div><strong>Todo en orden</strong><p>No hay errores de generación pendientes.</p></div></div>`;
   }
   function storyCard(story, index, groupId, batchReorderable = true) {
@@ -953,6 +990,32 @@
       if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) {
         showMessage(error.message, true);
         input.value = state.client?.[field] || '';
+      }
+    } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) input.disabled = false; }
+  }
+  async function saveClientDriveFolder() {
+    const input = $('client-drive-folder'), clientId = state.client?.id, selectionVersion = state.selectionVersion, value = input.value.trim();
+    if (!clientId) return;
+    if (!value || value === (state.client?.drive_folder_id || '')) { input.value = state.client?.drive_folder_id || ''; return; }
+    input.disabled = true;
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/drive-carpeta`, {method:'PATCH', body:JSON.stringify({drive_folder_id: value})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.drive_folder_id = updated.drive_folder_id;
+      renderDriveFolderState();
+      state.driveCount = undefined;
+      renderActivity();
+      showMessage('Carpeta de Drive actualizada.');
+      const folderId = updated.drive_folder_id;
+      api(`/portal/clientes/${encodeURIComponent(clientId)}/drive-info`).then((driveInfo) => {
+        if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id || folderId !== state.client.drive_folder_id) return;
+        state.driveCount = driveInfo?.count ?? null;
+        renderActivity();
+      }).catch(() => {});
+    } catch(error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) {
+        showMessage(error.message, true);
+        input.value = state.client?.drive_folder_id || '';
       }
     } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) input.disabled = false; }
   }
@@ -1110,7 +1173,7 @@
     $('ritmo-chips').setAttribute('aria-disabled', String(rhythmControlsBlocked));
     document.querySelectorAll('#ritmo-days-detail input').forEach((input) => { input.disabled = rhythmControlsBlocked; });
     refreshRitmoDetailTotal();
-    $('generate-weekly').disabled = rhythmControlsBlocked || !state.client;
+    $('generate-weekly').disabled = rhythmControlsBlocked || !state.client || !state.client.drive_folder_id;
   }
   function setRitmoSaving(saving) {
     ritmoSaving = saving;
@@ -1174,6 +1237,10 @@
     feedback.textContent = '';
     feedback.classList.add('hidden');
     showRitmoDetailMessage('');
+    if (!state.client.drive_folder_id) {
+      feedback.textContent = 'Falta la carpeta de Drive de este cliente. Cargala en Ajustes del cliente para poder generar.';
+      feedback.classList.remove('hidden');
+    }
     renderRitmoDaysDetail();
     $('ritmo-dialog').showModal();
   }
@@ -1217,7 +1284,8 @@
       showMessage(result.detail);
     } catch(error) {
       if (selectionVersion === state.selectionVersion && clientId === state.client?.id) {
-        feedback.textContent = error.message;
+        const info = friendlyGenerationError(error.message);
+        feedback.textContent = info ? (info.hint ? `${info.message} ${info.hint}` : info.message) : error.message;
         feedback.classList.remove('hidden');
       }
     } finally {
@@ -1535,7 +1603,10 @@
       $('history-list').innerHTML = rows.length ? rows.map((row) => `<div class="history-row"><div class="field">${escapeHtml(row.field)}</div><div class="meta">${row.changed_by_name ? escapeHtml(row.changed_by_name)+' · ' : ''}${new Date(row.changed_at).toLocaleString('es-AR')}</div><div class="diff"><span class="old">${escapeHtml(row.old_value || '(vacío)')}</span><span>${escapeHtml(row.new_value || '(vacío)')}</span></div></div>`).join('') : '<div class="empty">Todavía no hay cambios registrados para este cliente.</div>';
     } catch (error) { $('history-list').textContent = error.message; }
   }
-  function openSettings() { $('settings-dialog').showModal(); }
+  function openSettings() {
+    $('settings-title').textContent = state.client ? `Ajustes de ${state.client.name}` : 'Ajustes del cliente';
+    $('settings-dialog').showModal();
+  }
   function findStory(storyId) { for (const group of state.groups) { const story=(group.stories||[]).find((item)=>item.id===storyId); if(story) return {group,story}; } return null; }
   function openStory(story, group) {
     if (storyIsLocked(story)) return;
@@ -1745,6 +1816,8 @@
   $('client-instagram').addEventListener('change',()=>saveClientContact('instagram_profile_url','client-instagram'));
   $('client-whatsapp').addEventListener('change',()=>saveClientContact('whatsapp_contact','client-whatsapp'));
   $('client-email').addEventListener('change',()=>saveClientContact('contact_email','client-email'));
+  $('client-drive-folder').addEventListener('change',saveClientDriveFolder);
+  $('drive-missing-settings').addEventListener('click',openSettings);
   $('client-avatar-upload').addEventListener('click',()=>$('client-avatar-input').click());
   $('client-avatar-input').addEventListener('change',()=>{
     const file = $('client-avatar-input').files[0]; $('client-avatar-input').value = '';

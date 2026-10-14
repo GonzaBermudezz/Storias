@@ -814,6 +814,61 @@ def test_patch_client_contact_persists_only_the_supplied_contact_field(monkeypat
     )]
 
 
+def test_patch_client_drive_folder_extracts_id_from_link(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "c1"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/drive-carpeta", json={
+        "drive_folder_id": "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUv?usp=sharing",
+    })
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "c1", "drive_folder_id": "1AbCdEfGhIjKlMnOpQrStUv"}
+    assert db.updates == [(
+        "clients", {"drive_folder_id": "1AbCdEfGhIjKlMnOpQrStUv"}, [("id", "c1")],
+    )]
+
+
+def test_patch_client_drive_folder_rejects_invalid_value(monkeypatch, client):
+    db = DB([])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/drive-carpeta", json={"drive_folder_id": "hola"})
+
+    assert response.status_code == 422
+    assert db.updates == []
+
+
+def test_patch_client_drive_folder_rejects_other_agency(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-2"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/drive-carpeta", json={"drive_folder_id": "1AbCdEfGhIjKlMnOpQrStUv"})
+
+    assert response.status_code == 403
+    assert db.updates == []
+
+
+def test_client_updates_never_return_encrypted_credentials(monkeypatch, client):
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1"},
+        [{
+            "id": "c1", "instagram_profile_url": "argomedia",
+            "drive_refresh_token_encrypted": "enc-drive", "meta_access_token_encrypted": "enc-meta",
+        }],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/contacto", json={"instagram_profile_url": "argomedia"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["instagram_profile_url"] == "argomedia"
+    assert "drive_refresh_token_encrypted" not in body
+    assert "meta_access_token_encrypted" not in body
+    assert "enc-drive" not in response.text and "enc-meta" not in response.text
+
+
 def test_upload_client_avatar_updates_only_avatar_and_cleans_old_asset(monkeypatch, client):
     current = {
         "id": "c1", "agency_id": "agency-1", "logo_url": "https://cdn/logo.png",
