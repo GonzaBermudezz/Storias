@@ -5,6 +5,9 @@
   const storyIsLocked = (story) => LOCKED_STORY_STATES.has(story?.estado);
   const $ = (id) => document.getElementById(id);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'})[char]);
+  function foldText(value) {
+    return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
+  }
   const ICONS = {
     house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/> <path d="M16 3.128a4 4 0 0 1 0 7.744"/> <path d="M22 21v-2a4 4 0 0 0-3-3.87"/> <circle cx="9" cy="7" r="4"/>',
@@ -369,10 +372,10 @@
     button.textContent = pmSelection.size ? `Asignar ${pmSelection.size} cliente${pmSelection.size === 1 ? '' : 's'}` : 'Asignar';
   }
   function renderPmAssign() {
-    const query = $('assign-pm-search').value.trim().toLocaleLowerCase('es');
+    const query = foldText($('assign-pm-search').value.trim());
     const onlyUnassigned = $('assign-pm-unassigned').checked;
     const rows = state.clients
-      .filter((client) => (!query || client.name.toLocaleLowerCase('es').includes(query)) && (!onlyUnassigned || !client.assigned_employee_id))
+      .filter((client) => (!query || foldText(client.name).includes(query)) && (!onlyUnassigned || !client.assigned_employee_id))
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
     const shown = rows.slice(0, PM_ASSIGN_BATCH);
     const list = $('assign-pm-list');
@@ -387,11 +390,12 @@
     $('assign-pm-all').indeterminate = selectedVisible > 0 && selectedVisible < shown.length;
     $('assign-pm-all').disabled = !shown.length;
     $('assign-pm-all-label').textContent = `Seleccionar los ${shown.length} visibles`;
+    $('assign-pm-all').closest('label').classList.toggle('hidden', !shown.length);
     updatePmAssignSubmit();
   }
   function openAssignPm() {
     pmSelection.clear();
-    $('assign-pm-search').value = ''; $('assign-pm-unassigned').checked = false;
+    $('assign-pm-search').value = ''; $('assign-pm-unassigned').checked = state.clients.some((client) => !client.assigned_employee_id);
     $('assign-pm-feedback').className = 'modal-feedback hidden';
     $('assign-pm-target').innerHTML = '<option value="">Elegí un PM…</option>'
       + state.employees.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name || person.email)}</option>`).join('')
@@ -567,8 +571,8 @@
       injectFontFaces(fonts);
       const fontOptions = fonts.map((font) => `<option value="${escapeHtml(font.key)}" style="font-family:'sf-${escapeHtml(font.key)}',sans-serif">${escapeHtml(font.label)}</option>`).join('');
       $('client-pm').innerHTML = '<option value="">Sin asignar</option>' + employees.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name || person.email)}</option>`).join('');
-      $('client-font').innerHTML = '<option value="">Default</option>' + fontOptions;
-      $('story-font').innerHTML = '<option value="">Default del cliente</option>' + fontOptions;
+      $('client-font').innerHTML = '<option value="">Predeterminada</option>' + fontOptions;
+      $('story-font').innerHTML = '<option value="">Predeterminada del cliente</option>' + fontOptions;
       $('me-avatar').textContent = initials(me.name || me.email); $('me-name').textContent = me.name || me.email;
       $('me-role').textContent = me.role === 'admin' ? 'Administrador' : 'Empleado'; $('me-card').classList.remove('hidden');
       $('me-menu-name').textContent = me.name || me.email; $('me-menu-email').textContent = me.name ? (me.email || '') : '';
@@ -677,9 +681,9 @@
   // `matched`: scope + search (what the status counters describe).
   // `shown`: matched + the chosen status chip, sorted worst-first then by name.
   function computeClientList() {
-    const query = (state.clientSearch || '').trim().toLocaleLowerCase('es');
+    const query = foldText((state.clientSearch || '').trim());
     const matched = clientScopeList()
-      .filter((client) => !query || client.name.toLocaleLowerCase('es').includes(query))
+      .filter((client) => !query || foldText(client.name).includes(query))
       .map((client) => ({client, status: clientStatus(client)}));
     const shown = matched
       .filter(({status}) => state.clientStatus === 'all' || status.key === state.clientStatus)
@@ -693,7 +697,8 @@
     $('client-status-filter').classList.toggle('hidden', !state.clients.length);
     $('client-status-filter').innerHTML = STATUS_CHIPS.map(([key, label]) => {
       const active = state.clientStatus === key;
-      return `<button type="button" class="status-chip${active ? ' active' : ''}" data-status="${key}" aria-pressed="${active}">${label} <span class="chip-count">${counts[key]}</span></button>`;
+      const zero = key !== 'all' && counts[key] === 0 && !active;
+      return `<button type="button" class="status-chip${active ? ' active' : ''}${zero ? ' is-zero' : ''}" data-status="${key}" aria-pressed="${active}">${label} <span class="chip-count">${counts[key]}</span></button>`;
     }).join('');
   }
   function setClientScope(scope, persist) {
@@ -733,6 +738,7 @@
   async function selectClient(clientId) {
     const selectionVersion = ++state.selectionVersion;
     state.selectedClientId = clientId; state.client = null; state.groups = []; state.editingStory = null; draftDates = new Set(); setControlsDisabled(true);
+    $('client-view').classList.add('is-switching');
     if ($('story-dialog').open) $('story-dialog').close();
     clearMessage(); $('empty').classList.add('hidden'); $('client-view').classList.remove('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
@@ -764,6 +770,7 @@
         if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
       }
     } finally {
+      if (selectionVersion === state.selectionVersion) $('client-view').classList.remove('is-switching');
       if (selectionVersion === state.selectionVersion) setControlsDisabled(false);
     }
   }
@@ -799,7 +806,7 @@
     const values = Array.isArray(topics) ? topics : [];
     $('topics-text').innerHTML = values.length
       ? values.map((topic) => `<span class="tag">${escapeHtml(topic)}</span>`).join('')
-      : '<p class="field-text">Todavía no hay temas. Hacé click acá para agregarlos.</p>';
+      : '<p class="field-text">Todavía no hay temas. Hacé clic acá para agregarlos.</p>';
     $('topics-view').classList.toggle('empty', !values.length);
   }
   function renderClient() {
@@ -814,7 +821,7 @@
       : 'Definí una dirección, revisá las historias y dejalas listas para publicar.';
     $('business-description').value = state.client.business_description || ''; $('client-topics').value = (state.client.topics || []).join('\n');
     $('desc-count').textContent = String($('business-description').value.length); $('topics-count').textContent = String((state.client.topics || []).length);
-    updateFieldView('description', state.client.business_description, 'Todavía no hay descripción. Hacé click acá para agregarla.');
+    updateFieldView('description', state.client.business_description, 'Todavía no hay descripción. Hacé clic acá para agregarla.');
     renderTopicsView(state.client.topics);
     setFieldMode('description', false); setFieldMode('topics', false);
     renderFocusSelect();
@@ -1036,7 +1043,7 @@
     const dates = [...byDate.keys()].sort();
     renderHistorico(historicoItemsByDate());
     if (!dates.length) {
-      $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">' + icon('image', 34) + '</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Clickeá un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>' + icon('sparkles', 14) + 'Planificar la semana de este cliente</button></div>';
+      $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">' + icon('image', 34) + '</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Hacé clic en un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>' + icon('sparkles', 14) + 'Planificar la semana de este cliente</button></div>';
       $('week-badge').classList.add('hidden');
       return;
     }
@@ -1141,7 +1148,7 @@
         $('topics-count').textContent = String((updated.topics || []).length);
         renderTopicsView(updated.topics);
       } else {
-        updateFieldView(name, updated.business_description, 'Todavía no hay descripción. Hacé click acá para agregarla.');
+        updateFieldView(name, updated.business_description, 'Todavía no hay descripción. Hacé clic acá para agregarla.');
       }
       exitFieldEdit(name);
       showMessage(field==='topics'?'Temas guardados.':'Descripción guardada.');
@@ -1968,6 +1975,13 @@
   $('nav-home').addEventListener('click',showHome);
   $('nav-clients').addEventListener('click',showClients);
   $('nav-enfoques').addEventListener('click',showEnfoques);
+  ['nav-home', 'nav-clients', 'nav-enfoques'].forEach((id) => {
+    $(id).addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      $(id).click();
+    });
+  });
   $('new-focus-preset').addEventListener('click',()=>openFocusPresetDialog(null));
   $('close-focus-preset').addEventListener('click',()=>$('focus-preset-dialog').close());
   $('close-focus-preset-2').addEventListener('click',()=>$('focus-preset-dialog').close());

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Panel de empleados — Storias</title>
+  <title>Storias</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap">
   <style>
     :root{--bg:#F3F4F6;--surface:#FFFFFF;--surface-2:#FFFFFF;--border:#E5E7EB;--fg:#111827;--muted:#6B7280;--accent:#F0653C;--accent-soft:#FFF0EA;--danger:#DC2626;--danger-soft:#FEF2F2;--ok:#2563EB;--ok-soft:#EFF6FF;--success:#16A34A;--success-soft:#DCFCE7;--nav-active-bg:#EEF2FF;--nav-active-fg:#4F46E5;--shadow:0 1px 2px rgba(17,24,39,.04),0 6px 16px -8px rgba(17,24,39,.08)}
@@ -637,6 +637,10 @@
     .pm-assign-target select{flex:1}
     .modal-feedback.ok{background:var(--success-soft);color:var(--success)}
     .home-more{margin:6px 10px 2px}
+    #client-view.is-switching{opacity:.55;pointer-events:none;transition:opacity .12s}
+    {% raw %}@media(prefers-reduced-motion:reduce){#client-view.is-switching{transition:none}}{% endraw %}
+    .status-chip.is-zero{opacity:.55}
+    .nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   </style>
   <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
@@ -652,9 +656,9 @@
       <button type="button" id="sidebar-toggle" class="sidebar-toggle" title="Plegar menú" aria-label="Plegar menú"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg></button>
     </div>
     <nav class="main-nav">
-      <span class="nav-item" id="nav-home" title="Inicio"><span class="icon" data-icon="house" data-size="16"></span><span class="nav-label">Inicio</span></span>
-      <span class="nav-item active" id="nav-clients" title="Clientes"><span class="icon" data-icon="users" data-size="16"></span><span class="nav-label">Clientes</span></span>
-      <span class="nav-item" id="nav-enfoques" title="Enfoques"><span class="icon" data-icon="target" data-size="16"></span><span class="nav-label">Enfoques</span></span>
+      <span class="nav-item" id="nav-home" role="button" tabindex="0" title="Inicio"><span class="icon" data-icon="house" data-size="16"></span><span class="nav-label">Inicio</span></span>
+      <span class="nav-item active" id="nav-clients" role="button" tabindex="0" title="Clientes"><span class="icon" data-icon="users" data-size="16"></span><span class="nav-label">Clientes</span></span>
+      <span class="nav-item" id="nav-enfoques" role="button" tabindex="0" title="Enfoques"><span class="icon" data-icon="target" data-size="16"></span><span class="nav-label">Enfoques</span></span>
       <span class="nav-item disabled hidden" title="Próximamente"><span class="icon" data-icon="settings" data-size="16"></span>Ajustes</span>
     </nav>
     <div class="nav-divider"></div>
@@ -676,13 +680,13 @@
   </aside>
   <div class="app">
     <header class="topbar">
-      <div id="header-default"><h1>Panel de empleados</h1></div>
+      <div id="header-default"><h1>Storias</h1></div>
       <div id="header-client" class="header-client hidden">
         <span class="avatar" id="client-avatar"></span>
         <div>
           <h1 id="client-name"></h1>
           <div class="header-meta">
-            <span class="gen-status"><span class="gen-dot" id="gen-dot"></span><span>Generación semanal · Viernes 18:00hs</span></span>
+            <span class="gen-status"><span class="gen-dot" id="gen-dot"></span><span>Generación semanal · Viernes 18:00 hs</span></span>
           </div>
         </div>
       </div>
@@ -784,7 +788,7 @@
               <span class="info" tabindex="0" aria-label="Se usa en la próxima generación semanal y después se limpia solo. Los enfoques se crean y editan en la pestaña Enfoques del menú." data-tooltip="Se usa en la próxima generación semanal y después se limpia solo. Los enfoques se crean y editan en la pestaña Enfoques del menú.">i</span>
             </div>
             <div class="team-field"><label for="client-pm">PM asignado</label><select id="client-pm"><option value="">Sin asignar</option></select></div>
-            <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Default</option></select></div>
+            <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Predeterminada</option></select></div>
           </div>
         </div>
         <div id="plan-panel" class="plan-panel hidden">
@@ -793,7 +797,7 @@
         </div>
         <div class="workspace">
           <div class="stories-panel">
-            <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Para revisar y aprobar</span><p class="section-hint">Aprobá una historia haciendo click sobre su tarjeta. Podés editar el texto o la tipografía cuando lo necesites.</p></div><span id="week-badge" class="week-badge hidden"></span></div>
+            <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Para revisar y aprobar</span><p class="section-hint">Aprobá una historia con un clic sobre su tarjeta (te pedimos confirmar antes de aprobar). Podés editar el texto o la tipografía cuando lo necesites.</p></div><span id="week-badge" class="week-badge hidden"></span></div>
             <div id="stories" aria-live="polite"><div class="loading-state" role="status" aria-label="Cargando historias"><span class="spinner"></span><p>Cargando historias...</p></div></div>
             <div class="panel hidden" id="historico-panel">
               <div class="panel-head" id="historico-panel-toggle"><div><p class="eyebrow">Historial</p><h2>Historias subidas</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
@@ -803,7 +807,7 @@
           <div class="side-col">
             <aside class="activity">
               <h3><span data-icon="calendar" data-size="16"></span>Calendario</h3>
-              <p class="hint">Clickeá un día para sumar una historia a mano. Los puntitos marcan lo ya planificado.</p>
+              <p class="hint">Hacé clic en un día para sumar una historia a mano. Los puntitos marcan lo ya planificado.</p>
               <div class="cal-nav"><button id="cal-prev" class="icon-btn" aria-label="Mes anterior">‹</button><span id="cal-month-label"></span><button id="cal-next" class="icon-btn" aria-label="Mes siguiente">›</button></div>
               <div class="cal-weekday-head"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
               <div id="calendar-grid" class="calendar-grid"></div>
@@ -833,7 +837,7 @@
       <div class="story-edit-preview"><img id="story-edit-img" src="" alt="Vista previa"></div>
       <div class="story-edit-panel">
         <textarea id="story-text"></textarea>
-        <div class="team-field"><label for="story-font">Tipografía de esta historia</label><select id="story-font"><option value="">Default del cliente</option></select></div>
+        <div class="team-field"><label for="story-font">Tipografía de esta historia</label><select id="story-font"><option value="">Predeterminada del cliente</option></select></div>
         <button id="generate-ai-text" class="btn hidden">Generar con IA</button>
       </div>
     </div>

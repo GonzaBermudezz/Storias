@@ -33,6 +33,20 @@ def test_portal_page_renders_authenticated_employee_shell():
     assert '<script src="/static/portal.js" defer></script>' in response.text
 
 
+def test_portal_page_has_accessible_navigation_and_accent_insensitive_search():
+    page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
+        "sub": "emp-1", "email": "pm@example.com", "name": "PM",
+        "agency_id": "agency-1", "role": "employee",
+    })})
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert 'id="nav-home" role="button" tabindex="0"' in page.text
+    assert "Panel de empleados" not in page.text
+    assert "normalize('NFD')" in source
+    assert "Clickeá" not in source
+    assert "Clickeá" not in page.text
+
+
 def test_portal_frontend_uses_real_api_without_prototype_data():
     response = TestClient(app).get("/static/portal.js")
 
