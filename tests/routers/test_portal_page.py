@@ -88,6 +88,26 @@ def test_portal_page_includes_bulk_pm_assignment_and_pending_approval_panel():
     assert "refreshClientList" in source
 
 
+def test_portal_frontend_supports_review_queue_and_client_wide_approval():
+    page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
+        "sub": "emp-1", "email": "pm@example.com", "name": "PM",
+        "agency_id": "agency-1", "role": "employee",
+    })})
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert 'id="home-review-next"' in page.text
+    assert 'id="review-next"' in page.text
+    assert 'id="approve-all-client"' in page.text
+    assert 'id="week-badge"' in page.text
+    assert "function pendingQueue" in source
+    assert "function approveAllForClient" in source
+    assert "function scheduleClientListRefresh" in source
+    assert "const pending = pendingQueue();" in source
+    assert "/aprobar" in source
+    assert "aprobar-todas" not in source
+    assert "aprobar-lote" not in source
+
+
 def test_portal_frontend_keeps_health_dashboard_independent_and_latest_only():
     page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
         "sub": "emp-1", "email": "pm@example.com", "name": "PM",

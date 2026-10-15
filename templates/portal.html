@@ -641,6 +641,11 @@
     {% raw %}@media(prefers-reduced-motion:reduce){#client-view.is-switching{transition:none}}{% endraw %}
     .status-chip.is-zero{opacity:.55}
     .nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .review-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .review-actions .btn[hidden]{display:none}
+    .home-panel-head .btn{margin-left:auto;padding:6px 11px}
+    .home-panel-head .home-pill{margin-left:0}
+    #home-pending-panel .home-panel-head{flex-wrap:wrap}
   </style>
   <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
@@ -716,7 +721,7 @@
           <div class="stat-card" data-tone="accent"><span class="stat-icon" data-icon="check-check" data-size="16"></span><div class="stat-value" id="stat-aprobacion">–</div><div class="stat-label">Aprobación</div><div class="stat-hint">De las próximas</div></div>
         </div>
         <div class="panel home-panel hidden" id="home-pending-panel">
-          <div class="home-panel-head"><h2>Para aprobar</h2><span id="home-pending-count" class="home-pill neutral"></span></div>
+          <div class="home-panel-head"><h2>Para aprobar</h2><span id="home-pending-count" class="home-pill neutral"></span><button type="button" class="btn primary" id="home-review-next">Empezar a revisar</button></div>
           <div class="home-panel-body" id="home-pending"></div>
         </div>
         <div class="panel home-panel hidden" id="home-upcoming-panel">
@@ -797,7 +802,7 @@
         </div>
         <div class="workspace">
           <div class="stories-panel">
-            <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Para revisar y aprobar</span><p class="section-hint">Aprobá una historia con un clic sobre su tarjeta (te pedimos confirmar antes de aprobar). Podés editar el texto o la tipografía cuando lo necesites.</p></div><span id="week-badge" class="week-badge hidden"></span></div>
+            <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Para revisar y aprobar</span><p class="section-hint">Aprobá una historia con un clic sobre su tarjeta (te pedimos confirmar antes de aprobar). Podés editar el texto o la tipografía cuando lo necesites.</p></div><div class="review-actions"><span id="week-badge" class="week-badge hidden"></span><button type="button" class="btn" id="approve-all-client" hidden>Aprobar todo</button><button type="button" class="btn" id="review-next" hidden>Siguiente con pendientes</button></div></div>
             <div id="stories" aria-live="polite"><div class="loading-state" role="status" aria-label="Cargando historias"><span class="spinner"></span><p>Cargando historias...</p></div></div>
             <div class="panel hidden" id="historico-panel">
               <div class="panel-head" id="historico-panel-toggle"><div><p class="eyebrow">Historial</p><h2>Historias subidas</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>

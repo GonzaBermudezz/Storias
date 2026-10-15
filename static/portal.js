@@ -314,14 +314,42 @@
     renderHomeIdle(summary, problemIds);
     renderHomeHero({summary, problems: problemIds.size, healthKnown: !!health});
   }
+  // Cola de revisión: clientes del alcance actual (Todos/Míos) con historias sin
+  // aprobar, la más urgente primero. La usan el panel "Para aprobar" de Inicio y
+  // el botón "Siguiente con pendientes".
+  function pendingQueue() {
+    return clientScopeList()
+      .filter((client) => (client.pending_count || 0) > 0)
+      .sort((a, b) => (a.next_pending_date || '9999-12-31').localeCompare(b.next_pending_date || '9999-12-31') || a.name.localeCompare(b.name, 'es'));
+  }
+  function nextPendingClient() {
+    const queue = pendingQueue();
+    const currentId = state.selectedClientId;
+    const index = queue.findIndex((client) => client.id === currentId);
+    const notCurrent = (client) => client.id !== currentId;
+    return queue.slice(index + 1).find(notCurrent) || queue.find(notCurrent) || null;
+  }
+  function reviewNext() {
+    const next = nextPendingClient();
+    if (!next) { showMessage('No quedan clientes con historias sin aprobar.'); return; }
+    selectClient(next.id);
+  }
+  function updateReviewButtons() {
+    const next = nextPendingClient();
+    const queue = pendingQueue();
+    const button = $('review-next');
+    const others = queue.filter((client) => client.id !== state.selectedClientId).length;
+    button.hidden = !others;
+    button.textContent = others ? `Siguiente con pendientes (${others})` : 'Siguiente con pendientes';
+    button.title = next ? `Ir a ${next.name}` : '';
+  }
   // ---- Inicio: "Para aprobar" (se arma con state.clients, sin pedido extra) ----
   const HOME_PENDING_LIMIT = 8;
   function renderHomePending() {
     const panel = $('home-pending-panel');
-    const pending = clientScopeList()
-      .filter((client) => (client.pending_count || 0) > 0)
-      .sort((a, b) => (a.next_pending_date || '9999-12-31').localeCompare(b.next_pending_date || '9999-12-31') || a.name.localeCompare(b.name, 'es'));
+    const pending = pendingQueue();
     panel.classList.toggle('hidden', !pending.length);
+    $('home-review-next').hidden = !pending.length;
     if (!pending.length) return;
     const todayIso = isoDateInTimeZone(new Date());
     const tomorrowIso = nextCalendarIso(todayIso);
@@ -348,6 +376,11 @@
       state.clients = clients; renderClients();
       if (!$('home-view').classList.contains('hidden')) renderHomePending();
     } catch (_) { /* the cached list stays on screen */ }
+  }
+  let clientListRefreshTimer = null;
+  function scheduleClientListRefresh() {
+    clearTimeout(clientListRefreshTimer);
+    clientListRefreshTimer = setTimeout(() => { refreshClientList(); }, 1200);
   }
 
   // ---- Asignar PMs en bloque (solo admin) ----
@@ -714,6 +747,7 @@
   function renderClients() {
     const total = state.clients.length;
     renderAssignPmLink();
+    updateReviewButtons();
     if (!total) {
       $('client-count').textContent = 'Clientes';
       $('client-status-filter').classList.add('hidden');
@@ -746,7 +780,7 @@
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
     $('client-name').textContent = 'Cargando...'; $('stories').innerHTML = loadingMarkup('Cargando historias...'); $('week-badge').classList.add('hidden');
     $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; updateContactLinks(); $('drive-link').classList.add('hidden');
-    $('plan-panel').classList.add('hidden'); $('historico-panel').classList.add('hidden'); $('historico-list').innerHTML = ''; state.driveCount = undefined;
+    $('plan-panel').classList.add('hidden'); $('approve-all-client').hidden = true; $('historico-panel').classList.add('hidden'); $('historico-list').innerHTML = ''; state.driveCount = undefined;
     try {
       const [client, groups] = await Promise.all([
         api(`/portal/clientes/${encodeURIComponent(clientId)}`),
@@ -1045,6 +1079,7 @@
     if (!dates.length) {
       $('stories').innerHTML = '<div class="empty-state"><span class="empty-state-icon">' + icon('image', 34) + '</span><p class="empty-state-text">No hay historias próximas para este cliente.</p><p class="empty-state-hint">Hacé clic en un día del calendario para agregar una a mano, o generá la semana completa ahora.</p><button type="button" class="btn primary" data-empty-cta>' + icon('sparkles', 14) + 'Planificar la semana de este cliente</button></div>';
       $('week-badge').classList.add('hidden');
+      updateApproveAllClient();
       return;
     }
     const first = dates[0], last = dates[dates.length - 1];
@@ -1090,6 +1125,7 @@
       return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${approveAllBtn}${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
     }).join('');
     $('stories').innerHTML = `<section class="group">${rows}</section>`;
+    updateApproveAllClient();
   }
   function renderActivity() {
     const next = activeGroup();
@@ -1268,6 +1304,7 @@
   const generatingDates = new Set(); // block repeated "generar con IA" clicks for the same client selection/date
   const approvingStoryIds = new Set(); // block a second confirm dialog for the same card while one is already open/in flight
   const approvingDayDates = new Set(); // block a second "aprobar todas" confirm for the same day while one is in flight
+  const approvingClientIds = new Set(); // un solo "Aprobar todo" por cliente a la vez
   const schedulingPromptDates = new Set(); // only one schedule confirmation per client selection and day at a time
   const schedulingDates = new Set(); // block duplicate scheduling requests for the same client selection and day
   function dayOperationKey(clientId, selectionVersion, iso) {
@@ -1582,6 +1619,7 @@
       const updated = await api(`/portal/historias/${encodeURIComponent(story.id)}/aprobar`, {method:'PATCH', body:JSON.stringify({aprobado: next})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       Object.assign(story, updated);
+      scheduleClientListRefresh();
       renderStories(); renderPlan();
       approvedForScheduling = next && story.fecha_publicacion;
     } catch(error) {
@@ -1636,8 +1674,91 @@
       for (const story of batchStories) approvingStoryIds.delete(story.id);
       // Like individual approval, only prompt after this batch has released
       // its own locks; another finishing approval will do the same check.
-      if (approvedForScheduling) maybePromptSchedule(iso);
+      if (approvedForScheduling) { scheduleClientListRefresh(); maybePromptSchedule(iso); }
     }
+  }
+  function clientApprovableStories() {
+    const stories = [];
+    for (const group of state.groups) {
+      for (const story of (group.stories || [])) {
+        if (story.fecha_publicacion && !storyIsScheduled(story, group) && !storyIsLocked(story) && !story.aprobado && !approvingStoryIds.has(story.id)) stories.push(story);
+      }
+    }
+    return stories;
+  }
+  function updateApproveAllClient() {
+    const button = $('approve-all-client');
+    const count = state.client ? clientApprovableStories().length : 0;
+    button.hidden = count < 2;
+    button.textContent = count >= 2 ? `Aprobar todo (${count})` : 'Aprobar todo';
+  }
+  async function approveAllForClient() {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId || approvingClientIds.has(clientId)) return;
+    approvingClientIds.add(clientId);
+    let batch = [];
+    let approvedAny = false;
+    try {
+      const stories = clientApprovableStories();
+      if (stories.length < 2) return;
+      const dates = [...new Set(stories.map((story) => story.fecha_publicacion))].sort();
+      const range = dates.length === 1 ? dayLabel(dates[0]) : `${dayLabel(dates[0])} al ${dayLabel(dates[dates.length - 1])}`;
+      const confirmed = await confirmDialog(`¿Aprobar las ${stories.length} historias sin aprobar de ${state.client.name} (${range})? Esto no las agenda ni las publica todavía.`, {okLabel: 'Aprobar todo'});
+      if (!confirmed || selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      batch = clientApprovableStories();
+      if (!batch.length) return;
+      for (const story of batch) approvingStoryIds.add(story.id);
+      $('approve-all-client').disabled = true;
+      let failed = 0;
+      // De a 5 en paralelo para no saturar el backend con clientes con muchas historias.
+      for (let i = 0; i < batch.length; i += 5) {
+        const slice = batch.slice(i, i + 5);
+        const results = await Promise.allSettled(slice.map((story) =>
+          api(`/portal/historias/${encodeURIComponent(story.id)}/aprobar`, {method:'PATCH', body:JSON.stringify({aprobado: true})})
+        ));
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') Object.assign(slice[index], result.value); else failed += 1;
+        });
+        if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) break;
+      }
+      if (selectionVersion === state.selectionVersion && clientId === state.client?.id) {
+        renderStories(); renderPlan();
+        if (failed) showMessage(`Se aprobaron ${batch.length - failed} de ${batch.length}. ${failed} fallaron, probá de nuevo.`, true);
+        else showMessage('Historias aprobadas.');
+      }
+      approvedAny = batch.length - failed > 0;
+    } finally {
+      approvingClientIds.delete(clientId);
+      for (const story of batch) approvingStoryIds.delete(story.id);
+      $('approve-all-client').disabled = false;
+      if (approvedAny) {
+        scheduleClientListRefresh();
+        if (selectionVersion === state.selectionVersion && clientId === state.client?.id) { updateApproveAllClient(); promptScheduleApprovedDays(); }
+      }
+    }
+  }
+  async function promptScheduleApprovedDays() {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    const byDate = new Map();
+    for (const group of state.groups) {
+      for (const story of (group.stories || [])) {
+        if (!story.fecha_publicacion || storyIsScheduled(story, group) || storyIsLocked(story)) continue;
+        if (!byDate.has(story.fecha_publicacion)) byDate.set(story.fecha_publicacion, []);
+        byDate.get(story.fecha_publicacion).push(story);
+      }
+    }
+    const ready = [...byDate.entries()]
+      .filter(([, list]) => list.length && list.every((story) => story.aprobado && !approvingStoryIds.has(story.id)))
+      .map(([iso]) => iso).sort();
+    if (!ready.length) return;
+    const confirmed = await confirmDialog(`${ready.length === 1 ? 'Quedó completo 1 día' : `Quedaron completos ${ready.length} días`} (${ready.map(dayLabel).join(', ')}). ¿Agendar ${ready.length === 1 ? 'su publicación' : 'sus publicaciones'}?`, {okLabel: 'Agendar'});
+    if (!confirmed || selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+    for (const iso of ready) {
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      await scheduleDay(iso);
+    }
+    scheduleClientListRefresh();
   }
   async function maybePromptSchedule(iso) {
     const clientId = state.client?.id, selectionVersion = state.selectionVersion;
@@ -1679,6 +1800,7 @@
       state.groups = groups;
       renderStories(); renderPlan(); renderCalendarMonth(); renderActivity();
       showMessage('Publicación agendada.');
+      scheduleClientListRefresh();
     } catch(error) { showMessage(error.message, true); }
     finally { schedulingDates.delete(operationKey); }
   }
@@ -2043,6 +2165,9 @@
   });
   $('client-search').addEventListener('input',()=>{state.clientSearch=$('client-search').value;$('client-search-clear').classList.toggle('hidden',!$('client-search').value);renderClients();});
   $('client-search-clear').addEventListener('click',()=>{$('client-search').value='';state.clientSearch='';$('client-search-clear').classList.add('hidden');renderClients();$('client-search').focus();});
+  $('review-next').addEventListener('click', reviewNext);
+  $('home-review-next').addEventListener('click', reviewNext);
+  $('approve-all-client').addEventListener('click', approveAllForClient);
   $('save-description').addEventListener('click',()=>saveClientField('business_description','save-description'));
   $('save-topics').addEventListener('click',()=>saveClientField('topics','save-topics'));
   $('try-prompt').addEventListener('click',tryPrompt);
