@@ -347,3 +347,17 @@ def test_portal_polish_shows_pending_approvals_and_empty_image_preview():
     assert "$('story-edit-img').src" not in source
     assert 'id="story-edit-empty"' in page
     assert ".story-date{right:auto;left:7px;top:32px}" in page
+
+
+def test_portal_frontend_separates_system_errors_from_client_errors():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "function detectSystemIssues" in source
+    assert "SYSTEM_ERROR_REPEAT = 3" in source
+    assert "system: true" in source
+    assert "Problema del sistema" in source
+    assert "detectSystemIssues(last.health)" in source
+    assert "renderHomeHealth(health, issues)" in source
+    assert "systemCount: issues.length" in source
+    assert ".home-system{" in page

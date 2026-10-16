@@ -164,6 +164,13 @@
     if (!info) { $('home-subtitle').textContent = 'Resumen de tus clientes.'; return; }
     if (info.noClients) { $('home-subtitle').textContent = 'Todavía no tenés clientes asignados.'; return; }
     const {summary, problems, healthKnown} = info;
+    if (info.systemCount > 0) {
+      const admin = state.me?.role === 'admin';
+      $('home-subtitle').textContent = problems > 0
+        ? `Hay un problema del sistema y ${problems} cliente${problems === 1 ? ' necesita' : 's necesitan'} tu atención.`
+        : `Hay un problema del sistema. ${admin ? 'Revisalo en Salud del sistema.' : 'Avisá a un administrador.'}`;
+      return;
+    }
     if (problems > 0) {
       $('home-subtitle').textContent = `${problems} cliente${problems === 1 ? ' necesita' : 's necesitan'} tu atención.`;
     } else if (healthKnown && summary) {
@@ -193,7 +200,18 @@
     if (/drive_folder_id is required/i.test(text)) {
       return {message: 'Falta la carpeta de Drive de este cliente.', hint: 'Cargala en Ajustes del cliente.'};
     }
-    if (/GOOGLE_SERVICE_ACCOUNT_FILE|service_account|No such file or directory|invalid_grant|expired|revoked|insufficientPermissions|File not found/i.test(text)) {
+    if (/GOOGLE_SERVICE_ACCOUNT_FILE|service_account|No such file or directory/i.test(text)) {
+      return {system: true, message: 'El servidor no tiene configurado el acceso a Drive.',
+        hint: 'No es un problema de este cliente. Avisá a un administrador.',
+        adminHint: 'Revisá GOOGLE_SERVICE_ACCOUNT_FILE en las variables del servidor.'};
+    }
+    if (/ANTHROPIC_API_KEY/i.test(text)
+      || (/Error llamando a Claude/i.test(text) && /authentication|credit|rate.?limit|overloaded|invalid x-api-key|\b(401|403|429|529)\b/i.test(text))) {
+      return {system: true, message: 'El generador de contenido (Claude) no está disponible.',
+        hint: 'No es un problema de este cliente. Avisá a un administrador.',
+        adminHint: 'Revisá ANTHROPIC_API_KEY, el crédito de la cuenta de Anthropic o su estado.'};
+    }
+    if (/invalid_grant|expired|revoked|insufficientPermissions|File not found/i.test(text)) {
       return {message: 'No se pudo acceder al Drive del cliente.', hint: 'Revisá que su cuenta de Google esté conectada en Ajustes del cliente.'};
     }
     if (/sin im[aá]genes (suficientes|legibles)/i.test(text)) {
@@ -203,10 +221,45 @@
   }
   function generationErrorParts(raw) {
     const info = friendlyGenerationError(raw) || {message: 'La última generación falló.', hint: null};
-    const text = info.hint ? `${info.message} ${info.hint}` : info.message;
-    const detail = state.me?.role === 'admin' && raw
+    const admin = state.me?.role === 'admin';
+    const hint = admin && info.adminHint ? info.adminHint : info.hint;
+    const text = hint ? `${info.message} ${hint}` : info.message;
+    const detail = admin && raw
       ? `<details class="error-detail"><summary>Detalle técnico</summary><code>${escapeHtml(raw)}</code></details>` : '';
-    return {text, detail};
+    return {text, detail, system: !!info.system};
+  }
+  // Un error "del sistema" afecta a muchos clientes por una sola causa: o es de
+  // los conocidos (clave de Claude, cuenta de servicio de Drive) o es un error
+  // desconocido que se repite en 3+ clientes. Se calcula con la salud de TODA la
+  // agencia (sin filtrar por Mis clientes): el problema es de todos.
+  const SYSTEM_ERROR_REPEAT = 3;
+  function detectSystemIssues(health) {
+    const list = (health && health.clientes_con_error_generacion) || [];
+    const groups = new Map();
+    const unknown = new Map();
+    const add = (key, base, client) => {
+      if (!groups.has(key)) groups.set(key, {...base, ids: new Set()});
+      groups.get(key).ids.add(client.id);
+    };
+    list.forEach((client) => {
+      const info = friendlyGenerationError(client.generation_error);
+      if (info && info.system) { add('known:' + info.message, {...info, raw: client.generation_error}, client); return; }
+      if (info) return; // error conocido de un cliente (Drive, carpeta, pocas imágenes)
+      const key = String(client.generation_error || '').toLowerCase().replace(/\d+/g, '#').trim().slice(0, 100);
+      if (!key) return;
+      if (!unknown.has(key)) unknown.set(key, []);
+      unknown.get(key).push(client);
+    });
+    unknown.forEach((clients, key) => {
+      if (clients.length < SYSTEM_ERROR_REPEAT) return;
+      clients.forEach((client) => add('repeat:' + key, {
+        repeat: true, message: 'El mismo error se repite en varios clientes.',
+        hint: 'Parece un problema del sistema. Avisá a un administrador.',
+        adminHint: 'Mirá el detalle técnico: puede ser del servidor y no de los clientes.',
+        raw: clients[0].generation_error,
+      }, client));
+    });
+    return [...groups.values()];
   }
   const HOME_LIST_LIMIT = 5;
   const homeExpanded = new Set();
@@ -246,21 +299,24 @@
     const last = state.homeLast;
     if (!last) return;
     const {summary, health, scoped} = homeScopedData(last);
+    const issues = detectSystemIssues(last.health); // sin filtrar por Mis clientes
     if (summary) renderHomeUpcoming(summary.proximas_publicaciones);
     let problemIds = new Set();
-    if (health) problemIds = renderHomeHealth(health); else renderHealthUnavailable();
+    if (health) problemIds = renderHomeHealth(health, issues); else renderHealthUnavailable();
     renderHomeIdle(summary, problemIds);
     const noClients = scoped && !clientScopeList().length;
-    renderHomeHero(noClients ? {noClients: true} : {summary, problems: problemIds.size, healthKnown: !!health, scoped});
+    renderHomeHero(noClients ? {noClients: true} : {summary, problems: problemIds.size, healthKnown: !!health, scoped, systemCount: issues.length});
     $('home-stats-note').classList.toggle('hidden', !scoped);
   }
   function rerenderHomeLists() {
     renderHomeScoped();
   }
-  function renderHomeHealth(health) {
+  function renderHomeHealth(health, issues = []) {
+    const systemIds = new Set(issues.flatMap((issue) => [...issue.ids]));
     const checks = [
       {
-        title: 'Error de generación', okText: 'Sin errores de generación', items: health.clientes_con_error_generacion || [],
+        title: 'Error de generación', okText: 'Sin errores de generación', okHidden: issues.length > 0,
+        items: (health.clientes_con_error_generacion || []).filter((client) => !systemIds.has(client.id)),
         row: (c) => homeRow({id: c.id, name: c.name, tone: 'danger', sub: `${safeHealthDayLabel(c.generation_error_at, 'Reciente')} · ${generationErrorParts(c.generation_error).text}`}),
       },
       {
@@ -276,14 +332,25 @@
     checks.forEach((check) => check.items.forEach((item) => problemIds.add(item.id)));
     const sections = checks.filter((check) => check.items.length).map((check) =>
       `<div class="home-section"><div class="home-section-head"><span>${escapeHtml(check.title)}</span><span class="home-count">${check.items.length}</span></div>${capHomeRows(check.items.map(check.row), check.title)}</div>`);
-    const okChecks = checks.filter((check) => !check.items.length);
+    const okChecks = checks.filter((check) => !check.items.length && !check.okHidden);
     const okList = okChecks.length
       ? `<div class="home-ok-list">${okChecks.map((check) => `<span class="home-ok">${icon('check', 14)}${escapeHtml(check.okText)}</span>`).join('')}</div>`
       : '';
-    $('home-health').innerHTML = sections.join('') + okList;
+    const admin = state.me?.role === 'admin';
+    const systemBanner = issues.map((issue) => {
+      const n = issue.ids.size;
+      const title = issue.repeat ? `El mismo error se repite en ${n} clientes.` : issue.message;
+      const hint = admin && issue.adminHint ? issue.adminHint : issue.hint;
+      const raw = admin && issue.raw
+        ? `<details class="error-detail"><summary>Detalle técnico</summary><code>${escapeHtml(issue.raw)}</code></details>` : '';
+      return `<div class="home-system"><span>${icon('triangle-alert', 16)}</span><div><strong>Problema del sistema · ${escapeHtml(title)}</strong><p>${escapeHtml(hint)}</p><p class="home-system-count">Afecta a ${n} cliente${n === 1 ? '' : 's'}.</p>${raw}</div></div>`;
+    }).join('');
+    $('home-health').innerHTML = systemBanner + sections.join('') + okList;
     const pill = $('home-health-pill');
-    pill.className = 'home-pill ' + (problemIds.size ? 'danger' : 'success');
-    pill.textContent = problemIds.size ? `${problemIds.size} cliente${problemIds.size === 1 ? '' : 's'} con problemas` : 'Todo en orden';
+    const clientsText = `${problemIds.size} cliente${problemIds.size === 1 ? '' : 's'} con problemas`;
+    pill.className = 'home-pill ' + (issues.length || problemIds.size ? 'danger' : 'success');
+    pill.textContent = issues.length ? (problemIds.size ? `Problema del sistema · ${clientsText}` : 'Problema del sistema')
+      : (problemIds.size ? clientsText : 'Todo en orden');
     return problemIds;
   }
   function renderHealthUnavailable() {
@@ -751,7 +818,10 @@
     }
   }
   function clientStatus(client) {
-    if (client.generation_error) return {key: 'error', label: 'Error de generación'};
+    if (client.generation_error) {
+      const info = friendlyGenerationError(client.generation_error);
+      return {key: 'error', label: info && info.system ? 'Problema del sistema' : 'Error de generación'};
+    }
     const count = client.stories_count ?? 0, pending = client.pending_count ?? 0;
     if (pending > 0) return {key: 'pending', label: `${pending} sin aprobar`};
     if (count > 0) return {key: 'ready', label: `${count} historia${count === 1 ? '' : 's'} lista${count === 1 ? '' : 's'}`};
@@ -1212,7 +1282,7 @@
     }
     $('activity-list').innerHTML = rows.join('');
     $('activity-summary').innerHTML = state.client.generation_error
-      ? (() => { const parts = generationErrorParts(state.client.generation_error); return `<div class="status-card warn"><span>${icon('triangle-alert', 16)}</span><div><strong>Necesita atención</strong><p>${escapeHtml(parts.text)}</p>${parts.detail}</div></div>`; })()
+      ? (() => { const parts = generationErrorParts(state.client.generation_error); return `<div class="status-card warn"><span>${icon('triangle-alert', 16)}</span><div><strong>${parts.system ? 'Problema del sistema' : 'Necesita atención'}</strong><p>${escapeHtml(parts.text)}</p>${parts.detail}</div></div>`; })()
       : `<div class="status-card ok"><span>${icon('check', 16)}</span><div><strong>Todo en orden</strong><p>No hay errores de generación pendientes.</p></div></div>`;
   }
   function storyCard(story, index, groupId, batchReorderable = true) {
