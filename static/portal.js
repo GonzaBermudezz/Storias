@@ -697,8 +697,8 @@
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       state.client = updated;
       $('client-workspace-subtitle').textContent = state.client.weekly_focus
-        ? 'La dirección semanal está cargada. Revisá las historias y dejalas listas para publicar.'
-        : 'Definí una dirección, revisá las historias y dejalas listas para publicar.';
+        ? 'El enfoque semanal está cargado. Revisá las historias y dejalas listas para publicar.'
+        : 'Definí un enfoque, revisá las historias y dejalas listas para publicar.';
       showMessage(value ? 'Enfoque aplicado — se usa en la próxima generación y después se limpia solo.' : 'Enfoque quitado.');
     } catch (error) {
       if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message, true); renderFocusSelect(); }
@@ -715,7 +715,7 @@
       state.me = me; state.fontChoices = fonts; state.employees = employees; state.focusPresets = focusPresets;
       injectFontFaces(fonts);
       const fontOptions = fonts.map((font) => `<option value="${escapeHtml(font.key)}" style="font-family:'sf-${escapeHtml(font.key)}',sans-serif">${escapeHtml(font.label)}</option>`).join('');
-      $('client-pm').innerHTML = '<option value="">Sin asignar</option>' + employees.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name || person.email)}</option>`).join('');
+      $('client-pm').innerHTML = '<option value="">Sin PM</option>' + employees.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name || person.email)}</option>`).join('');
       $('client-font').innerHTML = '<option value="">Predeterminada</option>' + fontOptions;
       $('story-font').innerHTML = '<option value="">Predeterminada del cliente</option>' + fontOptions;
       $('me-avatar').textContent = initials(me.name || me.email); $('me-name').textContent = me.name || me.email;
@@ -974,8 +974,8 @@
     $('client-avatar-preview').classList.toggle('has-avatar', !!state.client.avatar_url);
     $('client-workspace-title').textContent = `${state.client.name} · contenido de la próxima semana`;
     $('client-workspace-subtitle').textContent = state.client.weekly_focus
-      ? 'La dirección semanal está cargada. Revisá las historias y dejalas listas para publicar.'
-      : 'Definí una dirección, revisá las historias y dejalas listas para publicar.';
+      ? 'El enfoque semanal está cargado. Revisá las historias y dejalas listas para publicar.'
+      : 'Definí un enfoque, revisá las historias y dejalas listas para publicar.';
     $('business-description').value = state.client.business_description || ''; $('client-topics').value = (state.client.topics || []).join('\n');
     $('desc-count').textContent = String($('business-description').value.length); $('topics-count').textContent = String((state.client.topics || []).length);
     updateFieldView('description', state.client.business_description, 'Todavía no hay descripción. Hacé clic acá para agregarla.');
@@ -1258,7 +1258,7 @@
       // "generadas", no "listas" — este número incluye historias todavía sin
       // aprobar (incluso con error), no solo las ya resueltas. El ✓ daba a
       // entender que ya estaban aprobadas.
-      rows.push(`<div class="activity-item"><span class="dot">${icon('image', 12)}</span><div><div>${activeCount} historia${activeCount===1?'':'s'} generada${activeCount===1?'':'s'}</div><div class="sub">Generadas con la dirección actual</div></div></div>`);
+      rows.push(`<div class="activity-item"><span class="dot">${icon('image', 12)}</span><div><div>${activeCount} historia${activeCount===1?'':'s'} generada${activeCount===1?'':'s'}</div><div class="sub">Generadas con la configuración actual</div></div></div>`);
     } else {
       rows.push(`<div class="activity-item"><span class="dot">–</span><div><div>Sin historias programadas</div><div class="sub">Todavía no se generó contenido para este cliente</div></div></div>`);
     }
@@ -1323,7 +1323,7 @@
       state.client.assigned_employee_id = updated.employee_id;
       const listedForPm = state.clients.find((item) => item.id === clientId);
       if (listedForPm) { listedForPm.assigned_employee_id = updated.employee_id; renderClients(); }
-      showMessage(updated.employee_id ? 'PM asignado.' : 'Cliente sin PM asignado.');
+      showMessage(updated.employee_id ? 'PM asignado.' : 'PM quitado.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message,true); select.value = state.client?.assigned_employee_id || ''; } }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled=false; }
   }

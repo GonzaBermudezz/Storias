@@ -361,3 +361,25 @@ def test_portal_frontend_separates_system_errors_from_client_errors():
     assert "renderHomeHealth(health, issues)" in source
     assert "systemCount: issues.length" in source
     assert ".home-system{" in page
+
+
+def test_portal_frontend_keeps_a_readable_font_floor_and_unified_wording():
+    import re
+
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+
+    allowed_small = (
+        ".avatar{", ".avatar-sm{", ".cal-weekday-head{", ".story-num{", ".story-date{",
+        ".story-text{", ".field-head .info,.team-field .info{",
+    )
+    for line in page.splitlines():
+        sizes = [float(size) for size in re.findall(r"font-size:([0-9.]+)px", line)]
+        if sizes and min(sizes) < 11:
+            assert line.strip().startswith(allowed_small), line.strip()[:80]
+
+    assert "dirección" not in source
+    assert "Definí la dirección" not in page
+    assert "Sin asignar" not in source and "Sin asignar" not in page
+    assert "El enfoque semanal está cargado" in source
+    assert "PM quitado." in source
