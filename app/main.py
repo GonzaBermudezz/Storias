@@ -64,7 +64,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # 1. Hosts permitidos — previene host header injection
 if s.is_production:
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["storias.app", "*.storias.app"])
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=s.trusted_hosts)
 
 # 2. Sesiones firmadas (para el flujo OAuth)
 app.add_middleware(SessionMiddleware, secret_key=s.secret_key, https_only=s.is_production, session_cookie="oauth_session")

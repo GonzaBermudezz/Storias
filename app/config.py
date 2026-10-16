@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     environment: str = "development"   # development | production
     secret_key: str                    # para firmar tokens (REQUERIDO)
     allowed_origins: list[str] = ["http://localhost:5001"]
+    # Hosts que acepta la API en producción (TrustedHostMiddleware). Se configura
+    # con la variable ALLOWED_HOSTS como lista JSON, igual que ALLOWED_ORIGINS:
+    #   ALLOWED_HOSTS=["mi-app.up.railway.app","portal.midominio.com"]
+    allowed_hosts: list[str] = ["storias.app", "*.storias.app"]
 
     # ── Supabase ───────────────────────────────────────────────────────────────
     supabase_url: str
@@ -93,6 +97,14 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def trusted_hosts(self) -> list[str]:
+        """allowed_hosts + el host con el que Railway hace el healthcheck."""
+        hosts = list(self.allowed_hosts)
+        if "healthcheck.railway.app" not in hosts:
+            hosts.append("healthcheck.railway.app")
+        return hosts
 
 
 @lru_cache
