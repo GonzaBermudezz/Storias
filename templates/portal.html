@@ -654,6 +654,26 @@
     .home-system{display:flex;gap:10px;align-items:flex-start;margin:0 0 10px;padding:12px 14px;border-radius:12px;background:var(--danger-soft);color:var(--danger);font-size:13px}
     .home-system p{margin-top:2px;color:inherit;opacity:.85;font-weight:400}
     .home-system .home-system-count{font-size:12px}
+    .style-block{padding:14px 0;border-top:1px solid var(--border)}
+    .style-block:first-child{border-top:0;padding-top:0}
+    .style-block .team-field{margin-top:8px;padding-top:0;border-top:0}
+    .style-block-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+    .style-block-head .btn{margin-left:auto}
+    .style-count{font-size:12px;color:var(--muted)}
+    .team-field input[type="number"]{font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg);width:80px}
+    .team-field input[type="number"]:disabled,.team-field input[type="text"]:disabled{opacity:.55}
+    .tone-list{display:grid;gap:8px}
+    .tone-card{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:10px 12px}
+    .tone-card-head{display:flex;align-items:center;justify-content:space-between;font-size:12px}
+    .tone-card-actions{display:inline-flex;gap:2px}
+    .tone-lines{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.5}
+    .tone-empty{margin:0;color:var(--muted);font-size:13px}
+    .tone-line{flex-direction:column;align-items:stretch;gap:6px}
+    .tone-line input[type="text"]{width:100%}
+    .client-logo-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    #style-panel-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;border-radius:var(--radius)}
+    .logo-preview{display:grid;place-items:center;width:160px;height:90px;border-radius:10px;background:#1c1c28;color:#cfcfe0;font-size:12px;overflow:hidden;text-align:center;padding:6px}
+    .logo-preview img{max-width:120px;max-height:70px;filter:brightness(0) invert(1);opacity:.7}
   </style>
   <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
@@ -805,6 +825,35 @@
             <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Predeterminada</option></select></div>
           </div>
         </div>
+        <div class="panel collapsed" id="style-panel">
+          <div class="panel-head" id="style-panel-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="style-panel-body"><div><p class="eyebrow">Tono y CTA</p><h2>Estilo de las historias</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
+          <div class="panel-body" id="style-panel-body">
+            <div class="style-block">
+              <div class="style-block-head">
+                <div class="field-head"><label>Ejemplos de tono</label><span class="info" tabindex="0" aria-label="Hilos reales de 4 historias que funcionaron bien. La IA los imita para que cada historia suene como este cliente." data-tooltip="Hilos reales de 4 historias que funcionaron bien. La IA los imita para que cada historia suene como este cliente.">i</span></div>
+                <span class="style-count" id="tone-count"></span>
+                <button type="button" class="btn" id="tone-add">Agregar ejemplo</button>
+              </div>
+              <div id="tone-list" class="tone-list"></div>
+            </div>
+            <div class="style-block">
+              <div class="style-block-head"><div class="field-head"><label>Link de agendado</label></div></div>
+              <p class="hint" id="cta-hint"></p>
+              <div class="team-field"><label for="cta-link">Link (Calendly)</label><input type="text" id="cta-link" placeholder="https://calendly.com/..." maxlength="300"></div>
+              <div class="team-field"><label for="cta-prob">Frecuencia (%)</label><input type="number" id="cta-prob" min="0" max="100" step="5"><span class="style-count">de los hilos incluyen el link en la historia 4</span></div>
+            </div>
+            <div class="style-block">
+              <div class="style-block-head"><div class="field-head"><label>Logo en las historias</label></div></div>
+              <p class="hint">Opcional. Se dibuja en blanco, centrado abajo. Tiene que ser un PNG con fondo transparente (hasta 2 MB).</p>
+              <div class="client-logo-row">
+                <div class="logo-preview" id="logo-preview"></div>
+                <input type="file" id="logo-input" accept="image/png" hidden>
+                <button type="button" class="btn" id="logo-upload">Subir logo</button>
+                <button type="button" class="btn hidden" id="logo-remove">Quitar logo</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div id="plan-panel" class="plan-panel hidden">
           <div class="plan-head" id="plan-panel-toggle"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
           <div id="plan-days" class="plan-days"></div>
@@ -891,6 +940,18 @@
       <a id="client-email-open" class="btn hidden"><span data-icon="mail" data-size="15"></span>Enviar mail</a>
     </div>
   </div><div class="modal-foot"><button id="close-settings-2" class="btn">Cerrar</button></div></dialog>
+  <dialog id="tone-dialog" class="wide">
+    <div class="modal-head"><strong id="tone-dialog-title">Nuevo ejemplo de tono</strong><button id="close-tone" class="icon-btn" aria-label="Cerrar">×</button></div>
+    <div class="modal-body">
+      <p class="hint">Escribí un hilo real que haya funcionado, una frase por historia. La IA imita el tono y la estructura.</p>
+      <div class="team-field tone-line"><label for="tone-line-1">Historia 1 · intriga</label><input type="text" id="tone-line-1" maxlength="140"></div>
+      <div class="team-field tone-line"><label for="tone-line-2">Historia 2 · problema</label><input type="text" id="tone-line-2" maxlength="140"></div>
+      <div class="team-field tone-line"><label for="tone-line-3">Historia 3 · solución</label><input type="text" id="tone-line-3" maxlength="140"></div>
+      <div class="team-field tone-line"><label for="tone-line-4">Historia 4 · CTA</label><input type="text" id="tone-line-4" maxlength="140"></div>
+      <p id="tone-feedback" class="modal-feedback hidden" role="alert" aria-live="polite"></p>
+    </div>
+    <div class="modal-foot"><button id="close-tone-2" class="btn">Cancelar</button><button id="save-tone" class="btn primary">Guardar</button></div>
+  </dialog>
   <dialog id="ritmo-dialog"><div class="modal-head"><strong>Días y horarios de publicación</strong><button id="close-ritmo" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body"><p class="hint">Elegí entre 1 y 4 días y definí cuántas de las 4 historias se publican cada día.</p><div id="ritmo-chips" class="ritmo-chips"></div><div id="ritmo-days-detail" class="ritmo-days-detail"></div><p id="ritmo-count-total" class="hint"></p><p id="ritmo-detail-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p><button id="save-ritmo-detail" class="btn">Guardar días y horarios</button><p id="ritmo-generation-message" class="modal-feedback hidden" role="alert" aria-live="polite"></p></div><div class="modal-foot"><button id="close-ritmo-2" class="btn">Cerrar</button><button id="generate-weekly" class="btn primary">Generar historias para la semana que viene</button></div></dialog>
   <dialog id="focus-preset-dialog">
     <div class="modal-head"><strong id="focus-preset-dialog-title">Nuevo enfoque</strong><button id="close-focus-preset" class="icon-btn" aria-label="Cerrar">×</button></div>

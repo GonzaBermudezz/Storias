@@ -383,3 +383,26 @@ def test_portal_frontend_keeps_a_readable_font_floor_and_unified_wording():
     assert "Sin asignar" not in source and "Sin asignar" not in page
     assert "El enfoque semanal está cargado" in source
     assert "PM quitado." in source
+
+
+def test_portal_frontend_has_client_style_panel_with_tone_examples_cta_and_optional_logo():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+
+    for element_id in ("style-panel", "tone-list", "tone-dialog", "tone-line-4", "cta-link", "cta-prob",
+                       "logo-preview", "logo-upload", "logo-remove"):
+        assert f'id="{element_id}"' in page
+    assert "Sin logo en las historias" in source
+    assert "function renderStyleSection" in source
+    assert "/cta`" in source and "/logo`" in source
+    assert "image/png" in source
+    assert "resizeImageForUpload(file" not in source.split("async function uploadClientLogo")[1].split("async function removeClientLogo")[0]
+    assert 'id="style-panel-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="style-panel-body"' in page
+    assert 'id="style-panel-body"' in page
+    assert "function setStylePanelCollapsed" in source
+    assert "$('style-panel-toggle').setAttribute('aria-expanded', String(!collapsed))" in source
+    assert "$('style-panel-toggle').addEventListener('keydown'" in source
+    assert "if (event.key !== 'Enter' && event.key !== ' ') return;" in source
+    assert '.client-logo-row{' in page
+    assert 'class="client-logo-row"' in page
+    assert page.count('class="logo-row"') == 1

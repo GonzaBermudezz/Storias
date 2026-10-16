@@ -139,7 +139,10 @@
     return client.avatar_url ? `<img src="${escapeHtml(client.avatar_url)}" alt="">` : escapeHtml(initials(client.name));
   }
   function setControlsDisabled(disabled) {
-    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload'].forEach((id) => { $(id).disabled = disabled; });
+    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload','tone-add','cta-link','logo-upload','logo-remove'].forEach((id) => { $(id).disabled = disabled; });
+    $('cta-prob').disabled = disabled || !state.client?.calendly_link;
+    updateStyleControls(disabled);
+    if (disabled && $('tone-dialog').open) $('tone-dialog').close();
     $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating || !state.client?.drive_folder_id;
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
@@ -990,6 +993,8 @@
     updateContactLinks();
     renderDriveConnectStatus();
     renderDriveFolderState();
+    renderStyleSection();
+    setStylePanelCollapsed(toneExamples().length > 0); // abierto si todavía faltan ejemplos
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     const url = driveUrl(state.client.drive_folder_id);
     if (url) { $('drive-link').href = url; $('drive-link').classList.remove('hidden'); }
@@ -1402,6 +1407,175 @@
     } catch(error) {
       if (selectionVersion === state.selectionVersion) showMessage(error.message, true);
     } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled = false; }
+  }
+  // ---- Estilo de las historias: ejemplos de tono, link de agendado y logo opcional ----
+  const TONE_MAX = 6;
+  const LOGO_MAX_BYTES = 2000000;
+  let editingToneIndex = null;
+  let toneDialogSelection = null;
+  const styleOperations = new Set();
+  function styleOperationKey(kind) { return `${state.selectionVersion}:${state.client?.id}:${kind}`; }
+  function styleSelectionMatches(clientId, selectionVersion) { return selectionVersion === state.selectionVersion && clientId === state.client?.id; }
+  function updateStyleControls(disabled = !state.client) {
+    disabled = disabled || !state.client;
+    const toneBusy = disabled || styleOperations.has(styleOperationKey('tone'));
+    ['tone-add','save-tone','close-tone','close-tone-2'].forEach((id) => { $(id).disabled = toneBusy; });
+    document.querySelectorAll('#tone-list button, #tone-dialog input').forEach((input) => { input.disabled = toneBusy; });
+    const ctaBusy = disabled || styleOperations.has(styleOperationKey('cta'));
+    $('cta-link').disabled = ctaBusy;
+    $('cta-prob').disabled = ctaBusy || !state.client?.calendly_link;
+    const logoBusy = disabled || styleOperations.has(styleOperationKey('logo'));
+    ['logo-upload','logo-remove','logo-input'].forEach((id) => { $(id).disabled = logoBusy; });
+  }
+  function toneExamples() { return Array.isArray(state.client?.tone_examples) ? state.client.tone_examples : []; }
+  function setStylePanelCollapsed(collapsed) {
+    $('style-panel').classList.toggle('collapsed', collapsed);
+    $('style-panel-toggle').setAttribute('aria-expanded', String(!collapsed));
+  }
+  function renderLogoState() {
+    const url = state.client?.logo_url;
+    $('logo-preview').innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Logo del cliente">` : '<span>Sin logo en las historias</span>';
+    $('logo-remove').classList.toggle('hidden', !url);
+    $('logo-upload').textContent = url ? 'Reemplazar logo' : 'Subir logo';
+  }
+  function renderToneExamples() {
+    const examples = toneExamples();
+    $('tone-list').innerHTML = examples.length
+      ? examples.map((lines, index) => `<div class="tone-card" data-tone-index="${index}"><div class="tone-card-head"><strong>Ejemplo ${index + 1}</strong><span class="tone-card-actions"><button type="button" class="icon-btn" data-tone-edit aria-label="Editar ejemplo ${index + 1}">${icon('pencil', 14)}</button><button type="button" class="icon-btn" data-tone-delete aria-label="Eliminar ejemplo ${index + 1}">${icon('trash', 14)}</button></span></div><ol class="tone-lines">${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ol></div>`).join('')
+      : '<p class="tone-empty">Todavía no hay ejemplos. Sumá hilos reales que hayan funcionado: la IA los imita para que cada historia suene como este cliente.</p>';
+    $('tone-add').classList.toggle('hidden', examples.length >= TONE_MAX);
+    $('tone-count').textContent = `${examples.length}/${TONE_MAX}`;
+  }
+  function renderCtaState() {
+    const client = state.client;
+    const link = client.calendly_link || '';
+    $('cta-link').value = link;
+    $('cta-prob').value = String(Math.round((Number(client.prob_link) || 0) * 100));
+    $('cta-prob').disabled = !link;
+    $('cta-hint').textContent = link
+      ? 'La historia 4 incluye el texto "Agenda tu consulta" y el link, según la frecuencia elegida.'
+      : 'Sin link, la historia 4 sale solo con su texto. Cargá el link de Calendly para sumar el botón de agendado.';
+  }
+  function renderStyleSection() {
+    if (!state.client) return;
+    renderToneExamples(); renderCtaState(); renderLogoState(); updateStyleControls();
+  }
+  async function persistToneExamples(next) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    const operationKey = styleOperationKey('tone');
+    if (!clientId || styleOperations.has(operationKey)) return false;
+    styleOperations.add(operationKey); updateStyleControls();
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}`, {method: 'PATCH', body: JSON.stringify({tone_examples: next})});
+      if (!styleSelectionMatches(clientId, selectionVersion)) return false;
+      state.client.tone_examples = Array.isArray(updated?.tone_examples) ? updated.tone_examples : next;
+      renderToneExamples();
+      return true;
+    } finally { styleOperations.delete(operationKey); updateStyleControls(); }
+  }
+  function openToneDialog(index) {
+    if (!state.client || styleOperations.has(styleOperationKey('tone'))) return;
+    if (index === null ? toneExamples().length >= TONE_MAX : !toneExamples()[index]) return;
+    toneDialogSelection = {clientId: state.client.id, selectionVersion: state.selectionVersion};
+    editingToneIndex = index;
+    const lines = index === null ? ['', '', '', ''] : toneExamples()[index];
+    $('tone-dialog-title').textContent = index === null ? 'Nuevo ejemplo de tono' : `Editar ejemplo ${index + 1}`;
+    [1, 2, 3, 4].forEach((n) => { $(`tone-line-${n}`).value = lines[n - 1] || ''; });
+    $('tone-feedback').classList.add('hidden');
+    $('tone-dialog').showModal();
+    $('tone-line-1').focus();
+  }
+  async function saveToneDialog() {
+    const selection = toneDialogSelection;
+    if (!selection || !styleSelectionMatches(selection.clientId, selection.selectionVersion) || styleOperations.has(styleOperationKey('tone'))) return;
+    const lines = [1, 2, 3, 4].map((n) => $(`tone-line-${n}`).value.trim());
+    const feedback = $('tone-feedback'); feedback.classList.add('hidden');
+    if (lines.some((line) => !line)) { feedback.textContent = 'Completá las 4 historias del ejemplo.'; feedback.classList.remove('hidden'); return; }
+    const isNew = editingToneIndex === null;
+    const next = toneExamples().map((example) => example.slice());
+    if (isNew) next.push(lines); else next[editingToneIndex] = lines;
+    try {
+      if (await persistToneExamples(next)) { $('tone-dialog').close(); showMessage(isNew ? 'Ejemplo agregado.' : 'Ejemplo actualizado.'); }
+    } catch (error) {
+      if (styleSelectionMatches(selection.clientId, selection.selectionVersion)) { feedback.textContent = error.message; feedback.classList.remove('hidden'); }
+    }
+  }
+  async function deleteToneExample(index) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId || styleOperations.has(styleOperationKey('tone'))) return;
+    const confirmed = await confirmDialog(`¿Eliminar el ejemplo ${index + 1}? La IA dejará de imitarlo en las próximas historias.`, {okLabel: 'Sí, eliminar', danger: true});
+    if (!confirmed || !styleSelectionMatches(clientId, selectionVersion)) return;
+    try {
+      if (await persistToneExamples(toneExamples().filter((_, i) => i !== index))) showMessage('Ejemplo eliminado.');
+    } catch (error) {
+      if (styleSelectionMatches(clientId, selectionVersion) && !['Acceso denegado', 'Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    }
+  }
+  async function saveCta() {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    const operationKey = styleOperationKey('cta');
+    if (!clientId || styleOperations.has(operationKey)) return;
+    const link = $('cta-link').value.trim() || null;
+    const percent = Math.min(100, Math.max(0, Number($('cta-prob').value) || 0));
+    const body = {};
+    const hadLink = !!state.client.calendly_link;
+    if (link !== (state.client.calendly_link || null)) body.calendly_link = link;
+    const currentProb = Number(state.client.prob_link) || 0;
+    if (link && !hadLink && currentProb === 0 && percent === 0) body.prob_link = 1; // link nuevo: por defecto sale siempre
+    else if (link && Math.abs(percent / 100 - currentProb) > 0.0001) body.prob_link = percent / 100;
+    if (!Object.keys(body).length) { renderCtaState(); updateStyleControls(); return; }
+    styleOperations.add(operationKey); updateStyleControls();
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/cta`, {method: 'PATCH', body: JSON.stringify(body)});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.calendly_link = Object.hasOwn(updated, 'calendly_link') ? updated.calendly_link : link;
+      state.client.prob_link = updated.prob_link ?? body.prob_link ?? currentProb;
+      showMessage('Link de agendado actualizado.');
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado', 'Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    } finally {
+      styleOperations.delete(operationKey);
+      if (styleSelectionMatches(clientId, selectionVersion)) renderCtaState();
+      updateStyleControls();
+    }
+  }
+  async function uploadClientLogo(file) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    const operationKey = styleOperationKey('logo');
+    if (!clientId || styleOperations.has(operationKey)) return;
+    if (file.type !== 'image/png') { showMessage('El logo tiene que ser un PNG con fondo transparente.', true); return; }
+    if (file.size > LOGO_MAX_BYTES) { showMessage('El logo pesa demasiado (máximo 2 MB).', true); return; }
+    styleOperations.add(operationKey); updateStyleControls();
+    const formData = new FormData(); formData.append('image', file); // sin reducir: hay que conservar la transparencia
+    try {
+      const response = await fetch(`/portal/clientes/${encodeURIComponent(clientId)}/logo`, {method: 'POST', credentials: 'same-origin', body: formData});
+      if (response.status === 401) { window.location.assign('/login'); return; }
+      if (!response.ok) { let detail = 'No se pudo subir el logo.'; try { detail = (await response.json()).detail || detail; } catch (_) {} throw new Error(detail); }
+      const updated = await response.json();
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.logo_url = updated.logo_url;
+      renderLogoState();
+      showMessage('Logo actualizado. Se usa en las historias nuevas.');
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion) showMessage(error.message, true);
+    } finally { styleOperations.delete(operationKey); updateStyleControls(); }
+  }
+  async function removeClientLogo() {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    const operationKey = styleOperationKey('logo');
+    if (!clientId || styleOperations.has(operationKey)) return;
+    const confirmed = await confirmDialog('¿Quitar el logo? Las historias nuevas de este cliente saldrán sin logo. Las ya generadas no cambian.', {okLabel: 'Sí, quitar', danger: true});
+    if (!confirmed || !styleSelectionMatches(clientId, selectionVersion) || styleOperations.has(operationKey)) return;
+    styleOperations.add(operationKey); updateStyleControls();
+    try {
+      await api(`/portal/clientes/${encodeURIComponent(clientId)}/logo`, {method: 'DELETE'});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.logo_url = null;
+      renderLogoState();
+      showMessage('Logo quitado.');
+    } catch (error) {
+      if (styleSelectionMatches(clientId, selectionVersion) && !['Acceso denegado', 'Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    } finally { styleOperations.delete(operationKey); updateStyleControls(); }
   }
   async function tryPrompt() {
     const button=$('try-prompt'), preview=$('prompt-preview'), clientId=state.client?.id, selectionVersion=state.selectionVersion;
@@ -2310,6 +2484,30 @@
     const file = $('client-avatar-input').files[0]; $('client-avatar-input').value = '';
     if (file) uploadClientAvatar(file);
   });
+  $('style-panel-toggle').addEventListener('click',()=>setStylePanelCollapsed(!$('style-panel').classList.contains('collapsed')));
+  $('style-panel-toggle').addEventListener('keydown',(event)=>{
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    setStylePanelCollapsed(!$('style-panel').classList.contains('collapsed'));
+  });
+  $('tone-add').addEventListener('click',()=>openToneDialog(null));
+  $('close-tone').addEventListener('click',()=>$('tone-dialog').close());
+  $('close-tone-2').addEventListener('click',()=>$('tone-dialog').close());
+  $('save-tone').addEventListener('click',saveToneDialog);
+  $('tone-list').addEventListener('click',(event)=>{
+    const card = event.target.closest('[data-tone-index]'); if (!card) return;
+    const index = Number(card.dataset.toneIndex);
+    if (event.target.closest('[data-tone-edit]')) openToneDialog(index);
+    else if (event.target.closest('[data-tone-delete]')) deleteToneExample(index);
+  });
+  $('cta-link').addEventListener('change',saveCta);
+  $('cta-prob').addEventListener('change',saveCta);
+  $('logo-upload').addEventListener('click',()=>$('logo-input').click());
+  $('logo-input').addEventListener('change',()=>{
+    const file = $('logo-input').files[0]; $('logo-input').value = '';
+    if (file) uploadClientLogo(file);
+  });
+  $('logo-remove').addEventListener('click',removeClientLogo);
   $('assign-pm-open').addEventListener('click', openAssignPm);
   $('close-assign-pm').addEventListener('click', () => $('assign-pm-dialog').close());
   $('close-assign-pm-2').addEventListener('click', () => $('assign-pm-dialog').close());
