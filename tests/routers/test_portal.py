@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import inspect
+import io
 from dataclasses import dataclass
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
+from PIL import Image
 
 from app.deps import require_admin, require_employee
 from app.main import app
@@ -2405,3 +2408,201 @@ def test_edit_story_from_other_agency_is_forbidden_before_download(monkeypatch, 
 def test_portal_requires_employee_auth():
     response = TestClient(app).get("/portal/clientes")
     assert response.status_code == 401
+
+
+def _png(alpha: int, *, visible_pixel: bool = False) -> bytes:
+    buffer = io.BytesIO()
+    image = Image.new("RGBA", (40, 20), (255, 255, 255, alpha))
+    if visible_pixel:
+        image.putpixel((20, 10), (255, 255, 255, 255))
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _jpeg() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (40, 20), "white").save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
+def test_patch_client_rejects_tone_examples_that_are_not_four_complete_lines(monkeypatch, client):
+    db = DB([])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    invalid_examples = [
+        [["a", "b", "c"]],
+        [["a", "b", "c", "  "]],
+        [["a", "b", "c", "d"]] * 7,
+        [["a" * 141, "b", "c", "d"]],
+    ]
+    for examples in invalid_examples:
+        response = client.patch("/portal/clientes/c1", json={"tone_examples": examples})
+        assert response.status_code == 422
+    assert db.inserts == []
+
+
+def test_patch_client_accepts_and_strips_valid_tone_examples(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1", "tone_examples": []}, {"id": "c1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1", json={
+        "tone_examples": [["  uno ", "dos", "tres", "cuatro"]],
+    })
+
+    assert response.status_code == 200
+    rpc = next(payload for table, payload in db.inserts if table == "rpc:update_client_prompt")
+    assert rpc["p_patch"] == {"tone_examples": [["uno", "dos", "tres", "cuatro"]]}
+
+
+def test_patch_cta_saves_link_and_frequency(monkeypatch, client):
+    payload = {"calendly_link": "https://calendly.com/x", "prob_link": 0.5}
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1"},
+        [{"id": "c1", **payload, "meta_access_token_encrypted": "secret-meta",
+          "drive_refresh_token_encrypted": "secret-drive"}],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.patch("/portal/clientes/c1/cta", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "c1", **payload}
+    assert db.updates == [("clients", payload, [("id", "c1")])]
+
+
+def test_patch_cta_rejects_non_https_links_and_out_of_range_frequency(monkeypatch, client):
+    db = DB([])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    invalid_payloads = [
+        {"calendly_link": "http://calendly.com/x"},
+        {"calendly_link": "no es un link"},
+        {"calendly_link": "https://calendly.com/not valid"},
+        {"calendly_link": "https://calendly.com:not-a-port/x"},
+        {"calendly_link": "https://calendly.com:70000/x"},
+        {"calendly_link": "https://calendly.\ncom/x"},
+        {"calendly_link": "https://calendly.com/x\ty"},
+        {"calendly_link": "https://calendly.com/" + "x" * 300},
+        {"prob_link": 1.5},
+        {"prob_link": -0.1},
+    ]
+    for payload in invalid_payloads:
+        response = client.patch("/portal/clientes/c1/cta", json=payload)
+        assert response.status_code == 422
+    assert db.updates == []
+
+
+def test_patch_cta_rejects_null_frequency_but_preserves_omitted_frequency(monkeypatch, client):
+    current = {"id": "c1", "agency_id": "agency-1", "calendly_link": "https://calendly.com/old", "prob_link": 0.5}
+    db = DB([current, [{**current, "prob_link": None}]])
+    factory = Mock(return_value=db)
+    monkeypatch.setattr("app.routers.portal.get_admin_client", factory)
+
+    response = client.patch("/portal/clientes/c1/cta", json={"prob_link": None})
+
+    assert response.status_code == 422
+    factory.assert_not_called()
+    assert db.updates == []
+
+    payload = {"calendly_link": "https://calendly.com:443/new"}
+    db = DB([current, [{**current, **payload}]])
+    factory.return_value = db
+
+    response = client.patch("/portal/clientes/c1/cta", json={"calendly_link": f" {payload['calendly_link']} "})
+
+    assert response.status_code == 200
+    assert response.json()["prob_link"] == 0.5
+    assert db.updates == [("clients", payload, [("id", "c1")])]
+
+
+def test_patch_cta_requires_a_link_for_a_frequency_and_clearing_the_link_zeroes_it(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1", "calendly_link": None}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/cta", json={"prob_link": 0.4})
+    assert response.status_code == 422
+    assert db.updates == []
+
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "calendly_link": "https://calendly.com/x", "prob_link": 0.5},
+        [{"id": "c1", "calendly_link": None, "prob_link": 0}],
+    ])
+    response = client.patch("/portal/clientes/c1/cta", json={"calendly_link": ""})
+    assert response.status_code == 200
+    assert db.updates == [("clients", {"calendly_link": None, "prob_link": 0}, [("id", "c1")])]
+
+
+def test_upload_client_logo_accepts_a_transparent_png_and_replaces_the_old_one(monkeypatch, client):
+    for background_alpha in (0, 10):
+        current = {"id": "c1", "agency_id": "agency-1", "logo_public_id": "logo/old"}
+        payload = {"logo_url": "https://cdn/logo.png", "logo_public_id": "logo/new"}
+        db = DB([current, [{**current, **payload, "meta_access_token_encrypted": "secret-meta"}]])
+        monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+        uploaded = Mock(return_value=SimpleNamespace(url=payload["logo_url"], public_id=payload["logo_public_id"]))
+        monkeypatch.setattr("app.routers.portal.uploads.upload_image", uploaded)
+        deleted = []
+        monkeypatch.setattr("app.routers.portal.uploads.delete_image", deleted.append)
+        data = _png(background_alpha, visible_pixel=True)
+
+        response = client.post("/portal/clientes/c1/logo", files={"image": ("logo.png", data, "image/png")})
+
+        assert response.status_code == 200
+        assert response.json() == {**current, **payload}
+        uploaded.assert_called_once_with(data, "c1", "logo")
+        assert db.updates == [("clients", payload, [("id", "c1")])]
+        assert deleted == ["logo/old"]
+
+
+def test_upload_client_logo_rejects_jpeg_opaque_png_and_huge_files(monkeypatch, client):
+    uploaded = Mock()
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", uploaded)
+    invalid_files = [
+        (_jpeg(), "PNG con fondo transparente"),
+        (_png(255), "no tiene fondo transparente"),
+        (b"x" * 2_000_001, "máximo 2 MB"),
+        (_png(0), "completamente transparente"),
+        (_png(10), "completamente transparente"),
+        (_png(11), "no tiene fondo transparente"),
+        (_png(128), "no tiene fondo transparente"),
+        (b"not-an-image", "no es una imagen válida"),
+    ]
+    for data, detail in invalid_files:
+        db = DB([{"id": "c1", "agency_id": "agency-1"}])
+        monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+        response = client.post("/portal/clientes/c1/logo", files={"image": ("logo.png", data, "image/png")})
+        assert response.status_code == 422
+        assert detail in response.json()["detail"]
+        assert db.updates == []
+    uploaded.assert_not_called()
+
+
+def test_delete_client_logo_clears_the_columns_and_cleans_cloudinary(monkeypatch, client):
+    for old_public_id in ("logo/old", None):
+        db = DB([
+            {"id": "c1", "agency_id": "agency-1", "logo_url": "https://cdn/old.png", "logo_public_id": old_public_id},
+            [{"id": "c1", "logo_url": None, "logo_public_id": None}],
+        ])
+        monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+        deleted = []
+        monkeypatch.setattr("app.routers.portal.uploads.delete_image", deleted.append)
+
+        response = client.delete("/portal/clientes/c1/logo")
+
+        assert response.status_code == 200
+        assert response.json() == {"id": "c1", "logo_url": None}
+        assert db.updates == [("clients", {"logo_url": None, "logo_public_id": None}, [("id", "c1")])]
+        assert deleted == ([old_public_id] if old_public_id else [])
+
+
+def test_upload_client_logo_reads_only_limit_plus_one_bytes(monkeypatch, employee):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    uploaded = Mock()
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", uploaded)
+    image = SimpleNamespace(file=Mock(wraps=io.BytesIO(b"x" * (portal._LOGO_MAX_BYTES + 10))))
+
+    with pytest.raises(HTTPException) as exc_info:
+        portal.upload_client_logo("c1", employee, image)
+
+    assert exc_info.value.status_code == 422
+    assert "máximo 2 MB" in exc_info.value.detail
+    image.file.read.assert_called_once_with(portal._LOGO_MAX_BYTES + 1)
+    uploaded.assert_not_called()
+    assert db.updates == []

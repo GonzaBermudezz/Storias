@@ -698,3 +698,20 @@ def test_publicar_historia_error_de_polling_incluye_cuerpo_de_meta_y_redacta_tok
     assert "respuesta de Meta" in message
     assert "OAuthException" in message
     assert token not in message
+
+
+def test_prompt_without_tone_examples_does_not_claim_real_examples():
+    config = config_cuan(tone_examples=[])
+    for prompt in (_armar_prompt(config), content._armar_prompt_historia_unica(config)):
+        assert "ejemplos REALES" not in prompt
+        assert "Ejemplo 1" not in prompt
+        assert "REGLAS DE TONO" in prompt
+
+
+def test_prompt_with_tone_examples_still_includes_them():
+    example = ["uno", "dos", "tres", "cuatro"]
+    config = config_cuan(tone_examples=[example])
+    for prompt in (_armar_prompt(config), content._armar_prompt_historia_unica(config)):
+        assert "ejemplos REALES" in prompt
+        assert "Ejemplo 1:" in prompt
+        assert "uno ||| dos ||| tres ||| cuatro" in prompt

@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import io
 import logging
 import re
 import secrets
+from urllib.parse import urlparse
 
 import requests
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
+from PIL import Image
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -80,6 +83,24 @@ class ClientPatch(BaseModel):
         if value is None:
             raise ValueError("tone_examples no puede ser null")
         return value
+
+    @field_validator("tone_examples", mode="after")
+    @classmethod
+    def tone_examples_shape(cls, value):
+        """Cada ejemplo es un hilo de EXACTAMENTE 4 líneas no vacías (las 4 historias)."""
+        if value is None:
+            return value
+        if len(value) > 6:
+            raise ValueError("Podés guardar hasta 6 ejemplos de tono.")
+        cleaned = []
+        for example in value:
+            lines = [str(line).strip() for line in example]
+            if len(lines) != 4 or any(not line for line in lines):
+                raise ValueError("Cada ejemplo tiene que tener las 4 historias completas.")
+            if any(len(line) > 140 for line in lines):
+                raise ValueError("Cada historia del ejemplo puede tener hasta 140 caracteres.")
+            cleaned.append(lines)
+        return cleaned
 
 
 class ClientPmPatch(BaseModel):
@@ -848,6 +869,53 @@ def patch_client_drive_folder(client_id: str, body: ClientDriveFolderPatch, empl
     return {"id": client_id, "drive_folder_id": body.drive_folder_id}
 
 
+class ClientCtaPatch(BaseModel):
+    calendly_link: str | None = None
+    prob_link: float | None = Field(default=None, ge=0, le=1)
+
+    @field_validator("prob_link", mode="before")
+    @classmethod
+    def prob_link_cannot_be_null(cls, value):
+        if value is None:
+            raise ValueError("prob_link no puede ser null")
+        return value
+
+    @field_validator("calendly_link")
+    @classmethod
+    def https_link(cls, value):
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        try:
+            parsed = urlparse(value)
+            _ = parsed.port  # Accessing the optional port validates its syntax and range.
+        except ValueError as exc:
+            raise ValueError("El link tiene que empezar con https:// y ser una dirección válida.") from exc
+        if parsed.scheme != "https" or not parsed.hostname or any(char.isspace() for char in value) or len(value) > 300:
+            raise ValueError("El link tiene que empezar con https:// y ser una dirección válida.")
+        return value
+
+
+@router.patch("/clientes/{client_id}/cta")
+def patch_client_cta(client_id: str, body: ClientCtaPatch, employee: EmployeeDep):
+    """Link de agendado (Calendly) de la historia 4 y con qué frecuencia se incluye (0 a 1)."""
+    db = get_admin_client()
+    current = _client_or_error(db, client_id, employee.agency_id)
+    payload = body.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Nada para actualizar")
+    link = payload["calendly_link"] if "calendly_link" in payload else current.get("calendly_link")
+    if link is None:
+        # Sin link no hay CTA posible: la frecuencia queda en 0.
+        if (payload.get("prob_link") or 0) > 0:
+            raise HTTPException(status_code=422, detail="Cargá primero el link para poder usar la frecuencia.")
+        payload["prob_link"] = 0
+    updated = db.table("clients").update(payload).eq("id", client_id).execute().data
+    return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, **payload}
+
+
 @router.post("/clientes/{client_id}/avatar")
 def upload_client_avatar(client_id: str, employee: EmployeeDep, image: UploadFile = File(...)):
     """Upload a portal-only avatar; it remains separate from the content logo.
@@ -885,6 +953,79 @@ def upload_client_avatar(client_id: str, employee: EmployeeDep, image: UploadFil
         except uploads.UploadError:
             pass
     return _without_secrets(updated[0])
+
+
+_LOGO_MAX_BYTES = 2_000_000
+
+
+def _validate_logo(data: bytes) -> None:
+    """El motor dibuja el logo en blanco usando solo su canal alfa: sin transparencia real
+    saldría un rectángulo blanco. Se acepta únicamente un PNG con fondo transparente."""
+    if len(data) > _LOGO_MAX_BYTES:
+        raise HTTPException(status_code=422, detail="El logo pesa demasiado (máximo 2 MB).")
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+    except Exception:
+        raise HTTPException(status_code=422, detail="El archivo no es una imagen válida.")
+    if img.format != "PNG":
+        raise HTTPException(status_code=422, detail="El logo tiene que ser un PNG con fondo transparente.")
+    low, high = img.convert("RGBA").getchannel("A").getextrema()
+    # Match imaging.py's effective mask: alpha <= 10 is clear, alpha > 10 is visible.
+    if low > 10:
+        raise HTTPException(
+            status_code=422,
+            detail="Ese PNG no tiene fondo transparente. Subí el logo exportado con fondo transparente.",
+        )
+    if high <= 10:
+        raise HTTPException(status_code=422, detail="El logo está completamente transparente.")
+
+
+@router.post("/clientes/{client_id}/logo")
+def upload_client_logo(client_id: str, employee: EmployeeDep, image: UploadFile = File(...)):
+    """Logo opcional que el motor superpone en las historias de este cliente.
+    Plain `def` por la misma razón que upload_client_avatar (subida bloqueante a Cloudinary)."""
+    db = get_admin_client()
+    current = _client_or_error(db, client_id, employee.agency_id, "id,agency_id,logo_url,logo_public_id")
+    data = image.file.read(_LOGO_MAX_BYTES + 1)
+    _validate_logo(data)
+    try:
+        uploaded = uploads.upload_image(data, client_id, "logo")
+    except uploads.UploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    try:
+        updated = db.table("clients").update(
+            {"logo_url": uploaded.url, "logo_public_id": uploaded.public_id}
+        ).eq("id", client_id).execute().data
+        if not updated:
+            raise RuntimeError("No se pudo guardar el logo")
+    except Exception:
+        try:
+            uploads.delete_image(uploaded.public_id)
+        except uploads.UploadError:
+            pass
+        raise
+    old_public_id = current.get("logo_public_id")
+    if old_public_id and old_public_id != uploaded.public_id:
+        try:
+            uploads.delete_image(old_public_id)
+        except uploads.UploadError:
+            pass
+    return _without_secrets(updated[0])
+
+
+@router.delete("/clientes/{client_id}/logo")
+def delete_client_logo(client_id: str, employee: EmployeeDep):
+    """Quita el logo: las historias nuevas de este cliente salen sin logo."""
+    db = get_admin_client()
+    current = _client_or_error(db, client_id, employee.agency_id, "id,agency_id,logo_url,logo_public_id")
+    db.table("clients").update({"logo_url": None, "logo_public_id": None}).eq("id", client_id).execute()
+    if current.get("logo_public_id"):
+        try:
+            uploads.delete_image(current["logo_public_id"])
+        except uploads.UploadError:
+            pass
+    return {"id": client_id, "logo_url": None}
 
 
 @router.patch("/clientes/{client_id}/ritmo")

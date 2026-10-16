@@ -113,7 +113,7 @@ def _armar_prompt(config: ClientContentConfig) -> str:
     return (
         f"{config.business_description}\n\n"
         f"{consigna_tema}\n\n"
-        f"{_formatear_ejemplos(config.nombre_negocio, config.tone_examples)}\n\n"
+        f"{_bloque_ejemplos(config)}"
         "REGLAS DE TONO (muy importante):\n"
         "- Lenguaje simple, cotidiano, como le hablarías a un amigo\n"
         "- PROHIBIDO usar vocabulario técnico o de moda del rubro, "
@@ -148,6 +148,8 @@ def _elegir_tema(config: ClientContentConfig) -> str:
 
 
 def _formatear_ejemplos(nombre_negocio: str, tone_examples: list[list[str]]) -> str:
+    if not tone_examples:
+        return ""
     bloques = []
     for i, ejemplo in enumerate(tone_examples, 1):
         bloques.append(f"Ejemplo {i}:\n{' ||| '.join(ejemplo)}")
@@ -158,6 +160,13 @@ def _formatear_ejemplos(nombre_negocio: str, tone_examples: list[list[str]]) -> 
         "referencia de estilo):"
     )
     return intro + "\n\n" + "\n\n".join(bloques)
+
+
+def _bloque_ejemplos(config: ClientContentConfig) -> str:
+    """Los ejemplos de tono más una línea en blanco, o nada si el cliente todavía no cargó ninguno
+    (así el prompt no afirma que existen ejemplos reales que no se muestran)."""
+    ejemplos = _formatear_ejemplos(config.nombre_negocio, config.tone_examples)
+    return f"{ejemplos}\n\n" if ejemplos else ""
 
 
 # -----------------------------------------
@@ -249,7 +258,7 @@ def _armar_prompt_historia_unica(config: ClientContentConfig) -> str:
         f"{config.business_description}\n\n"
         "Mirá la imagen adjunta con atención: qué muestra, qué transmite, "
         "qué se puede contar a partir de ella para este negocio.\n\n"
-        f"{_formatear_ejemplos(config.nombre_negocio, config.tone_examples)}\n\n"
+        f"{_bloque_ejemplos(config)}"
         "Escribí UNA sola historia de Instagram (una idea, un texto corto) "
         "que describa o se inspire en lo que se ve en la imagen, conectado "
         "con el negocio.\n\n"
