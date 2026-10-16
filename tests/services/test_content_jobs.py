@@ -132,6 +132,21 @@ def test_build_content_config_defaults_null_business_description_and_tone_exampl
     assert config.business_description == "" and config.tone_examples == [] and config.prob_link == 0.0
 
 
+def test_setup_gaps_reports_blocking_and_recommended():
+    assert jobs.setup_gaps({}) == {
+        "blocking": ["descripcion", "drive"], "recommended": ["ejemplos", "temas"],
+    }
+    assert jobs.setup_gaps(client(business_description="   "))["blocking"] == ["descripcion"]
+    assert jobs.setup_gaps(client(drive_folder_id="   "))["blocking"] == ["drive"]
+    assert jobs.setup_gaps(client()) == {"blocking": [], "recommended": []}
+    assert jobs.setup_gaps(client(tone_examples=None)) == {
+        "blocking": [], "recommended": ["ejemplos"],
+    }
+    assert jobs.setup_gaps(client(logo_url=None, calendly_link=None)) == {
+        "blocking": [], "recommended": [],
+    }
+
+
 def test_generate_for_client_returns_existing_group_without_external_work(generation):
     drive, engine = generation
     db = Database([client()])
@@ -275,12 +290,47 @@ def test_generate_for_client_by_id_skips_inactive_or_missing_client(generation):
     jobs.generate_for_client_by_id(Database([]), "nope", date(2026, 9, 18))
 
 
-def test_weekly_does_not_crash_for_client_with_no_business_description_yet(generation):
-    _, engine = generation
+def test_weekly_skips_client_with_no_business_description_without_error(generation):
+    drive, engine = generation
     db = Database([client("onboarding", business_description=None, tone_examples=None), client()])
     jobs.generate_weekly(db, date(2026, 9, 18))
     assert "generation_error" not in db.rows["clients"][0]
-    assert {p["p_client_id"] for p in db.saved} == {"onboarding", "good"}
+    assert {p["p_client_id"] for p in db.saved} == {"good"}
+    drive.assert_called_once_with("good", None)
+    engine.assert_called_once()
+
+
+def test_weekly_skips_client_without_drive_folder_without_writing_error(generation):
+    drive, engine = generation
+    db = Database([client("onboarding", drive_folder_id=""), client()])
+
+    jobs.generate_weekly(db, date(2026, 9, 18))
+
+    drive.assert_called_once_with("good", None)
+    engine.assert_called_once()
+    assert "generation_error" not in db.rows["clients"][0]
+    assert {p["p_client_id"] for p in db.saved} == {"good"}
+
+
+def test_generate_for_client_by_id_skips_incomplete_client(generation):
+    drive, engine = generation
+    db = Database([client(business_description="")])
+
+    jobs.generate_for_client_by_id(db, "good", date(2026, 9, 18))
+
+    assert db.saved == []
+    assert "generation_error" not in db.rows["clients"][0]
+    drive.assert_not_called()
+    engine.assert_not_called()
+
+
+def test_generate_for_client_still_allows_manual_generation_of_incomplete_client(generation):
+    db = Database([client(tone_examples=None, topics=None)])
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result["created"] is True
+    assert {p["p_client_id"] for p in db.saved} == {"good"}
 
 
 def test_weekly_continues_after_insufficient_images_and_saves_complete_thread(generation):

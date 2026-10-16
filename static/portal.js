@@ -176,6 +176,9 @@
     }
     if (problems > 0) {
       $('home-subtitle').textContent = `${problems} cliente${problems === 1 ? ' necesita' : 's necesitan'} tu atención.`;
+    } else if (info.incomplete > 0) {
+      const prefix = healthKnown ? 'Sin errores, pero ' : '';
+      $('home-subtitle').textContent = `${prefix}${info.incomplete} cliente${info.incomplete === 1 ? ' falta' : 's faltan'} completar y no se generan solos los viernes.`;
     } else if (healthKnown && summary) {
       const queue = pendingQueue(); // ya respeta Todos/Míos
       const waiting = queue.reduce((sum, client) => sum + (client.pending_count || 0), 0);
@@ -308,7 +311,7 @@
     if (health) problemIds = renderHomeHealth(health, issues); else renderHealthUnavailable();
     renderHomeIdle(summary, problemIds);
     const noClients = scoped && !clientScopeList().length;
-    renderHomeHero(noClients ? {noClients: true} : {summary, problems: problemIds.size, healthKnown: !!health, scoped, systemCount: issues.length});
+    renderHomeHero(noClients ? {noClients: true} : {summary, problems: problemIds.size, healthKnown: !!health, scoped, systemCount: issues.length, incomplete: incompleteClients().length});
     $('home-stats-note').classList.toggle('hidden', !scoped);
   }
   function rerenderHomeLists() {
@@ -392,7 +395,8 @@
   }
   function renderHomeIdle(summary, problemIds) {
     // A client that already shows up in "Salud" is not repeated here.
-    const idle = (summary?.clientes_sin_actividad || []).filter((client) => !problemIds.has(client.id));
+    const incompleteIds = new Set(incompleteClients().map((client) => client.id));
+    const idle = (summary?.clientes_sin_actividad || []).filter((client) => !problemIds.has(client.id) && !incompleteIds.has(client.id));
     $('home-idle-panel').classList.toggle('hidden', !idle.length);
     $('home-idle-count').textContent = String(idle.length);
     $('home-idle').innerHTML = capHomeRows(idle.map((client) => homeRow({
@@ -459,7 +463,26 @@
   }
   // ---- Inicio: "Para aprobar" (se arma con state.clients, sin pedido extra) ----
   const HOME_PENDING_LIMIT = 8;
+  function incompleteClients() {
+    return clientScopeList().filter((client) => setupGapsOf(client).blocking.length)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }
+  function renderHomeSetup() {
+    const panel = $('home-setup-panel');
+    const list = incompleteClients();
+    panel.classList.toggle('hidden', !list.length);
+    if (!list.length) { $('home-setup').innerHTML = ''; return; }
+    $('home-setup-count').textContent = `${list.length} cliente${list.length === 1 ? '' : 's'}${state.clientScope === 'mine' ? ' · tuyos' : ''}`;
+    const rows = list.slice(0, HOME_PENDING_LIMIT).map((client) => homeRow({
+      id: client.id, name: client.name, tone: 'warn',
+      sub: `Falta ${setupGapsOf(client).blocking.map((key) => SETUP_LABELS[key]).join(' y ')}`,
+    })).join('');
+    const more = list.length > HOME_PENDING_LIMIT
+      ? `<button type="button" class="btn home-more" data-home-setup-all>Ver los ${list.length} en Clientes</button>` : '';
+    $('home-setup').innerHTML = rows + more;
+  }
   function renderHomePending() {
+    renderHomeSetup();
     const panel = $('home-pending-panel');
     const pending = pendingQueue();
     panel.classList.toggle('hidden', !pending.length);
@@ -820,17 +843,43 @@
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
   }
+  const SETUP_LABELS = {descripcion: 'la descripción del negocio', drive: 'la carpeta de Drive', ejemplos: 'ejemplos de tono', temas: 'temas'};
+  function setupGapsOf(client) {
+    return {blocking: Array.isArray(client?.setup_blocking) ? client.setup_blocking : [], recommended: Array.isArray(client?.setup_recommended) ? client.setup_recommended : []};
+  }
+  function computeSetupGaps(client) { // Same rules as content_jobs.setup_gaps.
+    const blocking = [], recommended = [];
+    if (!String(client?.business_description || '').trim()) blocking.push('descripcion');
+    if (!String(client?.drive_folder_id || '').trim()) blocking.push('drive');
+    if (!(Array.isArray(client?.tone_examples) && client.tone_examples.length)) recommended.push('ejemplos');
+    if (!(Array.isArray(client?.topics) && client.topics.length)) recommended.push('temas');
+    return {blocking, recommended};
+  }
+  // Keep the client list current after editing the open client without refetching it.
+  function refreshSetupState() {
+    if (!state.client) return;
+    // An older list response must not overwrite the setup change just saved.
+    ++state.clientListVersion;
+    const listed = state.clients.find((item) => item.id === state.client.id);
+    if (listed) {
+      const gaps = computeSetupGaps(state.client);
+      listed.setup_blocking = gaps.blocking; listed.setup_recommended = gaps.recommended;
+    }
+    renderClients(); renderSetupNotice();
+    if (!$('home-view').classList.contains('hidden')) { renderHomePending(); renderHomeScoped(); }
+  }
   function clientStatus(client) {
     if (client.generation_error) {
       const info = friendlyGenerationError(client.generation_error);
       return {key: 'error', label: info && info.system ? 'Problema del sistema' : 'Error de generación'};
     }
+    if (setupGapsOf(client).blocking.length) return {key: 'incomplete', label: 'Falta completar'};
     const count = client.stories_count ?? 0, pending = client.pending_count ?? 0;
     if (pending > 0) return {key: 'pending', label: `${pending} sin aprobar`};
     if (count > 0) return {key: 'ready', label: `${count} historia${count === 1 ? '' : 's'} lista${count === 1 ? '' : 's'}`};
     return {key: 'idle', label: 'Sin historias'};
   }
-  const STATUS_ORDER = {error: 0, pending: 1, ready: 2, idle: 3};
+  const STATUS_ORDER = {error: 0, incomplete: 1, pending: 2, ready: 3, idle: 4};
   function clientScopeList() {
     return state.clientScope === 'mine'
       ? state.clients.filter((client) => client.assigned_employee_id && client.assigned_employee_id === state.me?.id)
@@ -848,9 +897,9 @@
       .sort((a, b) => STATUS_ORDER[a.status.key] - STATUS_ORDER[b.status.key] || a.client.name.localeCompare(b.client.name, 'es'));
     return {matched, shown, query};
   }
-  const STATUS_CHIPS = [['all', 'Todos'], ['error', 'Con error'], ['pending', 'Sin aprobar'], ['idle', 'Sin historias']];
+  const STATUS_CHIPS = [['all', 'Todos'], ['error', 'Con error'], ['incomplete', 'Incompletos'], ['pending', 'Sin aprobar'], ['idle', 'Sin historias']];
   function renderStatusChips(matched) {
-    const counts = {all: matched.length, error: 0, pending: 0, ready: 0, idle: 0};
+    const counts = {all: matched.length, error: 0, incomplete: 0, pending: 0, ready: 0, idle: 0};
     matched.forEach(({status}) => { counts[status.key] += 1; });
     $('client-status-filter').classList.toggle('hidden', !state.clients.length);
     $('client-status-filter').innerHTML = STATUS_CHIPS.map(([key, label]) => {
@@ -993,6 +1042,7 @@
     updateContactLinks();
     renderDriveConnectStatus();
     renderDriveFolderState();
+    renderSetupNotice();
     renderStyleSection();
     setStylePanelCollapsed(toneExamples().length > 0); // abierto si todavía faltan ejemplos
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
@@ -1000,6 +1050,31 @@
     if (url) { $('drive-link').href = url; $('drive-link').classList.remove('hidden'); }
     else { $('drive-link').classList.add('hidden'); }
     $('prompt-preview').classList.add('hidden'); renderStories(); renderPlan(); renderActivity(); loadCalendar();
+  }
+  function renderSetupNotice() {
+    const box = $('setup-notice');
+    if (!state.client) { box.classList.add('hidden'); return; }
+    const gaps = computeSetupGaps(state.client);
+    // Drive already has its own notice (#drive-missing-notice).
+    const missing = gaps.blocking.filter((key) => key !== 'drive');
+    const advised = gaps.recommended;
+    if (!missing.length && !advised.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    const parts = [];
+    if (missing.length) {
+      const first = missing[0];
+      parts.push(`<p class="setup-line is-blocking">Para que se generen solas los viernes falta ${missing.map((key) => SETUP_LABELS[key]).join(' y ')}. <button type="button" class="link-btn" data-setup-go="${first}">Completar</button></p>`);
+    }
+    if (advised.length) {
+      parts.push(`<p class="setup-line">Recomendado: sumar ${advised.map((key) => SETUP_LABELS[key]).join(' y ')}. <button type="button" class="link-btn" data-setup-go="${advised[0]}">Agregar</button></p>`);
+    }
+    box.innerHTML = parts.join('');
+    box.classList.remove('hidden');
+  }
+  function goToSetup(key) {
+    if (key === 'descripcion' || key === 'temas') $('content-panel').classList.remove('collapsed');
+    if (key === 'descripcion') { enterFieldEdit('description', 'business-description'); $('business-description').scrollIntoView({block: 'center', behavior: 'smooth'}); return; }
+    if (key === 'temas') { enterFieldEdit('topics', 'client-topics'); $('client-topics').scrollIntoView({block: 'center', behavior: 'smooth'}); return; }
+    if (key === 'ejemplos') { setStylePanelCollapsed(false); $('style-panel').scrollIntoView({block: 'start', behavior: 'smooth'}); }
   }
   function instagramHref(value) {
     if (!value) return null;
@@ -1314,6 +1389,7 @@
       } else {
         updateFieldView(name, updated.business_description, 'Todavía no hay descripción. Hacé clic acá para agregarla.');
       }
+      refreshSetupState();
       exitFieldEdit(name);
       showMessage(field==='topics'?'Temas guardados.':'Descripción guardada.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message,true); }
@@ -1369,6 +1445,7 @@
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       state.client.drive_folder_id = updated.drive_folder_id;
       renderDriveFolderState();
+      refreshSetupState();
       state.driveCount = undefined;
       renderActivity();
       showMessage('Carpeta de Drive actualizada.');
@@ -1470,6 +1547,7 @@
       if (!styleSelectionMatches(clientId, selectionVersion)) return false;
       state.client.tone_examples = Array.isArray(updated?.tone_examples) ? updated.tone_examples : next;
       renderToneExamples();
+      refreshSetupState();
       return true;
     } finally { styleOperations.delete(operationKey); updateStyleControls(); }
   }
@@ -2430,6 +2508,10 @@
       state.clientStatus = 'pending'; showClients();
       return;
     }
+    if (event.target.closest('[data-home-setup-all]')) {
+      state.clientStatus = 'incomplete'; showClients();
+      return;
+    }
     const chip = event.target.closest('[data-client-id]'); if (!chip) return;
     selectClient(chip.dataset.clientId);
   });
@@ -2479,6 +2561,10 @@
   $('client-email').addEventListener('change',()=>saveClientContact('contact_email','client-email'));
   $('client-drive-folder').addEventListener('change',saveClientDriveFolder);
   $('drive-missing-settings').addEventListener('click',openSettings);
+  $('setup-notice').addEventListener('click', (event) => {
+    const go = event.target.closest('[data-setup-go]');
+    if (go) goToSetup(go.dataset.setupGo);
+  });
   $('client-avatar-upload').addEventListener('click',()=>$('client-avatar-input').click());
   $('client-avatar-input').addEventListener('change',()=>{
     const file = $('client-avatar-input').files[0]; $('client-avatar-input').value = '';

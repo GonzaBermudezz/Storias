@@ -1992,8 +1992,8 @@ def test_list_clients_reports_pending_count_for_upcoming_stories(monkeypatch, cl
 
     assert response.status_code == 200
     assert response.json() == [
-        {"id": "c1", "agency_id": "agency-1", "stories_count": 2, "pending_count": 1, "next_pending_date": None, "assigned_employee_id": None},
-        {"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "next_pending_date": None, "assigned_employee_id": None},
+        {"id": "c1", "agency_id": "agency-1", "stories_count": 2, "pending_count": 1, "next_pending_date": None, "assigned_employee_id": None, "setup_blocking": ["descripcion", "drive"], "setup_recommended": ["ejemplos", "temas"]},
+        {"id": "c2", "agency_id": "agency-1", "stories_count": 0, "pending_count": 0, "next_pending_date": None, "assigned_employee_id": None, "setup_blocking": ["descripcion", "drive"], "setup_recommended": ["ejemplos", "temas"]},
     ]
 
 
@@ -2017,6 +2017,7 @@ def test_list_clients_excludes_future_published_stories_but_retains_active_state
     assert response.json() == [{
         "id": "c1", "agency_id": "agency-1", "stories_count": 4, "pending_count": 2,
         "next_pending_date": None, "assigned_employee_id": None,
+        "setup_blocking": ["descripcion", "drive"], "setup_recommended": ["ejemplos", "temas"],
     }]
 
 
@@ -2055,8 +2056,33 @@ def test_list_clients_selects_only_list_columns(monkeypatch, client):
 
     assert response.status_code == 200
     first_select = [args[0] for table, args in db.selects if table == "clients"][0]
-    assert first_select == "id,name,avatar_url,generation_error,generation_error_at"
-    assert "business_description" not in first_select and "encrypted" not in first_select
+    assert first_select == "id,name,avatar_url,generation_error,generation_error_at,drive_folder_id,business_description,tone_examples,topics"
+    assert "encrypted" not in first_select and "token" not in first_select
+    assert [table for table, _ in db.selects] == ["clients", "stories", "employee_clients"]
+
+
+def test_list_clients_reports_setup_gaps_without_leaking_heavy_fields(monkeypatch, client):
+    db = DB([
+        [
+            {"id": "complete", "business_description": "A studio", "drive_folder_id": "folder",
+             "tone_examples": [["a", "b", "c", "d"]], "topics": ["x"]},
+            {"id": "empty", "business_description": " ", "drive_folder_id": "",
+             "tone_examples": [], "topics": []},
+        ],
+        [], [],
+    ])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.get("/portal/clientes")
+
+    assert response.status_code == 200
+    complete, empty = response.json()
+    assert complete["setup_blocking"] == [] and complete["setup_recommended"] == []
+    assert empty["setup_blocking"] == ["descripcion", "drive"]
+    assert empty["setup_recommended"] == ["ejemplos", "temas"]
+    for row in response.json():
+        assert not {"drive_folder_id", "business_description", "tone_examples", "topics"} & row.keys()
+    assert db.responses == []
 
 
 def test_list_clients_counts_stories_beyond_one_page(monkeypatch, client):

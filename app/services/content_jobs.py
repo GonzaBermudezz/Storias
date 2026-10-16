@@ -385,8 +385,38 @@ def generate_for_client(db, row: dict, today: date) -> dict:
     return {"created": True, "group_id": group_id, "recycled": recycled}
 
 
+SETUP_BLOCKING = ("descripcion", "drive")
+SETUP_RECOMMENDED = ("ejemplos", "temas")
+
+
+def setup_gaps(row: dict) -> dict:
+    """What a client still lacks before it can generate good content on its own.
+
+    ``blocking`` gaps make the Friday job skip the client; ``recommended`` ones
+    only show up as a notice in the portal.
+    """
+    blocking = []
+    if not str(row.get("business_description") or "").strip():
+        blocking.append("descripcion")
+    if not str(row.get("drive_folder_id") or "").strip():
+        blocking.append("drive")
+    recommended = []
+    if not row.get("tone_examples"):
+        recommended.append("ejemplos")
+    if not row.get("topics"):
+        recommended.append("temas")
+    return {"blocking": blocking, "recommended": recommended}
+
+
 def _generate_for_client_safe(db, row: dict, today: date) -> None:
     """Isolate one client's failure without stopping the remaining clients."""
+    gaps = setup_gaps(row)["blocking"]
+    if gaps:
+        # Not a failure: the client is just not set up yet. No generation_error,
+        # so it does not pollute the real error list; the portal shows
+        # "Falta completar" instead.
+        logger.info("Skipping client %s: setup incomplete (%s)", row["id"], ", ".join(gaps))
+        return
     try:
         generate_for_client(db, row, today)
     except Exception as exc:

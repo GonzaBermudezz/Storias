@@ -24,7 +24,7 @@ from app.engine.exceptions import ClaudeGenerationError, EngineError
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
 from app.services import content_jobs, drive, uploads
-from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config
+from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config, setup_gaps
 from app.services.encryption import decrypt, encrypt
 
 router = APIRouter(prefix="/portal", tags=["portal"])
@@ -43,9 +43,9 @@ _CLIENT_DETAIL = (
     "publish_together,font_choice,drive_connected_email"
 )
 
-# The sidebar list only needs identity + status; the full _CLIENT_DETAIL
-# (voice, topics, tone examples, links…) is loaded per client on selection.
-_CLIENT_LIST = "id,name,avatar_url,generation_error,generation_error_at"
+# The sidebar gets identity + status; setup fields are read to derive gaps and
+# removed from the response. Full _CLIENT_DETAIL is loaded on selection.
+_CLIENT_LIST = "id,name,avatar_url,generation_error,generation_error_at,drive_folder_id,business_description,tone_examples,topics"
 # PostgREST silently truncates a response at its max-rows (1000 by default)
 # and long in_(...) URLs fail, so bulk reads go through small id chunks and
 # paged queries instead of one unbounded call.
@@ -336,6 +336,11 @@ def list_clients(employee: EmployeeDep):
             assigned[row["client_id"]] = row["employee_id"]
 
     for c in clients:
+        gaps = setup_gaps(c)
+        c["setup_blocking"] = gaps["blocking"]
+        c["setup_recommended"] = gaps["recommended"]
+        for heavy in ("drive_folder_id", "business_description", "tone_examples", "topics"):
+            c.pop(heavy, None)
         c["stories_count"] = counts.get(c["id"], 0)
         c["pending_count"] = pending.get(c["id"], 0)
         c["next_pending_date"] = next_pending.get(c["id"])

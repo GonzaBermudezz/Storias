@@ -66,11 +66,37 @@ def test_portal_frontend_uses_real_api_without_prototype_data():
     assert "clientSearch: ''" in source
     assert "toLocaleLowerCase('es')" in source
     assert "Sin resultados" in source
-    assert "const STATUS_ORDER = {error: 0, pending: 1, ready: 2, idle: 3}" in source
+    assert "const STATUS_ORDER = {error: 0, incomplete: 1, pending: 2, ready: 3, idle: 4}" in source
     assert "$('client-search').addEventListener('input'" in source
     assert "CUAN Arquitectura" not in source
     assert "Panadería Dora" not in source
     assert "images.unsplash.com" not in source
+
+
+def test_portal_frontend_marks_incomplete_clients_and_links_to_setup_fields():
+    page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
+        "sub": "emp-1", "email": "pm@example.com", "name": "PM",
+        "agency_id": "agency-1", "role": "employee",
+    })})
+    source = TestClient(app).get("/static/portal.js").text
+
+    for element_id in ("setup-notice", "home-setup-panel", "home-setup", "home-setup-count"):
+        assert f'id="{element_id}"' in page.text
+    for marker in ("setup_blocking", "'Falta completar'", "['incomplete', 'Incompletos']",
+                   "data-setup-go", "data-home-setup-all", "refreshSetupState"):
+        assert marker in source
+    assert "function renderHomePending() {\n    renderHomeSetup();" in source
+    setup_navigation = source.split("function goToSetup(key)", 1)[1].split("function instagramHref", 1)[0]
+    assert setup_navigation.index("classList.remove('collapsed')") < setup_navigation.index("enterFieldEdit(")
+    setup_refresh = source.split("function refreshSetupState()", 1)[1].split("function clientStatus", 1)[0]
+    assert "++state.clientListVersion;" in setup_refresh
+    assert "if (!$('home-view').classList.contains('hidden')) { renderHomePending(); renderHomeScoped(); }" in setup_refresh
+    incomplete_subtitle = source.split("} else if (info.incomplete > 0)", 1)[1].split("} else if (healthKnown && summary)", 1)[0]
+    assert "healthKnown ? 'Sin errores, pero ' : ''" in incomplete_subtitle
+    for start, end in (("async function saveClientField(", "async function saveClientPm("),
+                       ("async function saveClientDriveFolder(", "async function uploadClientAvatar("),
+                       ("async function persistToneExamples(", "function openToneDialog(")):
+        assert "refreshSetupState();" in source.split(start, 1)[1].split(end, 1)[0]
 
 
 def test_portal_page_includes_bulk_pm_assignment_and_pending_approval_panel():
