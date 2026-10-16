@@ -323,3 +323,15 @@ def test_portal_client_filters_are_local_and_expose_status_chips():
     assert "solo_mios" not in source
     assert "data-client-reset" in source
     assert "computeClientList" in source
+
+
+def test_portal_polish_handles_single_clients_loading_header_and_enfoques():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "Seleccionar el visible" in source
+    assert "Sin errores, pero" in source
+    assert "de ${total} cliente${total === 1 ? '' : 's'}" in source
+    assert "de ${total} clientes" not in source
+    assert "$('enfoques-view').classList.contains('hidden') && state.client?.id" in source
+    assert "#header-client.is-loading .header-meta" in page

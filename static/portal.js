@@ -162,6 +162,11 @@
     if (problems > 0) {
       $('home-subtitle').textContent = `${problems} cliente${problems === 1 ? ' necesita' : 's necesitan'} tu atención.`;
     } else if (healthKnown && summary) {
+      const idle = (summary.clientes_sin_actividad || []).length;
+      if (idle > 0) {
+        $('home-subtitle').textContent = `Sin errores, pero ${idle} cliente${idle === 1 ? ' no tiene' : 's no tienen'} historias agendadas.`;
+        return;
+      }
       if (info.scoped) { $('home-subtitle').textContent = 'Todo en orden con tus clientes.'; return; }
       const n = summary.historias_agendadas;
       $('home-subtitle').textContent = `Todo en orden. Hay ${n} historia${n === 1 ? '' : 's'} agendada${n === 1 ? '' : 's'} para subir.`;
@@ -450,7 +455,7 @@
     $('assign-pm-all').checked = shown.length > 0 && selectedVisible === shown.length;
     $('assign-pm-all').indeterminate = selectedVisible > 0 && selectedVisible < shown.length;
     $('assign-pm-all').disabled = !shown.length;
-    $('assign-pm-all-label').textContent = `Seleccionar los ${shown.length} visibles`;
+    $('assign-pm-all-label').textContent = shown.length === 1 ? 'Seleccionar el visible' : `Seleccionar los ${shown.length} visibles`;
     $('assign-pm-all').closest('label').classList.toggle('hidden', !shown.length);
     updatePmAssignSubmit();
   }
@@ -525,6 +530,7 @@
     $('enfoques-view').classList.remove('hidden'); $('home-view').classList.add('hidden'); $('empty').classList.add('hidden'); $('client-view').classList.add('hidden');
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     renderFocusPresetsList();
+    renderClients();
   }
   function renderFocusPresetsList() {
     const presets = state.focusPresets || [];
@@ -792,7 +798,7 @@
     const {matched, shown, query} = computeClientList();
     renderStatusChips(matched);
     const filtering = state.clientScope !== 'all' || state.clientStatus !== 'all' || !!query;
-    $('client-count').textContent = filtering ? `${shown.length} de ${total} clientes` : `${total} cliente${total === 1 ? '' : 's'}`;
+    $('client-count').textContent = filtering ? `${shown.length} de ${total} cliente${total === 1 ? '' : 's'}` : `${total} cliente${total === 1 ? '' : 's'}`;
     if (!shown.length) {
       $('client-list').innerHTML = state.clientScope === 'mine' && state.clientStatus === 'all' && !query && !clientScopeList().length
         ? listEmptyMarkup('Sin clientes asignados', 'Cuando te asignen uno, aparece acá.', false, true)
@@ -800,7 +806,7 @@
       return;
     }
     $('client-list').innerHTML = shown.map(({client, status}) => {
-      const active = $('home-view').classList.contains('hidden') && state.client?.id === client.id;
+      const active = $('home-view').classList.contains('hidden') && $('enfoques-view').classList.contains('hidden') && state.client?.id === client.id;
       return `<button class="client-item${active ? ' active' : ''}" data-client-id="${escapeHtml(client.id)}" title="${escapeHtml(client.name)}"><span class="avatar${client.avatar_url ? ' has-avatar' : ' avatar-' + avatarColor(client.id)}">${avatarContent(client)}</span><span class="meta"><span class="name">${escapeHtml(client.name)}</span><span class="count is-${status.key}">${escapeHtml(status.label)}</span></span><span class="status-dot is-${status.key}" aria-hidden="true"></span></button>`;
     }).join('');
   }
@@ -813,7 +819,7 @@
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
     $('enfoques-view').classList.add('hidden'); $('nav-enfoques').classList.remove('active');
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
-    $('client-name').textContent = 'Cargando...'; $('stories').innerHTML = loadingMarkup('Cargando historias...'); $('week-badge').classList.add('hidden');
+    $('client-name').textContent = 'Cargando...'; $('stories').innerHTML = loadingMarkup('Cargando historias...'); $('week-badge').classList.add('hidden'); $('header-client').classList.add('is-loading');
     $('activity-list').innerHTML = ''; $('activity-summary').innerHTML = ''; updateContactLinks(); $('drive-link').classList.add('hidden');
     $('plan-panel').classList.add('hidden'); $('approve-all-client').hidden = true; $('historico-panel').classList.add('hidden'); $('historico-list').innerHTML = ''; state.driveCount = undefined;
     try {
@@ -839,6 +845,7 @@
         if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
       }
     } finally {
+      if (selectionVersion === state.selectionVersion) $('header-client').classList.remove('is-loading');
       if (selectionVersion === state.selectionVersion) $('client-view').classList.remove('is-switching');
       if (selectionVersion === state.selectionVersion) setControlsDisabled(false);
     }
