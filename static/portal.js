@@ -157,10 +157,12 @@
     $('home-greeting').textContent = first ? `Hola, ${first}` : 'Hola';
     $('home-date').textContent = new Intl.DateTimeFormat('es-AR', {weekday: 'long', day: 'numeric', month: 'long'}).format(new Date());
     if (!info) { $('home-subtitle').textContent = 'Resumen de tus clientes.'; return; }
+    if (info.noClients) { $('home-subtitle').textContent = 'Todavía no tenés clientes asignados.'; return; }
     const {summary, problems, healthKnown} = info;
     if (problems > 0) {
       $('home-subtitle').textContent = `${problems} cliente${problems === 1 ? ' necesita' : 's necesitan'} tu atención.`;
     } else if (healthKnown && summary) {
+      if (info.scoped) { $('home-subtitle').textContent = 'Todo en orden con tus clientes.'; return; }
       const n = summary.historias_agendadas;
       $('home-subtitle').textContent = `Todo en orden. Hay ${n} historia${n === 1 ? '' : 's'} agendada${n === 1 ? '' : 's'} para subir.`;
     } else {
@@ -202,12 +204,42 @@
     }
     return rows.slice(0, limit).join('') + `<button type="button" class="btn home-more" data-home-expand="${escapeHtml(key)}">Ver los ${rows.length - limit} restantes</button>`;
   }
-  function rerenderHomeLists() {
+  // Con "Míos" activo, Inicio filtra sus listas por los clientes del usuario.
+  // /resumen y /salud devuelven toda la agencia; cada fila trae el id del cliente.
+  function homeScopedData(last) {
+    const {summary, health} = last;
+    if (state.clientScope !== 'mine') return {summary, health, scoped: false};
+    const mine = new Set(clientScopeList().map((client) => client.id));
+    const inMine = (id) => mine.has(id);
+    const scopedSummary = summary ? {
+      ...summary,
+      clientes_sin_actividad: (summary.clientes_sin_actividad || []).filter((client) => inMine(client.id)),
+      proximas_publicaciones: Array.isArray(summary.proximas_publicaciones)
+        ? summary.proximas_publicaciones.filter((item) => inMine(item.client_id)) : summary.proximas_publicaciones,
+    } : summary;
+    const scopedHealth = health ? {
+      ...health,
+      clientes_con_error_generacion: (health.clientes_con_error_generacion || []).filter((client) => inMine(client.id)),
+      clientes_con_pool_bajo: (health.clientes_con_pool_bajo || []).filter((client) => inMine(client.id)),
+      clientes_con_historias_en_error: (health.clientes_con_historias_en_error || []).filter((client) => inMine(client.id)),
+    } : health;
+    return {summary: scopedSummary, health: scopedHealth, scoped: true};
+  }
+  // Pinta las listas de Inicio (no las tarjetas de números) según el alcance actual.
+  function renderHomeScoped() {
     const last = state.homeLast;
     if (!last) return;
+    const {summary, health, scoped} = homeScopedData(last);
+    if (summary) renderHomeUpcoming(summary.proximas_publicaciones);
     let problemIds = new Set();
-    if (last.health) problemIds = renderHomeHealth(last.health);
-    renderHomeIdle(last.summary, problemIds);
+    if (health) problemIds = renderHomeHealth(health); else renderHealthUnavailable();
+    renderHomeIdle(summary, problemIds);
+    const noClients = scoped && !clientScopeList().length;
+    renderHomeHero(noClients ? {noClients: true} : {summary, problems: problemIds.size, healthKnown: !!health, scoped});
+    $('home-stats-note').classList.toggle('hidden', !scoped);
+  }
+  function rerenderHomeLists() {
+    renderHomeScoped();
   }
   function renderHomeHealth(health) {
     const checks = [
@@ -303,16 +335,12 @@
       setStat('stat-publicadas', summary.historias_publicadas, summary.historias_publicadas === 0);
       setStat('stat-promedio', summary.promedio_por_cliente, summary.promedio_por_cliente === 0);
       setStat('stat-aprobacion', summary.aprobacion_pct === null ? '—' : `${summary.aprobacion_pct}%`, summary.aprobacion_pct === null);
-      renderHomeUpcoming(summary.proximas_publicaciones);
     } else {
       const error = summaryResult.reason;
       if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
     state.homeLast = {summary, health};
-    let problemIds = new Set();
-    if (health) problemIds = renderHomeHealth(health); else renderHealthUnavailable();
-    renderHomeIdle(summary, problemIds);
-    renderHomeHero({summary, problems: problemIds.size, healthKnown: !!health});
+    renderHomeScoped();
   }
   // Cola de revisión: clientes del alcance actual (Todos/Míos) con historias sin
   // aprobar, la más urgente primero. La usan el panel "Para aprobar" de Inicio y
@@ -374,7 +402,7 @@
       const clients = await api('/portal/clientes');
       if (listVersion !== state.clientListVersion) return;
       state.clients = clients; renderClients();
-      if (!$('home-view').classList.contains('hidden')) renderHomePending();
+      if (!$('home-view').classList.contains('hidden')) { renderHomePending(); renderHomeScoped(); }
     } catch (_) { /* the cached list stays on screen */ }
   }
   let clientListRefreshTimer = null;
@@ -460,7 +488,7 @@
     const openListed = state.clients.find((client) => client.id === state.client?.id);
     if (openListed && state.client) { state.client.assigned_employee_id = openListed.assigned_employee_id || null; $('client-pm').value = state.client.assigned_employee_id || ''; }
     renderClients(); renderPmAssign();
-    if (!$('home-view').classList.contains('hidden')) renderHomePending();
+    if (!$('home-view').classList.contains('hidden')) { renderHomePending(); renderHomeScoped(); }
     if (failure) {
       feedback.className = 'modal-feedback';
       feedback.textContent = (done ? `Se asignaron ${done}, pero el resto falló: ` : '') + failure.message;
@@ -680,6 +708,13 @@
       const clients = await api('/portal/clientes');
       if (listVersion !== state.clientListVersion) return;
       state.clients = clients;
+      // Un PM que nunca eligió Todos/Míos entra directo en "Míos" si tiene clientes asignados.
+      let storedScope = null;
+      try { storedScope = localStorage.getItem('storias.clientScope'); } catch (_) {}
+      if (!state.clientsLoadedOnce && storedScope === null && state.me?.role !== 'admin'
+          && clients.some((client) => client.assigned_employee_id && client.assigned_employee_id === state.me?.id)) {
+        setClientScope('mine', false);
+      }
       // A saved "Míos" scope is only kept on the first load if it has something to show.
       if (!state.clientsLoadedOnce && state.clientScope === 'mine' && !clientScopeList().length) setClientScope('all', false);
       state.clientsLoadedOnce = true;
@@ -2147,7 +2182,7 @@
     if (!btn || btn.dataset.filter === state.clientScope) return;
     setClientScope(btn.dataset.filter, true);
     renderClients();
-    if (!$('home-view').classList.contains('hidden')) renderHomePending();
+    if (!$('home-view').classList.contains('hidden')) { renderHomePending(); renderHomeScoped(); }
   });
   $('client-status-filter').addEventListener('click',(event)=>{
     const btn = event.target.closest('[data-status]');
@@ -2159,7 +2194,9 @@
   $('client-list').addEventListener('click',(event)=>{
     if (event.target.closest('[data-client-reset]')) {
       state.clientSearch = ''; $('client-search').value = ''; $('client-search-clear').classList.add('hidden');
-      state.clientStatus = 'all'; setClientScope('all', true); renderClients(); return;
+      state.clientStatus = 'all'; setClientScope('all', true); renderClients();
+      if (!$('home-view').classList.contains('hidden')) { renderHomePending(); renderHomeScoped(); }
+      return;
     }
     const item=event.target.closest('[data-client-id]');if(item)selectClient(item.dataset.clientId);
   });

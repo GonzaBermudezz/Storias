@@ -646,6 +646,7 @@
     .home-panel-head .btn{margin-left:auto;padding:6px 11px}
     .home-panel-head .home-pill{margin-left:0}
     #home-pending-panel .home-panel-head{flex-wrap:wrap}
+    .home-stats-note{margin:-6px 0 16px;font-size:11.5px;color:var(--muted)}
   </style>
   <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
@@ -720,6 +721,7 @@
           <div class="stat-card" data-tone="neutral"><span class="stat-icon" data-icon="users" data-size="16"></span><div class="stat-value" id="stat-promedio">–</div><div class="stat-label">Promedio por cliente</div><div class="stat-hint">Historias próximas</div></div>
           <div class="stat-card" data-tone="accent"><span class="stat-icon" data-icon="check-check" data-size="16"></span><div class="stat-value" id="stat-aprobacion">–</div><div class="stat-label">Aprobación</div><div class="stat-hint">De las próximas</div></div>
         </div>
+        <p class="home-stats-note hidden" id="home-stats-note">Los números de arriba son de toda la agencia. Las listas de abajo muestran solo tus clientes.</p>
         <div class="panel home-panel hidden" id="home-pending-panel">
           <div class="home-panel-head"><h2>Para aprobar</h2><span id="home-pending-count" class="home-pill neutral"></span><button type="button" class="btn primary" id="home-review-next">Empezar a revisar</button></div>
           <div class="home-panel-body" id="home-pending"></div>

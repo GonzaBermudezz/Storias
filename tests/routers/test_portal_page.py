@@ -108,6 +108,27 @@ def test_portal_frontend_supports_review_queue_and_client_wide_approval():
     assert "aprobar-lote" not in source
 
 
+def test_portal_home_lists_respect_client_scope_and_clarify_agency_stats():
+    page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
+        "sub": "emp-1", "email": "pm@example.com", "name": "PM",
+        "agency_id": "agency-1", "role": "employee",
+    })})
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert 'id="home-stats-note"' in page.text
+    assert "function homeScopedData" in source
+    assert "function renderHomeScoped" in source
+    assert "Todavía no tenés clientes asignados." in source
+    assert source.count("renderHomeUpcoming(summary.proximas_publicaciones)") == 1
+    load_home_summary = source.split("async function loadHomeSummary()", 1)[1].split("function pendingQueue()", 1)[0]
+    assert "renderHomeUpcoming(summary.proximas_publicaciones)" not in load_home_summary
+    refresh_clients = source.split("async function refreshClientList()", 1)[1].split("let clientListRefreshTimer", 1)[0]
+    reset_filters = source.split("if (event.target.closest('[data-client-reset]'))", 1)[1].split("const item=", 1)[0]
+    assign_pm = source.split("// Keep the open client's own PM selector consistent with the list.", 1)[1].split("function showHome()", 1)[0]
+    for update_path in (refresh_clients, reset_filters, assign_pm):
+        assert "renderHomePending(); renderHomeScoped();" in update_path
+
+
 def test_portal_frontend_keeps_health_dashboard_independent_and_latest_only():
     page = TestClient(app).get("/portal", cookies={"session": _make_jwt({
         "sub": "emp-1", "email": "pm@example.com", "name": "PM",
