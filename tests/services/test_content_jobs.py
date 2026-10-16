@@ -656,3 +656,167 @@ def test_publish_now_counts_failures(publication):
 
     assert result == {"publicadas": 0, "fallidas": 1}
     assert db.rows["stories"][0]["estado"] == "error"
+
+
+def _tag(persona, escena): return {"persona": persona, "escena": escena}
+
+
+def _rows(*ids): return [(i, f"{i}.jpg", b"x") for i in ids]
+
+
+def test_elegir_hilo_puts_the_person_photo_last_and_varies_scenes():
+    examinadas = _rows("a", "b", "c", "d", "e", "f")
+    tags = {"a": _tag(True, "ambiente"), "b": _tag(False, "producto"), "c": _tag(False, "producto"),
+            "d": _tag(False, "detalle"), "e": _tag(False, "exterior"), "f": _tag(True, "producto")}
+    elegidas = jobs.elegir_hilo(examinadas, tags, frescas={r[0] for r in examinadas})
+    assert [r[0] for r in elegidas] == ["b", "d", "e", "a"]  # c repite escena con b; a (persona) va última
+
+
+def test_elegir_hilo_avoids_scenes_used_this_week_when_it_can():
+    examinadas = _rows("a", "b", "c", "d", "e")
+    tags = {"a": _tag(False, "producto"), "b": _tag(False, "ambiente"), "c": _tag(False, "detalle"),
+            "d": _tag(False, "exterior"), "e": _tag(True, "grafico")}
+    elegidas = jobs.elegir_hilo(examinadas, tags, {r[0] for r in examinadas}, escenas_recientes={"producto"})
+    assert [r[0] for r in elegidas] == ["b", "c", "d", "e"]
+
+
+def test_elegir_hilo_still_returns_four_when_nothing_is_tagged_or_there_is_no_person():
+    examinadas = _rows("a", "b", "c", "d", "e")
+    assert [r[0] for r in jobs.elegir_hilo(examinadas, {}, {r[0] for r in examinadas})] == ["a", "b", "c", "d"]
+    tags = {r[0]: _tag(False, "producto") for r in examinadas}
+    assert len(jobs.elegir_hilo(examinadas, tags, {r[0] for r in examinadas})) == 4
+
+
+def test_elegir_hilo_prefers_fresh_photos_over_recently_used_ones():
+    examinadas = _rows("a", "b", "c", "d", "e", "f")
+    tags = {"a": _tag(False, "producto"), "b": _tag(False, "ambiente"), "c": _tag(False, "detalle"),
+            "d": _tag(False, "exterior"), "e": _tag(True, "grafico"), "f": _tag(True, "ambiente")}
+    elegidas = jobs.elegir_hilo(examinadas, tags, frescas={"a", "b", "c", "d", "f"})
+    assert [r[0] for r in elegidas] == ["a", "c", "d", "f"]  # f es fresca; b repite su escena
+
+
+def test_elegir_hilo_keeps_all_fresh_photos_when_only_three_are_available():
+    examinadas = _rows("a", "b", "c", "d", "e", "f")
+    tags = {"a": _tag(False, "producto"), "b": _tag(False, "producto"),
+            "c": _tag(False, "producto"), "d": _tag(False, "detalle"),
+            "e": _tag(False, "exterior"), "f": _tag(True, "ambiente")}
+
+    elegidas = jobs.elegir_hilo(examinadas, tags, frescas={"a", "b", "c"})
+
+    assert [row[0] for row in elegidas] == ["a", "b", "c", "f"]
+
+
+def test_elegir_hilo_reserves_the_cta_scene_before_choosing_the_other_three():
+    examinadas = _rows("a", "b", "c", "d", "e")
+    tags = {"a": _tag(False, "producto"), "b": _tag(False, "ambiente"),
+            "c": _tag(False, "detalle"), "d": _tag(False, "exterior"),
+            "e": _tag(True, "producto")}
+
+    elegidas = jobs.elegir_hilo(examinadas, tags, frescas={row[0] for row in examinadas})
+
+    assert [row[0] for row in elegidas] == ["b", "c", "d", "e"]
+
+
+@pytest.mark.parametrize("failed_index", [4, 8])
+def test_generate_for_client_survives_optional_photo_download_errors(generation, monkeypatch, failed_index):
+    metadata, engine = generation
+    metadata.return_value = image_metadata(12)
+
+    def download(rows, **kwargs):
+        downloaded = []
+        for file_id, name in rows:
+            if file_id == f"file-{failed_index}":
+                raise RuntimeError("optional photo unavailable")
+            downloaded.append((file_id, name, b"image"))
+        return downloaded
+
+    monkeypatch.setattr(jobs.drive, "download_images", download)
+    monkeypatch.setattr(jobs.image_tags, "classify_many", lambda rows: {
+        row[0]: _tag(False, "producto") for row in rows})
+    db = Database([client()])
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result["created"] is True
+    assert [image.drive_file_id for image in engine.call_args.args[1]] == ["file-0", "file-1", "file-2", "file-3"]
+
+
+@pytest.mark.parametrize("failed_index", [0, 3])
+def test_generate_for_client_still_propagates_required_photo_download_errors(generation, monkeypatch, failed_index):
+    _, engine = generation
+
+    def download(rows, **kwargs):
+        downloaded = []
+        for file_id, name in rows:
+            if file_id == f"file-{failed_index}":
+                raise RuntimeError("required photo unavailable")
+            downloaded.append((file_id, name, b"image"))
+        return downloaded
+
+    monkeypatch.setattr(jobs.drive, "download_images", download)
+    db = Database([client()])
+
+    with pytest.raises(RuntimeError, match="required photo unavailable"):
+        jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    engine.assert_not_called()
+    assert db.saved == []
+
+
+@pytest.mark.parametrize("candidate_cap", [24, 10])
+def test_image_candidate_cap_applies_even_when_all_downloaded_images_are_unreadable(monkeypatch, candidate_cap):
+    attempted = []
+
+    def download(rows, **kwargs):
+        attempted.extend(file_id for file_id, _ in rows)
+        return []
+
+    monkeypatch.setattr(jobs, "IMAGE_EXAMINE_MAX", candidate_cap)
+    monkeypatch.setattr(jobs.drive, "download_images", download)
+    rows = jobs._elegir_y_descargar_hilo(
+        Database(), "good", image_metadata(40), [], datetime.now(timezone.utc), None)
+
+    assert rows == []
+    assert attempted == [f"file-{index}" for index in range(candidate_cap)]
+
+
+def test_generate_for_client_orders_photos_by_tags_and_only_classifies_new_ones(generation, monkeypatch):
+    drive, engine = generation
+    drive.return_value = image_metadata(6)
+    engine.return_value = HiloGenerado(
+        historias=[f"Story {index}" for index in range(4)],
+        imagenes_originales_url=[f"raw-{index}" for index in range(4)],
+        imagenes_editadas_url=[f"edited-{index}" for index in range(4)],
+        drive_file_ids_usados=["file-1", "file-2", "file-3", "file-5"],
+    )
+    db = Database([client()])
+    db.rows["image_tags"] = [
+        {"client_id": "good", "drive_file_id": "file-0", "has_person": True, "scene": "ambiente"},
+        {"client_id": "good", "drive_file_id": "file-1", "has_person": False, "scene": "producto"},
+        {"client_id": "good", "drive_file_id": "file-2", "has_person": False, "scene": "ambiente"},
+    ]
+    classified = []
+
+    def classify_many(rows):
+        classified.extend(row[0] for row in rows)
+        return {"file-3": _tag(False, "detalle"), "file-4": _tag(False, "producto"), "file-5": _tag(True, "exterior")}
+
+    monkeypatch.setattr(jobs.image_tags, "classify_many", classify_many)
+
+    jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    ids = [image.drive_file_id for image in engine.call_args.args[1]]
+    # 3 sin personas de escenas distintas (file-4 repite "producto") y al final una con persona
+    # de escena nueva (file-0 repite "ambiente", file-5 es "exterior").
+    assert ids == ["file-1", "file-2", "file-3", "file-5"]
+    assert sorted(classified) == ["file-3", "file-4", "file-5"]
+
+
+def test_generate_for_client_works_when_tags_cannot_be_read_or_saved(generation):
+    _, engine = generation
+    db = Database([client()])  # sin tabla image_tags: la lectura falla y se sigue sin etiquetas
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result["created"] is True
+    assert [image.drive_file_id for image in engine.call_args.args[1]] == ["file-0", "file-1", "file-2", "file-3"]

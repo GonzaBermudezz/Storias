@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from itertools import combinations
 import logging
 from zoneinfo import ZoneInfo
 
 from app.config import get_settings
 from app.engine import content
 from app.engine.schemas import ClientContentConfig, HiloGenerado, ImagenCandidata
-from app.services import drive
+from app.services import drive, image_tags
 from app.services.encryption import decrypt
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,12 @@ NO_REPEAT_WEEKS = 3
 # on: Mon/Wed/Fri/Sun, spreading the thread across the week instead of
 # dumping all 4 the same day.
 PUBLISH_DAY_OFFSETS = (0, 2, 4, 6)
+# Selección de fotos de un hilo: se descargan y etiquetan en tandas (en el orden
+# de seleccionar_imagenes) hasta tener 3 sin personas y 1 con persona, con tope
+# para no bajar toda la carpeta. "Misma semana" = fotos usadas en los últimos 7 días.
+IMAGE_BATCH = 8
+IMAGE_EXAMINE_MAX = 24
+RECENT_DAYS = 7
 
 
 def local_today() -> date:
@@ -130,6 +137,14 @@ def _thread_payload(row: dict, config: ClientContentConfig, result: HiloGenerado
     }
 
 
+def _parse_fecha(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
 def seleccionar_imagenes(disponibles: list[tuple], historial: list[dict],
                          ahora: datetime, semanas_cooldown: int = NO_REPEAT_WEEKS,
                          limite: int | None = 4) -> tuple[list[tuple], bool]:
@@ -137,16 +152,9 @@ def seleccionar_imagenes(disponibles: list[tuple], historial: list[dict],
     cutoff = ahora - timedelta(weeks=semanas_cooldown)
     history = {row["drive_file_id"]: row.get("last_used_at") for row in historial}
 
-    def parsed(value):
-        if value is None:
-            return None
-        if isinstance(value, datetime):
-            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-
     never, expired, recent = [], [], []
     for image in disponibles:
-        used_at = parsed(history.get(image[0])) if image[0] in history else None
+        used_at = _parse_fecha(history.get(image[0])) if image[0] in history else None
         if image[0] not in history:
             never.append(image)
         elif used_at is None or used_at <= cutoff:
@@ -158,6 +166,152 @@ def seleccionar_imagenes(disponibles: list[tuple], historial: list[dict],
     ranked = chosen + [image for _, image in sorted(recent, key=lambda item: item[0])]
     selected = ranked if limite is None else ranked[:limite]
     return selected, len(selected) < 4 or len(chosen) < 4
+
+
+def _load_tags(db, client_id: str) -> dict[str, dict]:
+    """Etiquetas ya guardadas del cliente. Si la tabla no existe todavía (migración
+    sin aplicar) o falla la lectura, se sigue sin etiquetas: nunca rompe la generación."""
+    try:
+        rows = _all_rows(db.table("image_tags").select("drive_file_id,has_person,scene").eq(
+            "client_id", client_id
+        ).order("drive_file_id"))
+    except Exception:
+        logger.warning("No se pudieron leer las etiquetas de fotos del cliente %s", client_id, exc_info=True)
+        return {}
+    return {row["drive_file_id"]: {"persona": bool(row["has_person"]), "escena": row["scene"]}
+            for row in rows}
+
+
+def _save_tags(db, client_id: str, new_tags: dict[str, dict]) -> None:
+    if not new_tags:
+        return
+    try:
+        db.table("image_tags").upsert(
+            [{"client_id": client_id, "drive_file_id": file_id,
+              "has_person": tag["persona"], "scene": tag["escena"]}
+             for file_id, tag in new_tags.items()],
+            on_conflict="client_id,drive_file_id",
+        ).execute()
+    except Exception:
+        logger.warning("No se pudieron guardar las etiquetas de fotos del cliente %s", client_id, exc_info=True)
+
+
+def _ids_frescos(ids, historial: list[dict], ahora: datetime,
+                 semanas_cooldown: int = NO_REPEAT_WEEKS) -> set[str]:
+    """Fotos nunca usadas o cuyo cooldown ya venció (la misma regla de seleccionar_imagenes)."""
+    cutoff = ahora - timedelta(weeks=semanas_cooldown)
+    used = {row["drive_file_id"]: _parse_fecha(row.get("last_used_at")) for row in historial}
+    return {file_id for file_id in ids if used.get(file_id) is None or used[file_id] <= cutoff}
+
+
+def _escenas_recientes(historial: list[dict], tags: dict[str, dict], ahora: datetime) -> set[str]:
+    desde = ahora - timedelta(days=RECENT_DAYS)
+    scenes = set()
+    for row in historial:
+        used = _parse_fecha(row.get("last_used_at"))
+        tag = tags.get(row["drive_file_id"])
+        if used and used >= desde and tag and tag["escena"] != "otro":
+            scenes.add(tag["escena"])
+    return scenes
+
+
+def elegir_hilo(examinadas: list[tuple], tags: dict[str, dict], frescas: set[str],
+                escenas_recientes=frozenset()) -> list[tuple]:
+    """Elige las fotos del hilo en el orden de las historias: 3 SIN personas y la
+    4ª (la del CTA) CON persona, de escenas distintas entre sí y, si se puede, distintas
+    de las escenas usadas esa semana.
+
+    ``examinadas``: [(drive_file_id, nombre, bytes)] ya en orden de preferencia
+    (nunca usadas → cooldown vencido → recientes). Se usa la máxima cantidad posible
+    de ``frescas`` y solo el mínimo relleno reciente. Sin etiqueta = foto "desconocida": sirve de relleno
+    después de las que sí cumplen. Nunca falla por falta de etiquetas: en el peor caso
+    devuelve las primeras 4 en el orden recibido (como antes de a74)."""
+    if len(examinadas) < 4:
+        return list(examinadas)
+
+    def persona(item):
+        tag = tags.get(item[0])
+        return None if tag is None else tag["persona"]
+
+    def escena(item):
+        tag = tags.get(item[0])
+        return tag["escena"] if tag and tag["escena"] != "otro" else None
+
+    fresh_target = min(4, sum(item[0] in frescas for item in examinadas))
+    recent_scenes = set(escenas_recientes)
+    best_score, elegidas = None, []
+    # Evaluate the CTA together with the other three photos, so its scene is
+    # reserved before deciding which non-person photos make the final thread.
+    for group in combinations(enumerate(examinadas), 4):
+        if sum(item[0] in frescas for _, item in group) != fresh_target:
+            continue
+        for cta in group:
+            ordered = [entry for entry in group if entry[0] != cta[0]] + [cta]
+            people = [persona(item) for _, item in ordered]
+            scenes = {scene for _, item in ordered if (scene := escena(item))}
+            score = (
+                sum(value is not None and value is not (index == 3)
+                    for index, value in enumerate(people)),
+                sum(value is None for value in people),
+                -len(scenes - recent_scenes),
+                -len(scenes),
+                tuple(index for index, _ in ordered),
+            )
+            if best_score is None or score < best_score:
+                best_score = score
+                elegidas = [item for _, item in ordered]
+    return elegidas
+
+
+def _hilo_completo(examinadas: list[tuple], tags: dict[str, dict]) -> bool:
+    sin = sum(1 for item in examinadas if tags.get(item[0], {}).get("persona") is False)
+    con = sum(1 for item in examinadas if tags.get(item[0], {}).get("persona") is True)
+    return len(examinadas) >= 4 and sin >= 3 and con >= 1
+
+
+def _elegir_y_descargar_hilo(db, client_id: str, ranked: list[tuple], historial: list[dict],
+                             ahora: datetime, refresh_token: str | None) -> list[tuple]:
+    """Descarga y etiqueta fotos en tandas y devuelve las 4 elegidas (id, nombre, bytes)
+    en orden de historia. Si no se pueden etiquetar (sin clave, Claude caído, tabla sin
+    migrar), el resultado es el de antes de a74: las 4 primeras del ranking."""
+    tags = _load_tags(db, client_id)
+    examinadas: list[tuple] = []
+    posicion = 0
+    candidate_limit = min(len(ranked), IMAGE_EXAMINE_MAX)
+    while posicion < candidate_limit:
+        end = min(posicion + IMAGE_BATCH, candidate_limit)
+        tanda = ranked[posicion:end]
+        posicion = end
+        try:
+            filas = drive.download_images(tanda, refresh_token=refresh_token)
+        except Exception:
+            if len(examinadas) >= 4:
+                logger.warning("Se omitió una tanda opcional de fotos del cliente %s", client_id, exc_info=True)
+                break
+            # A fifth-or-later download can fail inside the very first batch,
+            # hiding the first four successful downloads. Recover that prefix;
+            # failures before four readable photos remain required errors.
+            filas = []
+            for item in tanda:
+                try:
+                    filas.extend(drive.download_images([item], refresh_token=refresh_token))
+                except Exception:
+                    if len(examinadas) + len(filas) < 4:
+                        raise
+                    logger.warning("Se omitió una foto opcional del cliente %s", client_id, exc_info=True)
+                    break
+        examinadas.extend(filas)
+        pendientes = [fila for fila in filas if fila[0] not in tags]
+        if pendientes:
+            nuevas = image_tags.classify_many(pendientes)
+            tags.update(nuevas)
+            _save_tags(db, client_id, nuevas)
+            if not nuevas and len(examinadas) >= 4:
+                break  # el clasificador no responde: no seguir descargando de más
+        if _hilo_completo(examinadas, tags):
+            break
+    frescas = _ids_frescos([fila[0] for fila in examinadas], historial, ahora)
+    return elegir_hilo(examinadas, tags, frescas, _escenas_recientes(historial, tags, ahora))
 
 
 def generate_for_client(db, row: dict, today: date) -> dict:
@@ -201,7 +355,7 @@ def generate_for_client(db, row: dict, today: date) -> dict:
         raise RuntimeError("No se pudo leer el historial de imágenes usadas") from exc
     now = datetime.now(timezone.utc)
     ranked, _ = seleccionar_imagenes(available, history, now, limite=None)
-    selected_rows = drive.download_images(ranked, limit=4, refresh_token=refresh_token)
+    selected_rows = _elegir_y_descargar_hilo(db, row["id"], ranked, history, now, refresh_token)
     if len(selected_rows) < 4:
         raise ValueError(
             f"sin imágenes legibles suficientes: {len(selected_rows)} disponibles; se requieren 4"
