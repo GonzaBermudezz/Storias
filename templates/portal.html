@@ -626,7 +626,7 @@
     .pm-assign-tools .client-search{margin:0;flex:1}
     .pm-assign-check{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg);cursor:pointer;white-space:nowrap}
     .pm-assign-all{margin:0 0 6px 2px;color:var(--muted)}
-    .pm-assign-list{max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:10px}
+    .pm-assign-list{height:320px;max-height:45vh;overflow:auto;border:1px solid var(--border);border-radius:10px}
     .pm-assign-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer}
     .pm-assign-row:last-child{border-bottom:0}
     .pm-assign-row:hover{background:var(--bg)}
@@ -648,6 +648,9 @@
     #home-pending-panel .home-panel-head{flex-wrap:wrap}
     .home-stats-note{margin:-6px 0 16px;font-size:11.5px;color:var(--muted)}
     #header-client.is-loading .header-meta{visibility:hidden}
+    .story-date{right:auto;left:7px;top:32px}
+    .story-edit-empty{display:grid;place-items:center;width:100%;height:100%;color:#9a9aae;font-size:13px}
+    .story-edit-empty.hidden{display:none}
   </style>
   <script>try{if(localStorage.getItem('storias.sidebarCollapsed')==='1')document.documentElement.classList.add('sidebar-collapsed')}catch(e){}</script>
   <script src="/static/portal.js" defer></script>
@@ -842,7 +845,7 @@
   <dialog id="story-dialog" class="story-edit">
     <div class="modal-head"><strong>Editar historia</strong><button id="close-story" class="icon-btn" aria-label="Cerrar">×</button></div>
     <div class="story-edit-body">
-      <div class="story-edit-preview"><img id="story-edit-img" src="" alt="Vista previa"></div>
+      <div class="story-edit-preview"><img id="story-edit-img" alt="Vista previa" class="hidden"><span class="story-edit-empty" id="story-edit-empty">Sin imagen</span></div>
       <div class="story-edit-panel">
         <textarea id="story-text"></textarea>
         <div class="team-field"><label for="story-font">Tipografía de esta historia</label><select id="story-font"><option value="">Predeterminada del cliente</option></select></div>

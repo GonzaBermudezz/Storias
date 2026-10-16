@@ -335,3 +335,15 @@ def test_portal_polish_handles_single_clients_loading_header_and_enfoques():
     assert "de ${total} clientes" not in source
     assert "$('enfoques-view').classList.contains('hidden') && state.client?.id" in source
     assert "#header-client.is-loading .header-meta" in page
+
+
+def test_portal_polish_shows_pending_approvals_and_empty_image_preview():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+
+    assert "function setStoryEditImage" in source
+    assert "toLocaleString('es-AR', {maximumFractionDigits: 1})" in source
+    assert "sin aprobar en ${queue.length}" in source
+    assert "$('story-edit-img').src" not in source
+    assert 'id="story-edit-empty"' in page
+    assert ".story-date{right:auto;left:7px;top:32px}" in page

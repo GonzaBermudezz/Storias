@@ -8,6 +8,11 @@
   function foldText(value) {
     return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
   }
+  function setStoryEditImage(url) {
+    const img = $('story-edit-img');
+    if (url) { img.src = url; img.classList.remove('hidden'); $('story-edit-empty').classList.add('hidden'); }
+    else { img.removeAttribute('src'); img.classList.add('hidden'); $('story-edit-empty').classList.remove('hidden'); }
+  }
   const ICONS = {
     house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/> <path d="M16 3.128a4 4 0 0 1 0 7.744"/> <path d="M22 21v-2a4 4 0 0 0-3-3.87"/> <circle cx="9" cy="7" r="4"/>',
@@ -162,6 +167,12 @@
     if (problems > 0) {
       $('home-subtitle').textContent = `${problems} cliente${problems === 1 ? ' necesita' : 's necesitan'} tu atención.`;
     } else if (healthKnown && summary) {
+      const queue = pendingQueue(); // ya respeta Todos/Míos
+      const waiting = queue.reduce((sum, client) => sum + (client.pending_count || 0), 0);
+      if (waiting > 0) {
+        $('home-subtitle').textContent = `Sin errores. Tenés ${waiting} historia${waiting === 1 ? '' : 's'} sin aprobar en ${queue.length} cliente${queue.length === 1 ? '' : 's'}.`;
+        return;
+      }
       const idle = (summary.clientes_sin_actividad || []).length;
       if (idle > 0) {
         $('home-subtitle').textContent = `Sin errores, pero ${idle} cliente${idle === 1 ? ' no tiene' : 's no tienen'} historias agendadas.`;
@@ -338,7 +349,7 @@
       setStat('stat-edicion', summary.historias_en_edicion, summary.historias_en_edicion === 0);
       setStat('stat-agendadas', summary.historias_agendadas, summary.historias_agendadas === 0);
       setStat('stat-publicadas', summary.historias_publicadas, summary.historias_publicadas === 0);
-      setStat('stat-promedio', summary.promedio_por_cliente, summary.promedio_por_cliente === 0);
+      setStat('stat-promedio', Number(summary.promedio_por_cliente).toLocaleString('es-AR', {maximumFractionDigits: 1}), summary.promedio_por_cliente === 0);
       setStat('stat-aprobacion', summary.aprobacion_pct === null ? '—' : `${summary.aprobacion_pct}%`, summary.aprobacion_pct === null);
     } else {
       const error = summaryResult.reason;
@@ -1985,7 +1996,7 @@
   function openStory(story, group) {
     if (storyIsLocked(story)) return;
     state.editingStory=story; $('story-text').value=story.text || '';
-    $('story-edit-img').src = story.image_url || '';
+    setStoryEditImage(story.image_url);
     // Only offer AI-generated text for manually-uploaded stories — never for
     // an AI-thread story, whose text is already carefully written per-slot.
     const isManual = !!group && !group.generation_week;
@@ -2005,7 +2016,7 @@
       const updated = await api(`/portal/historias/${encodeURIComponent(story.id)}/tipografia`, {method:'PATCH', body:JSON.stringify({font_choice:fontChoice})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id || story !== state.editingStory) return;
       Object.assign(story, updated);
-      $('story-edit-img').src = updated.image_url || '';
+      setStoryEditImage(updated.image_url);
       renderStories(); renderPlan();
       showMessage('Tipografía actualizada.');
     } catch(error) {
@@ -2023,7 +2034,7 @@
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id || story !== state.editingStory) return;
       Object.assign(story, updated);
       $('story-text').value = updated.text || '';
-      $('story-edit-img').src = updated.image_url || '';
+      setStoryEditImage(updated.image_url);
       $('story-font').value = updated.font_choice || ''; $('story-font').disabled = false;
       button.textContent = 'Generar otra vez';
       renderStories(); renderPlan();
