@@ -917,7 +917,8 @@ def test_generate_for_client_orders_photos_by_tags_and_only_classifies_new_ones(
         imagenes_editadas_url=[f"edited-{index}" for index in range(4)],
         drive_file_ids_usados=["file-1", "file-2", "file-3", "file-5"],
     )
-    db = Database([client()])
+    # Sin enfoque: es el escenario de a74 (con enfoque, a79 re-etiqueta las fotos sin producto).
+    db = Database([client(weekly_focus=None)])
     db.rows["image_tags"] = [
         {"client_id": "good", "drive_file_id": "file-0", "has_person": True, "scene": "ambiente"},
         {"client_id": "good", "drive_file_id": "file-1", "has_person": False, "scene": "producto"},
@@ -948,3 +949,244 @@ def test_generate_for_client_works_when_tags_cannot_be_read_or_saved(generation)
 
     assert result["created"] is True
     assert [image.drive_file_id for image in engine.call_args.args[1]] == ["file-0", "file-1", "file-2", "file-3"]
+
+
+# ---------------------------------------------------------------------------
+# a79: fotos que coinciden con el producto del enfoque
+# ---------------------------------------------------------------------------
+def test_es_relevante_compara_el_enfoque_con_la_ruta_y_el_producto():
+    enfoque = "Llegó la nueva Osmo Pocket"
+    assert jobs.es_relevante(enfoque, "Osmo Pocket/IMG_1.jpg", "")
+    assert jobs.es_relevante(enfoque, "IMG_9.jpg", "drone DJI Osmo")
+    assert not jobs.es_relevante(enfoque, "Garmin/IMG_2.jpg", "reloj Garmin")
+
+
+def test_es_relevante_ignora_las_palabras_genericas():
+    enfoque = "Black Friday: 6 cuotas sin interés en toda la web"
+    assert not jobs.es_relevante(enfoque, "Osmo Pocket/IMG_1.jpg", "")
+    assert not jobs.es_relevante(enfoque, "promo-black-friday.jpg", "cuotas sin interés")
+    assert not jobs.es_relevante(None, "Osmo Pocket/IMG_1.jpg", "osmo")
+    assert not jobs.es_relevante("", "Osmo Pocket/IMG_1.jpg", "osmo")
+
+
+def test_es_relevante_no_distingue_tildes_ni_mayusculas():
+    assert jobs.es_relevante("OSMO", "osmo/img.jpg", "")
+    assert jobs.es_relevante("cámara nueva", "Camara/IMG_1.jpg", "")
+
+
+def test_es_relevante_cuenta_codigos_pero_no_numeros_sueltos():
+    assert jobs.es_relevante("Llegó el X5", "Insta360 X5/IMG_1.jpg", "")
+    assert not jobs.es_relevante("Nuevo modelo 2031", "IMG_2031.jpg", "")
+
+
+def test_elegir_hilo_prefiere_las_fotos_del_producto_aunque_sean_menos_frescas():
+    examinadas = _rows("f1", "f2", "f3", "r1", "r2", "r3", "p")
+    tags = {"f1": _tag(False, "producto"), "f2": _tag(False, "detalle"), "f3": _tag(False, "exterior"),
+            "r1": _tag(False, "producto"), "r2": _tag(False, "detalle"), "r3": _tag(False, "exterior"),
+            "p": _tag(True, "ambiente")}
+    frescas = {"f1", "f2", "f3", "p"}
+
+    elegidas = jobs.elegir_hilo(examinadas, tags, frescas, relevantes={"r1", "r2", "r3"})
+
+    assert [r[0] for r in elegidas] == ["r1", "r2", "r3", "p"]
+    # Sin relevantes, como en a74, ganan las frescas.
+    assert [r[0] for r in jobs.elegir_hilo(examinadas, tags, frescas)] == ["f1", "f2", "f3", "p"]
+
+
+def test_elegir_hilo_con_relevantes_mantiene_la_regla_de_persona():
+    examinadas = _rows("r1", "r2", "r3", "r4", "p")
+    tags = {"r1": _tag(False, "producto"), "r2": _tag(False, "detalle"), "r3": _tag(False, "exterior"),
+            "r4": _tag(False, "ambiente"), "p": _tag(True, "ambiente")}
+    relevantes = {"r1", "r2", "r3", "r4"}
+
+    elegidas = jobs.elegir_hilo(examinadas, tags, {r[0] for r in examinadas}, relevantes=relevantes)
+
+    ids = [r[0] for r in elegidas]
+    # 4 relevantes sin persona: igual la del CTA es la de persona, aunque no sea relevante.
+    assert ids[3] == "p"
+    assert all(tags[i]["persona"] is False for i in ids[:3])
+
+
+def test_elegir_hilo_con_relevantes_vacias_se_comporta_como_antes():
+    examinadas = _rows("a", "b", "c", "d", "e", "f")
+    tags = {"a": _tag(True, "ambiente"), "b": _tag(False, "producto"), "c": _tag(False, "producto"),
+            "d": _tag(False, "detalle"), "e": _tag(False, "exterior"), "f": _tag(True, "producto")}
+    frescas = {"a", "b", "c", "d"}
+
+    assert jobs.elegir_hilo(examinadas, tags, frescas, relevantes=frozenset()) == jobs.elegir_hilo(
+        examinadas, tags, frescas)
+
+
+class _TagsQuery(Query):
+    def select(self, fields="", *args):
+        self.fields = fields
+        return self
+
+    def upsert(self, rows, on_conflict=None):
+        self.op, self.values = "upsert", rows
+        return self
+
+    def execute(self):
+        db = self.db
+        if self.op == "upsert":
+            db.upserts.append(deepcopy(self.values))
+            if db.fail_upserts:
+                db.fail_upserts -= 1
+                raise RuntimeError("column subject does not exist")
+            return SimpleNamespace(data=self.values)
+        if self.name == "image_tags" and self.op is None:
+            db.tag_selects.append(self.fields)
+            if db.fail_selects:
+                db.fail_selects -= 1
+                raise RuntimeError("column subject does not exist")
+        return super().execute()
+
+
+class _TagsDatabase(Database):
+    """Database with image_tags upsert support and injectable failures for the
+    a79 'subject' column (simulating the migration not applied yet)."""
+    def __init__(self, *args, fail_selects=0, fail_upserts=0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fail_selects, self.fail_upserts = fail_selects, fail_upserts
+        self.tag_selects, self.upserts = [], []
+
+    def table(self, name): return _TagsQuery(self, name)
+
+
+def test_load_tags_devuelve_el_producto_desde_subject():
+    db = _TagsDatabase()
+    db.rows["image_tags"] = [
+        {"client_id": "good", "drive_file_id": "f1", "has_person": False, "scene": "producto", "subject": "drone DJI"},
+        {"client_id": "good", "drive_file_id": "f2", "has_person": True, "scene": "ambiente", "subject": None},
+    ]
+
+    tags = jobs._load_tags(db, "good")
+
+    assert tags == {"f1": {"persona": False, "escena": "producto", "producto": "drone DJI"},
+                    "f2": {"persona": True, "escena": "ambiente", "producto": None}}
+    assert db.tag_selects == ["drive_file_id,has_person,scene,subject"]
+
+
+def test_load_tags_sin_columna_subject_reintenta_sin_ella():
+    db = _TagsDatabase(fail_selects=1)
+    db.rows["image_tags"] = [
+        {"client_id": "good", "drive_file_id": "f1", "has_person": False, "scene": "producto"},
+    ]
+
+    tags = jobs._load_tags(db, "good")
+
+    assert tags == {"f1": {"persona": False, "escena": "producto", "producto": None}}
+    assert db.tag_selects == ["drive_file_id,has_person,scene,subject", "drive_file_id,has_person,scene"]
+
+
+def test_load_tags_si_falla_todo_devuelve_vacio():
+    assert jobs._load_tags(_TagsDatabase(fail_selects=2), "good") == {}
+
+
+def test_save_tags_incluye_subject():
+    db = _TagsDatabase()
+
+    jobs._save_tags(db, "good", {"f1": {"persona": False, "escena": "producto", "producto": "drone DJI"},
+                                 "f2": {"persona": True, "escena": "ambiente"}})
+
+    assert db.upserts == [[
+        {"client_id": "good", "drive_file_id": "f1", "has_person": False, "scene": "producto", "subject": "drone DJI"},
+        {"client_id": "good", "drive_file_id": "f2", "has_person": True, "scene": "ambiente", "subject": ""},
+    ]]
+
+
+def test_save_tags_sin_columna_subject_reintenta_sin_ella():
+    db = _TagsDatabase(fail_upserts=1)
+
+    jobs._save_tags(db, "good", {"f1": {"persona": False, "escena": "producto", "producto": "drone"}})
+
+    assert len(db.upserts) == 2
+    assert "subject" in db.upserts[0][0]
+    assert db.upserts[1] == [{"client_id": "good", "drive_file_id": "f1", "has_person": False, "scene": "producto"}]
+
+
+def test_save_tags_nunca_levanta():
+    jobs._save_tags(_TagsDatabase(fail_upserts=2), "good", {"f1": {"persona": False, "escena": "otro"}})
+
+
+def _echo_engine(engine):
+    """The engine mock returns the IDs of the photos it was given, so the
+    persistence check accepts whatever selection the job made."""
+    engine.side_effect = lambda config, imagenes: HiloGenerado(
+        historias=[f"Story {index}" for index in range(4)],
+        imagenes_originales_url=[f"raw-{index}" for index in range(4)],
+        imagenes_editadas_url=[f"edited-{index}" for index in range(4)],
+        drive_file_ids_usados=[image.drive_file_id for image in imagenes],
+    )
+
+
+def _osmo_folder():
+    # 4 fotos generales primero (en el orden de Drive) y 4 de la subcarpeta del producto.
+    return ([(f"gen-{i}", f"General/IMG_{i}.jpg") for i in range(4)]
+            + [(f"osmo-{i}", f"Osmo Pocket/IMG_{i}.jpg") for i in range(4)])
+
+
+def test_generate_for_client_con_enfoque_prioriza_fotos_del_producto(generation, monkeypatch):
+    drive_mock, engine = generation
+    _echo_engine(engine)
+    drive_mock.return_value = _osmo_folder()
+    db = _TagsDatabase([client(weekly_focus="Llegó la nueva Osmo Pocket")])
+    escenas = {"osmo-0": "producto", "osmo-1": "detalle", "osmo-2": "exterior", "osmo-3": "ambiente"}
+    # Etiquetadas con a74 (sin subject): con enfoque se vuelven a etiquetar.
+    db.rows["image_tags"] = [
+        {"client_id": "good", "drive_file_id": file_id, "has_person": file_id == "osmo-3", "scene": scene}
+        for file_id, scene in escenas.items()
+    ]
+    classified = []
+
+    def classify_many(rows):
+        classified.extend(row[0] for row in rows)
+        return {row[0]: {"persona": row[0] == "osmo-3", "escena": escenas.get(row[0], "otro"),
+                         "producto": "cámara DJI Osmo Pocket" if row[0] in escenas else ""}
+                for row in rows}
+
+    monkeypatch.setattr(jobs.image_tags, "classify_many", classify_many)
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result["created"] is True
+    assert [image.drive_file_id for image in engine.call_args.args[1]] == ["osmo-0", "osmo-1", "osmo-2", "osmo-3"]
+    # Las gen-* no tenían etiqueta (se clasifican siempre); las osmo-* sí tenían, pero de a74
+    # (sin producto): se re-etiquetan porque hay enfoque.
+    assert sorted(classified) == [f"gen-{i}" for i in range(4)] + [f"osmo-{i}" for i in range(4)]
+    assert "generation_error" not in db.rows["clients"][0]
+
+
+def test_generate_for_client_sin_enfoque_no_reetiqueta_fotos_viejas(generation, monkeypatch):
+    drive_mock, engine = generation
+    _echo_engine(engine)
+    drive_mock.return_value = [("old", "old.jpg"), ("n1", "n1.jpg"), ("n2", "n2.jpg"), ("n3", "n3.jpg")]
+    db = _TagsDatabase([client(weekly_focus=None)])
+    db.rows["image_tags"] = [{"client_id": "good", "drive_file_id": "old", "has_person": False, "scene": "producto"}]
+    classified = []
+
+    def classify_many(rows):
+        classified.extend(row[0] for row in rows)
+        return {}
+
+    monkeypatch.setattr(jobs.image_tags, "classify_many", classify_many)
+
+    jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert "old" not in classified
+    assert sorted(classified) == ["n1", "n2", "n3"]
+
+
+def test_generate_for_client_sin_coincidencias_usa_fotos_generales_sin_error(generation, caplog):
+    drive_mock, engine = generation
+    _echo_engine(engine)
+    drive_mock.return_value = _osmo_folder()
+    db = Database([client(weekly_focus="Llegó el nuevo Kindle Paperwhite")])
+
+    with caplog.at_level("INFO", logger=jobs.logger.name):
+        result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result["created"] is True
+    assert len(engine.call_args.args[1]) == 4
+    assert "generation_error" not in db.rows["clients"][0]
+    assert "Sin fotos que coincidan con el enfoque" in caplog.text

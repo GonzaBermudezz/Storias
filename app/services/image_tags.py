@@ -24,14 +24,19 @@ logger = logging.getLogger(__name__)
 SCENES = ("producto", "ambiente", "detalle", "exterior", "grafico", "otro")
 _MAX_SIDE = 768
 _MAX_WORKERS = 4
+_MAX_PRODUCTO = 60
 _PROMPT = (
-    "Mirá la foto y devolvé SOLO un JSON con dos campos, sin texto extra:\n"
-    '{"persona": true o false, "escena": "<una de: producto, ambiente, detalle, exterior, grafico, otro>"}\n\n'
+    "Mirá la foto y devolvé SOLO un JSON con tres campos, sin texto extra:\n"
+    '{"persona": true o false, "escena": "<una de: producto, ambiente, detalle, exterior, grafico, otro>", '
+    '"producto": "<texto corto>"}\n\n'
     "persona = true SOLO si hay una persona claramente visible (su cara o su cuerpo es protagonista). "
     "Manos solas, siluetas lejanas o personas muy chicas de fondo = false.\n"
     "escena: producto = objeto o trabajo terminado en primer plano; ambiente = vista general de un "
     "espacio interior; detalle = primer plano de un material, textura o pieza; exterior = fachada, "
-    "calle o paisaje; grafico = texto, logo, diseño o captura de pantalla; otro = nada de lo anterior."
+    "calle o paisaje; grafico = texto, logo, diseño o captura de pantalla; otro = nada de lo anterior.\n"
+    "producto = el nombre corto del objeto o producto principal que se ve, con la marca y el modelo "
+    "SOLO si se leen en la foto o son inconfundibles (ej.: \"reloj Garmin Forerunner\", \"drone DJI\", "
+    "\"camiseta\"). Si no hay un producto claro, dejalo vacío (\"\")."
 )
 
 
@@ -44,7 +49,8 @@ def _preparar(image_bytes: bytes) -> str:
 
 
 def parse_tag(text: str | None) -> dict | None:
-    """Convierte la respuesta de Claude en {"persona": bool, "escena": str} o None."""
+    """Convierte la respuesta de Claude en {"persona": bool, "escena": str, "producto": str}
+    o None. ``producto`` es opcional en la respuesta: si falta o no es texto, queda ""."""
     match = re.search(r"\{.*\}", text or "", re.DOTALL)
     if not match:
         return None
@@ -55,7 +61,10 @@ def parse_tag(text: str | None) -> dict | None:
     if not isinstance(data, dict) or not isinstance(data.get("persona"), bool):
         return None
     escena = str(data.get("escena", "")).strip().lower()
-    return {"persona": data["persona"], "escena": escena if escena in SCENES else "otro"}
+    producto = data.get("producto")
+    producto = producto.strip()[:_MAX_PRODUCTO] if isinstance(producto, str) else ""
+    return {"persona": data["persona"], "escena": escena if escena in SCENES else "otro",
+            "producto": producto}
 
 
 def classify_image(image_bytes: bytes) -> dict | None:
@@ -65,8 +74,8 @@ def classify_image(image_bytes: bytes) -> dict | None:
     try:
         client = anthropic.Anthropic(api_key=api_key, timeout=30.0, max_retries=1)
         response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=60,
+            model=os.getenv("IMAGE_TAG_MODEL") or CLAUDE_MODEL,
+            max_tokens=100,
             messages=[{
                 "role": "user",
                 "content": [

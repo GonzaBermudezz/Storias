@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from itertools import combinations
 import logging
+import re
+import unicodedata
 from zoneinfo import ZoneInfo
 
 from app.config import get_settings
@@ -172,25 +174,42 @@ def seleccionar_imagenes(disponibles: list[tuple], historial: list[dict],
 def _load_tags(db, client_id: str) -> dict[str, dict]:
     """Etiquetas ya guardadas del cliente. Si la tabla no existe todavía (migración
     sin aplicar) o falla la lectura, se sigue sin etiquetas: nunca rompe la generación."""
-    try:
-        rows = _all_rows(db.table("image_tags").select("drive_file_id,has_person,scene").eq(
-            "client_id", client_id
-        ).order("drive_file_id"))
-    except Exception:
-        logger.warning("No se pudieron leer las etiquetas de fotos del cliente %s", client_id, exc_info=True)
+    rows = None
+    # Con "subject" primero; si falla (columna de a79 sin migrar), una vez sin ella.
+    for fields in ("drive_file_id,has_person,scene,subject", "drive_file_id,has_person,scene"):
+        try:
+            rows = _all_rows(db.table("image_tags").select(fields).eq(
+                "client_id", client_id
+            ).order("drive_file_id"))
+            break
+        except Exception:
+            logger.warning("No se pudieron leer las etiquetas de fotos del cliente %s (%s)",
+                           client_id, fields, exc_info=True)
+    if rows is None:
         return {}
-    return {row["drive_file_id"]: {"persona": bool(row["has_person"]), "escena": row["scene"]}
+    # producto: None = todavía sin reconocer (o columna sin migrar); "" = sin producto claro.
+    return {row["drive_file_id"]: {"persona": bool(row["has_person"]), "escena": row["scene"],
+                                   "producto": row.get("subject")}
             for row in rows}
 
 
 def _save_tags(db, client_id: str, new_tags: dict[str, dict]) -> None:
     if not new_tags:
         return
+    rows = [{"client_id": client_id, "drive_file_id": file_id,
+             "has_person": tag["persona"], "scene": tag["escena"],
+             "subject": tag.get("producto") or ""}
+            for file_id, tag in new_tags.items()]
     try:
+        db.table("image_tags").upsert(rows, on_conflict="client_id,drive_file_id").execute()
+        return
+    except Exception:
+        logger.warning("No se pudieron guardar las etiquetas con producto del cliente %s; "
+                       "se reintenta sin producto", client_id, exc_info=True)
+    try:
+        # Columna "subject" de a79 sin migrar: se guarda lo de a74.
         db.table("image_tags").upsert(
-            [{"client_id": client_id, "drive_file_id": file_id,
-              "has_person": tag["persona"], "scene": tag["escena"]}
-             for file_id, tag in new_tags.items()],
+            [{key: value for key, value in row.items() if key != "subject"} for row in rows],
             on_conflict="client_id,drive_file_id",
         ).execute()
     except Exception:
@@ -205,6 +224,36 @@ def _ids_frescos(ids, historial: list[dict], ahora: datetime,
     return {file_id for file_id in ids if used.get(file_id) is None or used[file_id] <= cutoff}
 
 
+_STOP_ENFOQUE = frozenset((
+    "llego", "nueva", "nuevo", "nuevas", "nuevos", "para", "con", "sin", "del", "los", "las", "una", "uno",
+    "que", "por", "hoy", "esta", "este", "semana", "cuota", "cuotas", "interes", "venta", "ventas", "promo",
+    "promocion", "descuento", "black", "friday", "envio", "gratis", "todo", "toda", "todos", "web", "tienda",
+    "stock", "original", "garantia", "como", "cada", "armamos", "pedido", "cerramos", "esta", "mas",
+    "jpg", "jpeg", "png", "webp", "img", "dsc", "foto", "fotos", "imagen", "image",
+))
+
+
+def _tokens_producto(text: str | None) -> set[str]:
+    """Palabras que identifican un producto: sin tildes, en minúscula, sin las genéricas
+    ('nueva', 'cuotas'…), sin números sueltos (contadores de cámara). Códigos como 'x5' sí cuentan."""
+    folded = unicodedata.normalize("NFKD", (text or "").lower())
+    folded = "".join(ch for ch in folded if not unicodedata.combining(ch))
+    out = set()
+    for token in re.findall(r"[a-z0-9]+", folded):
+        if token in _STOP_ENFOQUE or token.isdigit():
+            continue
+        if len(token) >= 3 or (len(token) == 2 and any(c.isdigit() for c in token)):
+            out.add(token)
+    return out
+
+
+def es_relevante(enfoque: str | None, nombre: str, producto: str | None) -> bool:
+    """¿La foto parece ser del producto del que habla el enfoque? Compara las palabras del
+    enfoque con la ruta del archivo (incluye la subcarpeta) y con el producto que vio Claude."""
+    palabras = _tokens_producto(enfoque)
+    return bool(palabras) and bool(palabras & _tokens_producto(f"{nombre} {producto or ''}"))
+
+
 def _escenas_recientes(historial: list[dict], tags: dict[str, dict], ahora: datetime) -> set[str]:
     desde = ahora - timedelta(days=RECENT_DAYS)
     scenes = set()
@@ -217,7 +266,7 @@ def _escenas_recientes(historial: list[dict], tags: dict[str, dict], ahora: date
 
 
 def elegir_hilo(examinadas: list[tuple], tags: dict[str, dict], frescas: set[str],
-                escenas_recientes=frozenset()) -> list[tuple]:
+                escenas_recientes=frozenset(), relevantes=frozenset()) -> list[tuple]:
     """Elige las fotos del hilo en el orden de las historias: 3 SIN personas y la
     4ª (la del CTA) CON persona, de escenas distintas entre sí y, si se puede, distintas
     de las escenas usadas esa semana.
@@ -226,7 +275,9 @@ def elegir_hilo(examinadas: list[tuple], tags: dict[str, dict], frescas: set[str
     (nunca usadas → cooldown vencido → recientes). Se usa la máxima cantidad posible
     de ``frescas`` y solo el mínimo relleno reciente. Sin etiqueta = foto "desconocida": sirve de relleno
     después de las que sí cumplen. Nunca falla por falta de etiquetas: en el peor caso
-    devuelve las primeras 4 en el orden recibido (como antes de a74)."""
+    devuelve las primeras 4 en el orden recibido (como antes de a74).
+    ``relevantes`` (a79): ids de fotos del producto del enfoque. Si hay, pesan más que la
+    frescura (sin el filtro de frescas), siempre debajo de la regla de persona; vacío = igual que antes."""
     if len(examinadas) < 4:
         return list(examinadas)
 
@@ -244,20 +295,32 @@ def elegir_hilo(examinadas: list[tuple], tags: dict[str, dict], frescas: set[str
     # Evaluate the CTA together with the other three photos, so its scene is
     # reserved before deciding which non-person photos make the final thread.
     for group in combinations(enumerate(examinadas), 4):
-        if sum(item[0] in frescas for _, item in group) != fresh_target:
+        if not relevantes and sum(item[0] in frescas for _, item in group) != fresh_target:
             continue
         for cta in group:
             ordered = [entry for entry in group if entry[0] != cta[0]] + [cta]
             people = [persona(item) for _, item in ordered]
             scenes = {scene for _, item in ordered if (scene := escena(item))}
-            score = (
-                sum(value is not None and value is not (index == 3)
-                    for index, value in enumerate(people)),
-                sum(value is None for value in people),
-                -len(scenes - recent_scenes),
-                -len(scenes),
-                tuple(index for index, _ in ordered),
-            )
+            if relevantes:
+                score = (
+                    sum(value is not None and value is not (index == 3)
+                        for index, value in enumerate(people)),
+                    -sum(item[0] in relevantes for _, item in ordered),
+                    -sum(item[0] in frescas for _, item in ordered),
+                    sum(value is None for value in people),
+                    -len(scenes - recent_scenes),
+                    -len(scenes),
+                    tuple(index for index, _ in ordered),
+                )
+            else:
+                score = (
+                    sum(value is not None and value is not (index == 3)
+                        for index, value in enumerate(people)),
+                    sum(value is None for value in people),
+                    -len(scenes - recent_scenes),
+                    -len(scenes),
+                    tuple(index for index, _ in ordered),
+                )
             if best_score is None or score < best_score:
                 best_score = score
                 elegidas = [item for _, item in ordered]
@@ -271,11 +334,19 @@ def _hilo_completo(examinadas: list[tuple], tags: dict[str, dict]) -> bool:
 
 
 def _elegir_y_descargar_hilo(db, client_id: str, ranked: list[tuple], historial: list[dict],
-                             ahora: datetime, refresh_token: str | None) -> list[tuple]:
+                             ahora: datetime, refresh_token: str | None,
+                             enfoque: str | None = None) -> list[tuple]:
     """Descarga y etiqueta fotos en tandas y devuelve las 4 elegidas (id, nombre, bytes)
     en orden de historia. Si no se pueden etiquetar (sin clave, Claude caído, tabla sin
-    migrar), el resultado es el de antes de a74: las 4 primeras del ranking."""
+    migrar), el resultado es el de antes de a74: las 4 primeras del ranking.
+    Con ``enfoque`` (a79), primero se examinan las fotos que ya parecen del producto y se
+    prefieren en el hilo; las etiquetadas sin producto (a74) se vuelven a etiquetar."""
     tags = _load_tags(db, client_id)
+    if enfoque:
+        def _relevante(item) -> bool:
+            return es_relevante(enfoque, item[1], tags.get(item[0], {}).get("producto"))
+        # Partición estable: conserva el orden de frescura dentro de cada grupo.
+        ranked = [item for item in ranked if _relevante(item)] + [item for item in ranked if not _relevante(item)]
     examinadas: list[tuple] = []
     posicion = 0
     candidate_limit = min(len(ranked), IMAGE_EXAMINE_MAX)
@@ -302,7 +373,8 @@ def _elegir_y_descargar_hilo(db, client_id: str, ranked: list[tuple], historial:
                     logger.warning("Se omitió una foto opcional del cliente %s", client_id, exc_info=True)
                     break
         examinadas.extend(filas)
-        pendientes = [fila for fila in filas if fila[0] not in tags]
+        pendientes = [fila for fila in filas if fila[0] not in tags
+                      or (enfoque and tags[fila[0]].get("producto") is None)]
         if pendientes:
             nuevas = image_tags.classify_many(pendientes)
             tags.update(nuevas)
@@ -312,7 +384,11 @@ def _elegir_y_descargar_hilo(db, client_id: str, ranked: list[tuple], historial:
         if _hilo_completo(examinadas, tags):
             break
     frescas = _ids_frescos([fila[0] for fila in examinadas], historial, ahora)
-    return elegir_hilo(examinadas, tags, frescas, _escenas_recientes(historial, tags, ahora))
+    relevantes = {file_id for file_id, nombre, _ in examinadas
+                  if enfoque and es_relevante(enfoque, nombre, tags.get(file_id, {}).get("producto"))}
+    if enfoque and not relevantes:
+        logger.info("Sin fotos que coincidan con el enfoque del cliente %s; se usan fotos generales", client_id)
+    return elegir_hilo(examinadas, tags, frescas, _escenas_recientes(historial, tags, ahora), relevantes)
 
 
 def generate_for_client(db, row: dict, today: date) -> dict:
@@ -356,7 +432,8 @@ def generate_for_client(db, row: dict, today: date) -> dict:
         raise RuntimeError("No se pudo leer el historial de imágenes usadas") from exc
     now = datetime.now(timezone.utc)
     ranked, _ = seleccionar_imagenes(available, history, now, limite=None)
-    selected_rows = _elegir_y_descargar_hilo(db, row["id"], ranked, history, now, refresh_token)
+    selected_rows = _elegir_y_descargar_hilo(db, row["id"], ranked, history, now, refresh_token,
+                                             enfoque=config.weekly_focus)
     if len(selected_rows) < 4:
         raise ValueError(
             f"sin imágenes legibles suficientes: {len(selected_rows)} disponibles; se requieren 4"

@@ -82,23 +82,48 @@ def _drive_client(refresh_token: str | None = None):
     return build("drive", "v3", http=http, cache_discovery=False)
 
 
+_FOLDER_MIME = "application/vnd.google-apps.folder"
+_MAX_SUBFOLDERS = 50
+
+
+def _escape_query(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _list_all(files, query: str) -> list[dict]:
+    items, token = [], None
+    while True:
+        page = files.list(
+            q=query, fields="nextPageToken,files(id,name)", pageSize=1000, pageToken=token,
+            supportsAllDrives=True, includeItemsFromAllDrives=True,
+        ).execute()
+        items.extend(page.get("files", []))
+        token = page.get("nextPageToken")
+        if not token:
+            return items
+
+
 def _image_files(drive_folder_id: str, refresh_token: str | None = None):
     if not drive_folder_id:
         raise ValueError("drive_folder_id is required")
-    folder = drive_folder_id.replace("\\", "\\\\").replace("'", "\\'")
     files = _drive_client(refresh_token).files()
-    metadata = []
-    token = None
-    while True:
-        page = files.list(
-            q=f"'{folder}' in parents and trashed = false and mimeType contains 'image/'",
-            fields="nextPageToken,files(id,name)", pageSize=1000, pageToken=token,
-            supportsAllDrives=True, includeItemsFromAllDrives=True,
-        ).execute()
-        metadata.extend(page.get("files", []))
-        token = page.get("nextPageToken")
-        if not token:
-            break
+
+    def images_in(folder_id: str) -> list[dict]:
+        return _list_all(
+            files, f"'{_escape_query(folder_id)}' in parents and trashed = false and mimeType contains 'image/'")
+
+    metadata = images_in(drive_folder_id)
+    # Un nivel de subcarpetas: el nombre de la subcarpeta viaja en el nombre de la
+    # foto ("Osmo Pocket/IMG_1.jpg") y sirve para saber de qué producto es.
+    folders = _list_all(
+        files, f"'{_escape_query(drive_folder_id)}' in parents and trashed = false and mimeType = '{_FOLDER_MIME}'")
+    for folder in sorted(folders, key=lambda item: (item["name"], item["id"]))[:_MAX_SUBFOLDERS]:
+        try:
+            for item in images_in(folder["id"]):
+                metadata.append({"id": item["id"], "name": f"{folder['name']}/{item['name']}"})
+        except Exception:
+            # Una subcarpeta ilegible no puede romper el resto del pool.
+            logger.warning("No se pudo leer la subcarpeta %s de Drive", folder["id"], exc_info=True)
     return files, sorted(metadata, key=lambda item: (item["name"], item["id"]))
 
 
