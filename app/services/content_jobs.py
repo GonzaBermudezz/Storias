@@ -227,7 +227,7 @@ def _ids_frescos(ids, historial: list[dict], ahora: datetime,
 _STOP_ENFOQUE = frozenset((
     "llego", "nueva", "nuevo", "nuevas", "nuevos", "para", "con", "sin", "del", "los", "las", "una", "uno",
     "que", "por", "hoy", "esta", "este", "semana", "cuota", "cuotas", "interes", "venta", "ventas", "promo",
-    "promocion", "descuento", "black", "friday", "envio", "gratis", "todo", "toda", "todos", "web", "tienda",
+    "promocion", "promos", "descuento", "black", "friday", "envio", "gratis", "todo", "toda", "todos", "web", "tienda",
     "stock", "original", "garantia", "como", "cada", "armamos", "pedido", "cerramos", "esta", "mas",
     "jpg", "jpeg", "png", "webp", "img", "dsc", "foto", "fotos", "imagen", "image",
 ))
@@ -252,6 +252,21 @@ def es_relevante(enfoque: str | None, nombre: str, producto: str | None) -> bool
     enfoque con la ruta del archivo (incluye la subcarpeta) y con el producto que vio Claude."""
     palabras = _tokens_producto(enfoque)
     return bool(palabras) and bool(palabras & _tokens_producto(f"{nombre} {producto or ''}"))
+
+
+def tema_de_la_semana(topics: list[str] | None, client_id: str, today: date) -> str | None:
+    """Tema que toca esta semana, por rotación (no al azar): recorre todos los temas y no
+    repite el mismo dos semanas seguidas. Regenerar la misma semana da el mismo tema.
+    El desplazamiento sale de los bytes del client_id (hash() cambia en cada proceso).
+
+    La semana es el número absoluto de semana lunes–domingo (date(1, 1, 1) es lunes), no
+    año*53 + semana ISO: esa cuenta salta de a 2 al cerrar un año de 52 semanas y con
+    2 temas repetiría el mismo tema dos semanas seguidas."""
+    limpios = [topic.strip() for topic in (topics or []) if isinstance(topic, str) and topic.strip()]
+    if not limpios:
+        return None
+    semana = (today.toordinal() - 1) // 7
+    return limpios[(semana + sum(client_id.encode("utf-8"))) % len(limpios)]
 
 
 def _escenas_recientes(historial: list[dict], tags: dict[str, dict], ahora: datetime) -> set[str]:
@@ -339,7 +354,7 @@ def _elegir_y_descargar_hilo(db, client_id: str, ranked: list[tuple], historial:
     """Descarga y etiqueta fotos en tandas y devuelve las 4 elegidas (id, nombre, bytes)
     en orden de historia. Si no se pueden etiquetar (sin clave, Claude caído, tabla sin
     migrar), el resultado es el de antes de a74: las 4 primeras del ranking.
-    Con ``enfoque`` (a79), primero se examinan las fotos que ya parecen del producto y se
+    Con ``enfoque`` (a79: enfoque o tema de la semana, a80), primero se examinan las fotos que ya parecen del producto y se
     prefieren en el hilo; las etiquetadas sin producto (a74) se vuelven a etiquetar."""
     tags = _load_tags(db, client_id)
     if enfoque:
@@ -418,6 +433,9 @@ def generate_for_client(db, row: dict, today: date) -> dict:
         db.table("story_groups").delete().eq("id", group_id).execute()
 
     config = build_content_config(row)
+    tema = None if config.weekly_focus else tema_de_la_semana(config.topics, row["id"], today)
+    if tema:
+        config = config.model_copy(update={"tema_elegido": tema})
     encrypted_refresh_token = row.get("drive_refresh_token_encrypted")
     refresh_token = decrypt(encrypted_refresh_token) if encrypted_refresh_token else None
     available = drive.list_image_metadata(row.get("drive_folder_id"), refresh_token)
@@ -433,7 +451,7 @@ def generate_for_client(db, row: dict, today: date) -> dict:
     now = datetime.now(timezone.utc)
     ranked, _ = seleccionar_imagenes(available, history, now, limite=None)
     selected_rows = _elegir_y_descargar_hilo(db, row["id"], ranked, history, now, refresh_token,
-                                             enfoque=config.weekly_focus)
+                                             enfoque=config.weekly_focus or config.tema_elegido)
     if len(selected_rows) < 4:
         raise ValueError(
             f"sin imágenes legibles suficientes: {len(selected_rows)} disponibles; se requieren 4"

@@ -153,9 +153,12 @@ def _armar_prompt(config: ClientContentConfig) -> str:
 
 
 def _elegir_tema(config: ClientContentConfig) -> str:
-    """Prioridad: weekly_focus > random de topics > fallback generico."""
+    """Prioridad: weekly_focus > tema_elegido (lo decide el portal, para que las fotos
+    coincidan) > random de topics > fallback generico."""
     if config.weekly_focus:
         return config.weekly_focus
+    if config.tema_elegido:
+        return config.tema_elegido
     if config.topics:
         return random.choice(config.topics)
     return TEMA_FALLBACK

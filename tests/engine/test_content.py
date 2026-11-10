@@ -264,6 +264,33 @@ def test_elegir_tema_sin_nada_devuelve_fallback():
     assert _elegir_tema(config_cuan(topics=None)) == TEMA_FALLBACK
 
 
+def test_elegir_tema_usa_el_tema_elegido_antes_que_el_random(monkeypatch):
+    def no_random(_):
+        raise AssertionError("random.choice no debería llamarse con tema_elegido")
+
+    monkeypatch.setattr(content.random, "choice", no_random)
+    config = config_cuan(tema_elegido="Garmin para running")
+
+    assert all(_elegir_tema(config) == "Garmin para running" for _ in range(20))
+
+
+def test_elegir_tema_weekly_focus_gana_al_tema_elegido():
+    config = config_cuan(weekly_focus="cerramos una venta", tema_elegido="Garmin para running")
+    assert _elegir_tema(config) == "cerramos una venta"
+
+
+def test_elegir_tema_sin_tema_elegido_sigue_igual():
+    assert _elegir_tema(config_cuan(tema_elegido=None)) in TOPICS_CUAN
+    assert _elegir_tema(config_cuan(tema_elegido=None, topics=None)) == TEMA_FALLBACK
+
+
+def test_prompt_con_tema_elegido_no_es_obligatorio():
+    prompt = _armar_prompt(config_cuan(tema_elegido="Garmin para running"))
+
+    assert "sobre este tema: Garmin para running" in prompt
+    assert "(obligatorio esta semana)" not in prompt
+
+
 def test_prompt_generalizado_no_menciona_cocinas_por_defecto():
     prompt = _armar_prompt(config_cuan(weekly_focus="campaña de mes de aniversario"))
     assert "el diferencial de CUAN" in prompt  # por config.nombre_negocio

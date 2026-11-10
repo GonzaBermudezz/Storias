@@ -26,7 +26,7 @@ Extienden el `supabase_schema.sql` que ya armó Matías.
 |---|---|---|
 | `business_description` | text | Personaje/tono estable del cliente — reemplaza el bloque hardcodeado "Sos el copywriter de CUAN..." de `main.py` |
 | `tone_examples` | jsonb | Array de hilos de ejemplo, cada uno como array de 4 strings — reemplaza los 6 ejemplos hardcodeados |
-| `topics` | jsonb | Array de temas posibles (strings). Si es null/vacío, el engine no elige tema random — usa `weekly_focus` obligatorio o un tema genérico |
+| `topics` | jsonb | Array de temas posibles (strings). Si es null/vacío, el engine no elige tema random — usa `weekly_focus` obligatorio o un tema genérico. Si no hay weekly_focus, el portal elige un tema por rotación y se lo pasa al motor como `tema_elegido` |
 | `weekly_focus` | text, nullable | Instrucción puntual de esta semana (ej. "destacar la venta que cerramos el martes"). Si está cargado, reemplaza la elección aleatoria de tema |
 | `weekly_focus_expires_at` | date, nullable | El portal la limpia sola después de la próxima generación — el engine no la borra, solo la lee |
 | `drive_folder_id` | text | Carpeta del cliente dentro de la Unidad Compartida |
@@ -78,6 +78,7 @@ class ClientContentConfig(BaseModel):
     calendly_link: str | None = None
     prob_link: float = 0.0              # probabilidad (0-1) de agregar el CTA en la historia 4, sorteada por el motor
     weekly_format: str | None = None
+    tema_elegido: str | None = None     # tema de la semana elegido por el portal (solo si no hay weekly_focus); el motor lo prefiere al random
 
 class ImagenCandidata(BaseModel):
     drive_file_id: str

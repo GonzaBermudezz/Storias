@@ -917,8 +917,9 @@ def test_generate_for_client_orders_photos_by_tags_and_only_classifies_new_ones(
         imagenes_editadas_url=[f"edited-{index}" for index in range(4)],
         drive_file_ids_usados=["file-1", "file-2", "file-3", "file-5"],
     )
-    # Sin enfoque: es el escenario de a74 (con enfoque, a79 re-etiqueta las fotos sin producto).
-    db = Database([client(weekly_focus=None)])
+    # Sin enfoque ni temas: es el escenario de a74 (con enfoque o tema de la semana, a79/a80
+    # re-etiquetan las fotos sin producto).
+    db = Database([client(weekly_focus=None, topics=None)])
     db.rows["image_tags"] = [
         {"client_id": "good", "drive_file_id": "file-0", "has_person": True, "scene": "ambiente"},
         {"client_id": "good", "drive_file_id": "file-1", "has_person": False, "scene": "producto"},
@@ -1161,7 +1162,7 @@ def test_generate_for_client_sin_enfoque_no_reetiqueta_fotos_viejas(generation, 
     drive_mock, engine = generation
     _echo_engine(engine)
     drive_mock.return_value = [("old", "old.jpg"), ("n1", "n1.jpg"), ("n2", "n2.jpg"), ("n3", "n3.jpg")]
-    db = _TagsDatabase([client(weekly_focus=None)])
+    db = _TagsDatabase([client(weekly_focus=None, topics=None)])  # sin enfoque ni tema de la semana
     db.rows["image_tags"] = [{"client_id": "good", "drive_file_id": "old", "has_person": False, "scene": "producto"}]
     classified = []
 
@@ -1190,3 +1191,110 @@ def test_generate_for_client_sin_coincidencias_usa_fotos_generales_sin_error(gen
     assert len(engine.call_args.args[1]) == 4
     assert "generation_error" not in db.rows["clients"][0]
     assert "Sin fotos que coincidan con el enfoque" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# a80: el portal elige el tema de la semana antes de elegir las fotos
+# ---------------------------------------------------------------------------
+_TEMAS = ["Garmin para running", "DJI y creadores", "Kindle para leer"]
+_LUNES = date(2026, 11, 9)
+
+
+def test_tema_de_la_semana_rota_y_no_repite_dos_semanas_seguidas():
+    semanas = [jobs.tema_de_la_semana(_TEMAS, "abc", _LUNES + timedelta(weeks=n)) for n in range(4)]
+
+    assert len(set(semanas[:3])) == 3
+    assert semanas[3] == semanas[0]
+    assert all(jobs.tema_de_la_semana(["Único"], "abc", _LUNES + timedelta(weeks=n)) == "Único" for n in range(5))
+    assert jobs.tema_de_la_semana([], "abc", _LUNES) is None
+    assert jobs.tema_de_la_semana(None, "abc", _LUNES) is None
+    assert jobs.tema_de_la_semana(["  ", "", None], "abc", _LUNES) is None
+    assert jobs.tema_de_la_semana(["  ", " Garmin "], "abc", _LUNES) == "Garmin"
+
+
+def test_tema_de_la_semana_no_repite_al_cambiar_de_ano():
+    # 2027 tiene 52 semanas ISO: año*53 + semana saltaría de a 2 entre el 27/12/2027 y el
+    # 3/1/2028 y, con 2 temas, repetiría el mismo tema dos semanas seguidas.
+    temas = ["Garmin para running", "DJI y creadores"]
+    lunes = date(2027, 12, 6)
+    seguidas = [jobs.tema_de_la_semana(temas, "abc", lunes + timedelta(weeks=n)) for n in range(6)]
+
+    assert all(a != b for a, b in zip(seguidas, seguidas[1:]))
+
+
+def test_tema_de_la_semana_es_estable_para_el_mismo_cliente_y_semana():
+    temas = {jobs.tema_de_la_semana(_TEMAS, "abc", _LUNES + timedelta(days=d)) for d in range(7)}
+
+    assert len(temas) == 1
+    assert jobs.tema_de_la_semana(_TEMAS, "abc", _LUNES) == jobs.tema_de_la_semana(_TEMAS, "abc", _LUNES)
+    assert jobs.tema_de_la_semana(_TEMAS, "abc", _LUNES + timedelta(days=7)) not in temas
+
+
+def test_tema_de_la_semana_difiere_entre_clientes():
+    # "a" y "b" suman 97 y 98 bytes: con 3 temas caen en posiciones distintas.
+    assert jobs.tema_de_la_semana(_TEMAS, "a", _LUNES) != jobs.tema_de_la_semana(_TEMAS, "b", _LUNES)
+
+
+def test_generate_for_client_pasa_el_tema_elegido_al_motor(generation):
+    _, engine = generation
+    db = Database([client(weekly_focus=None, topics=_TEMAS)])
+
+    jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    config = engine.call_args.args[0]
+    assert config.tema_elegido == jobs.tema_de_la_semana(_TEMAS, "good", date(2026, 9, 18))
+    assert config.weekly_focus is None
+    # El tema elegido no es un enfoque: no se persiste ni se limpia como tal.
+    assert db.saved[0]["p_used_focus"] is None
+
+
+def test_generate_for_client_con_enfoque_no_elige_tema(generation):
+    _, engine = generation
+    db = Database([client(weekly_focus="Launch", topics=_TEMAS)])
+
+    jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert engine.call_args.args[0].tema_elegido is None
+    assert db.saved[0]["p_used_focus"] == "Launch"
+
+
+def test_generate_for_client_sin_topics_ni_enfoque_no_elige_tema(generation):
+    _, engine = generation
+    db = Database([client(weekly_focus=None, topics=None)])
+
+    jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert engine.call_args.args[0].tema_elegido is None
+
+
+def _fecha_con_tema(temas, client_id, tema):
+    for n in range(len(temas)):
+        dia = _LUNES + timedelta(weeks=n)
+        if jobs.tema_de_la_semana(temas, client_id, dia) == tema:
+            return dia
+    raise AssertionError(f"ninguna semana da {tema!r}")
+
+
+@pytest.mark.parametrize("tema, carpeta", [("Garmin para running", "Garmin"), ("DJI y creadores", "DJI")])
+def test_generate_for_client_sin_enfoque_elige_fotos_del_tema(generation, monkeypatch, tema, carpeta):
+    drive_mock, engine = generation
+    _echo_engine(engine)
+    temas = ["Garmin para running", "DJI y creadores"]
+    drive_mock.return_value = ([(f"garmin-{i}", f"Garmin/IMG_{i}.jpg") for i in range(4)]
+                               + [(f"dji-{i}", f"DJI/IMG_{i}.jpg") for i in range(4)])
+    db = Database([client(weekly_focus=None, topics=temas)])
+    prefijo = carpeta.lower()
+
+    def classify_many(rows):
+        # Persona solo en la última foto de cada carpeta; escenas distintas entre sí.
+        escenas = ("producto", "detalle", "exterior", "ambiente")
+        return {row[0]: {"persona": row[0].endswith("-3"), "escena": escenas[int(row[0][-1])], "producto": ""}
+                for row in rows}
+
+    monkeypatch.setattr(jobs.image_tags, "classify_many", classify_many)
+
+    jobs.generate_for_client(db, db.rows["clients"][0], _fecha_con_tema(temas, "good", tema))
+
+    assert engine.call_args.args[0].tema_elegido == tema
+    assert [image.drive_file_id for image in engine.call_args.args[1]] == [f"{prefijo}-{i}" for i in range(4)]
+    assert db.saved[0]["p_used_focus"] is None

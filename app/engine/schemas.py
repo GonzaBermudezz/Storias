@@ -19,6 +19,7 @@ class ClientContentConfig(BaseModel):
     prob_link: float = 0.0
     font_choice: str | None = None      # key de imaging.FONT_CHOICES; None = fuente default del motor
     weekly_format: str | None = None    # key de formatos.FORMATOS; None = arco por defecto
+    tema_elegido: str | None = None     # tema de la semana que el portal eligió de `topics` (solo si no hay weekly_focus)
 
 
 class ImagenCandidata(BaseModel):
