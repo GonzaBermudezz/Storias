@@ -239,6 +239,12 @@
     .day-desc::placeholder{color:var(--muted)}
     .day-time{font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--fg);margin-left:auto}
     .day-time:disabled{opacity:.5;cursor:not-allowed}
+    .day-ai-options{display:flex;gap:8px;align-items:center;margin-top:8px}
+    .day-ai-options .day-ai-label{font-size:11px;font-weight:650;color:var(--muted);flex-shrink:0}
+    .day-format,.day-theme{font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
+    .day-format{max-width:190px}
+    .day-theme{flex:1;min-width:0}
+    @media(max-width:640px){.day-ai-options{flex-direction:column;align-items:stretch}.day-format{max-width:none}}
     .story-batches{display:flex;flex-direction:column;gap:10px}
     .story-batch-label{font-size:11px;color:var(--muted);font-weight:650;margin-bottom:5px}
     .day-row-cards{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
@@ -845,6 +851,11 @@
               <label for="client-format">Formato de la semana</label>
               <select id="client-format"><option value="">Automático</option></select>
               <span class="info" tabindex="0" aria-label="Cambia cómo se cuentan las 4 historias de la próxima generación: producto nuevo, venta, promo, tip… Después de generar vuelve a Automático." data-tooltip="Cambia cómo se cuentan las 4 historias de la próxima generación: producto nuevo, venta, promo, tip… Después de generar vuelve a Automático.">i</span>
+            </div>
+            <div class="team-field">
+              <label for="client-voice">Estilo de voz</label>
+              <select id="client-voice"><option value="">Estándar</option></select>
+              <span class="info" tabindex="0" aria-label="Cambia cómo suenan las historias del cliente. Estándar es el tono de siempre: simple y cotidiano, sin palabras técnicas." data-tooltip="Cambia cómo suenan las historias del cliente. Estándar es el tono de siempre: simple y cotidiano, sin palabras técnicas.">i</span>
             </div>
             <div class="team-field"><label for="client-pm">PM asignado</label><select id="client-pm"><option value="">Sin PM</option></select></div>
             <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Predeterminada</option></select></div>

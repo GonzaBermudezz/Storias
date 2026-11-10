@@ -24,6 +24,7 @@ from app.engine.exceptions import ClaudeGenerationError, EngineError
 from app.engine.formatos import FORMATOS
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
+from app.engine.voces import VOCES
 from app.services import client_access, content_jobs, drive, uploads
 from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config, setup_gaps
 from app.services.encryption import decrypt, encrypt
@@ -41,7 +42,7 @@ _CLIENT_DETAIL = (
     "avatar_url,avatar_public_id,instagram_profile_url,whatsapp_contact,"
     "contact_email,calendly_link,prob_link,generation_error,"
     "generation_error_at,publish_days,"
-    "publish_together,font_choice,drive_connected_email,weekly_format"
+    "publish_together,font_choice,drive_connected_email,weekly_format,voice_style"
 )
 
 # The sidebar gets identity + status; setup fields are read to derive gaps and
@@ -186,6 +187,26 @@ class StoryPatch(BaseModel):
 class GenerateStoryRequest(BaseModel):
     fecha_publicacion: str
     hora_publicacion: str
+    # a82: both optional; without them the endpoint behaves exactly as before.
+    formato: str | None = None
+    tema: str | None = None
+
+    @field_validator("formato")
+    @classmethod
+    def known_story_format(cls, value):
+        if value is not None and value not in FORMATOS:
+            raise ValueError("Formato no reconocido")
+        return value
+
+    @field_validator("tema")
+    @classmethod
+    def clean_story_theme(cls, value):
+        if value is None:
+            return None
+        value = value.strip()
+        if len(value) > 200:
+            raise ValueError("El tema puede tener hasta 200 caracteres.")
+        return value or None
 
 
 class StoryOrder(BaseModel):
@@ -809,6 +830,11 @@ def list_weekly_formats(employee: EmployeeDep):
     return [{"key": key, "label": f["label"], "hint": f["hint"]} for key, f in FORMATOS.items()]
 
 
+@router.get("/estilos-voz")
+def list_voice_styles(employee: EmployeeDep):
+    return [{"key": key, "label": v["label"], "hint": v["hint"]} for key, v in VOCES.items()]
+
+
 class ClientContactPatch(BaseModel):
     instagram_profile_url: str | None = None
     whatsapp_contact: str | None = None
@@ -917,6 +943,28 @@ def delete_client_access(client_id: str, user_id: str, employee: EmployeeDep):
     if not client_access.deactivate_client_user(db, client_id, user_id):
         raise HTTPException(status_code=404, detail="Acceso no encontrado")
     return {"id": user_id, "active": False}
+
+
+class ClientVoicePatch(BaseModel):
+    voice_style: str | None = None
+
+    @field_validator("voice_style")
+    @classmethod
+    def known_voice(cls, value):
+        if value is not None and value not in VOCES:
+            raise ValueError("Estilo de voz desconocido.")
+        return value
+
+
+@router.patch("/clientes/{client_id}/estilo-voz")
+def patch_client_voice(client_id: str, body: ClientVoicePatch, employee: EmployeeDep):
+    """Estilo de voz del cliente (null = Estándar). Estilístico, sin auditoría; no se consume."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    updated = db.table("clients").update({"voice_style": body.voice_style}).eq(
+        "id", client_id
+    ).execute().data
+    return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, "voice_style": body.voice_style}
 
 
 @router.patch("/clientes/{client_id}/contacto")
@@ -1380,6 +1428,7 @@ def generate_story_for_day(client_id: str, body: GenerateStoryRequest, employee:
             raise HTTPException(status_code=422, detail="El cliente no tiene imágenes disponibles en Drive")
         now = datetime.now(timezone.utc)
         ranked, _ = content_jobs.seleccionar_imagenes(available, history, now, limite=None)
+        ranked = content_jobs.priorizar_por_tema(ranked, body.tema)
         try:
             downloaded = drive.download_images(ranked, limit=1, refresh_token=refresh_token)
         except Exception as exc:
@@ -1389,7 +1438,9 @@ def generate_story_for_day(client_id: str, body: GenerateStoryRequest, employee:
         image_id, image_name, image_bytes = downloaded[0]
 
         config = build_content_config(client)
-        text = content.generar_texto_para_imagen(config, image_bytes)
+        # Without formato/tema the call stays exactly as before (a82).
+        extra = {key: value for key, value in (("formato", body.formato), ("tema", body.tema)) if value}
+        text = content.generar_texto_para_imagen(config, image_bytes, **extra)
         imagen_editada = content.editar_historia(
             config, image_bytes, text, next_order, font_choice=client.get("font_choice"),
         )

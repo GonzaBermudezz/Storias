@@ -34,6 +34,7 @@ Extienden el `supabase_schema.sql` que ya armó Matías.
 | `calendly_link` | text, nullable | Ya existía en `CONFIG` de `main.py`, ahora por cliente |
 | `prob_link` | float, default 0 | Ídem |
 | `weekly_format` | text, nullable | Formato de la próxima generación (clave de app/engine/formatos.py). null = arco por defecto. Se consume en la generación y vuelve a null |
+| `voice_style` | text, nullable | Estilo de voz del cliente (clave de app/engine/voces.py). null = Estándar, el tono de siempre. No se consume |
 
 **`client_images`** (nueva) — tracking de no-repetición:
 | Campo | Tipo |
@@ -101,6 +102,7 @@ class ClientContentConfig(BaseModel):
     calendly_link: str | None = None
     prob_link: float = 0.0              # probabilidad (0-1) de agregar el CTA en la historia 4, sorteada por el motor
     weekly_format: str | None = None
+    voice_style: str | None = None      # clave de voces.VOCES; None = tono de siempre
     tema_elegido: str | None = None     # tema de la semana elegido por el portal (solo si no hay weekly_focus); el motor lo prefiere al random
 
 class ImagenCandidata(BaseModel):
@@ -196,4 +198,11 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - La sesión del cliente usa la cookie `client_session` (httponly, samesite lax y `secure` en producción) y dura `client_session_days` (30). Es distinta de `session`, la de empleados: ninguna autentica a la otra. `require_client` acepta el Bearer o `client_session`, exige `role == "client"` y en cada request lee `client_users` junto con `clients(agency_id,active)`. Si el usuario o el cliente están inactivos, responde 401.
 - API del cliente en `/app/api`: `GET /me`, `GET /semana`, `PATCH /historias/{id}/aprobar`, `PATCH /dias/{fecha}/aprobar` y `PATCH /semana` (`{enfoque, formato}` → `clients.weekly_focus` / `weekly_format`). **El `client_id` sale siempre de la sesión, nunca de la URL ni del body, y lo ajeno responde 404 igual que lo inexistente.** Como la base se usa con service role, este filtro es lo único que aísla a un cliente de otro.
 - Aprobar desde el panel = `stories.aprobado`, que es lo único que habilita la publicación. El panel no toca `agendado`. `GET /app/salir` cierra la sesión del cliente.
+
+## 9. Formatos, estilo de voz y formato por día — a82
+
+- `app/engine/formatos.py` trae 9 formatos: los 6 de a78 más `cuenta_regresiva`, `teaser` y `resultado`, para lanzamientos. Cada formato tiene `label`, `hint`, `arco` (4 consignas, máx 10/8/8/10 palabras) y `unica`: una oración que dice cómo se cuenta ese formato cuando es una sola historia. Ninguna consigna inventa fechas, horas ni cifras; solo las usa si figuran en el tema.
+- `app/engine/voces.py` define `VOCES` (`canchero`, `tecnico`, `sobrio`). Cada estilo reemplaza las dos viñetas de vocabulario de REGLAS DE TONO en `_armar_prompt` y `_armar_prompt_historia_unica`. Si `voice_style` es null o una clave desconocida, el prompt queda idéntico al de antes (`_REGLAS_TONO_POR_DEFECTO`).
+- En la consola: `GET /portal/estilos-voz` devuelve `[{key, label, hint}]` y `PATCH /portal/clientes/{id}/estilo-voz` recibe `{voice_style}` (clave o null; una clave desconocida da 422). El panel del cliente todavía no edita el estilo de voz.
+- `POST /portal/clientes/{id}/historias/generar` acepta dos campos opcionales: `formato`, una clave de `FORMATOS` (otra da 422), y `tema`, de hasta 200 caracteres (vacío = null). Llegan a `generar_texto_para_imagen(config, image_bytes, formato=None, tema=None)`. Con tema, el tema manda y la foto se elige primero entre las que coinciden por nombre o subcarpeta (`content_jobs.priorizar_por_tema`, sin visión). Si no viene ninguno de los dos, el endpoint y el prompt quedan como antes.
 

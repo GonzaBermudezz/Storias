@@ -792,3 +792,106 @@ def test_prompt_with_tone_examples_still_includes_them():
         assert "ejemplos REALES" in prompt
         assert "Ejemplo 1:" in prompt
         assert "uno ||| dos ||| tres ||| cuatro" in prompt
+
+
+# ---------------------------------------------------------------------------
+# a82: formatos de lanzamiento, estilo de voz y formato/tema por historia
+# ---------------------------------------------------------------------------
+from app.engine.content import _REGLAS_TONO_POR_DEFECTO, _armar_prompt_historia_unica  # noqa: E402
+from app.engine.voces import VOCES  # noqa: E402
+
+_PROHIBIDO = "PROHIBIDO usar vocabulario técnico"
+
+
+@pytest.mark.parametrize("clave", sorted(FORMATOS))
+def test_formato_tiene_maximos_10_8_8_10_y_unica_de_una_oracion(clave):
+    formato = FORMATOS[clave]
+    maximos = [texto.rsplit("(máx ", 1)[1].split(" ", 1)[0] for texto in formato["arco"]]
+    assert maximos == ["10", "8", "8", "10"], clave
+    unica = formato["unica"].format(negocio="CUAN")
+    assert unica.strip() and "{" not in unica, clave
+    assert unica.endswith(".") and unica.count(".") == 1, clave
+
+
+def test_formatos_de_lanzamiento_existen():
+    assert {"cuenta_regresiva", "teaser", "resultado"} <= set(FORMATOS)
+    assert len(FORMATOS) == 9
+
+
+@pytest.mark.parametrize("clave", ["cuenta_regresiva", "resultado"])
+def test_formatos_de_lanzamiento_no_inventan_fechas_ni_cifras(clave):
+    consignas = " ".join(FORMATOS[clave]["arco"]) + " " + FORMATOS[clave]["unica"]
+    assert "solo si figura" in consignas or "si no figura" in consignas
+
+
+def test_sin_estilo_de_voz_el_tono_es_el_de_siempre():
+    config = config_cuan(voice_style=None, weekly_format=None)
+    for prompt in (_armar_prompt(config), _armar_prompt_historia_unica(config)):
+        assert "REGLAS DE TONO (muy importante):\n" + _REGLAS_TONO_POR_DEFECTO in prompt
+        assert _PROHIBIDO in prompt
+
+
+@pytest.mark.parametrize("clave", sorted(VOCES))
+def test_cada_estilo_de_voz_reemplaza_las_vinetas_de_vocabulario(clave):
+    config = config_cuan(voice_style=clave)
+    reglas = "".join(f"- {regla}\n" for regla in VOCES[clave]["reglas"])
+    for prompt in (_armar_prompt(config), _armar_prompt_historia_unica(config)):
+        assert "REGLAS DE TONO (muy importante):\n" + reglas in prompt
+        assert _PROHIBIDO not in prompt
+        assert "Lenguaje simple, cotidiano" not in prompt
+    assert "- Cada historia es UNA sola idea, corta, con gancho\n" in _armar_prompt(config)
+    assert "- Máximo 12 palabras\n" in _armar_prompt_historia_unica(config)
+
+
+def test_estilo_de_voz_desconocido_cae_al_tono_de_siempre():
+    import random
+
+    config = config_cuan(voice_style="inventado")
+    random.seed(7)
+    con_clave = _armar_prompt(config)
+    random.seed(7)
+    assert con_clave == _armar_prompt(config_cuan(voice_style=None))
+    assert _armar_prompt_historia_unica(config) == _armar_prompt_historia_unica(config_cuan())
+
+
+def test_voces_estan_bien_formadas():
+    for clave, voz in VOCES.items():
+        assert voz["label"].strip() and voz["hint"].strip(), clave
+        assert voz["reglas"] and all(r.strip() and not r.startswith("- ") and "\n" not in r for r in voz["reglas"]), clave
+
+
+def test_historia_unica_con_formato_y_tema():
+    config = config_cuan()
+    prompt = _armar_prompt_historia_unica(config, formato="teaser", tema="Garmin")
+
+    assert f"Formato de esta historia: Teaser. {FORMATOS['teaser']['unica']}" in prompt
+    assert "Tema de esta historia: Garmin. El tema tiene prioridad; la imagen es el contexto visual." in prompt
+    assert "que describa o se inspire en lo que se ve en la imagen" not in prompt
+    assert "- Máximo 12 palabras\n" in prompt
+
+
+def test_historia_unica_reemplaza_negocio_en_la_frase_del_formato():
+    prompt = _armar_prompt_historia_unica(config_cuan(), formato="comparativa")
+    assert "la de CUAN" in prompt and "{negocio}" not in prompt
+    assert "Mirá la imagen adjunta con atención" in prompt
+
+
+def test_historia_unica_ignora_formato_desconocido_y_tema_vacio():
+    base = _armar_prompt_historia_unica(config_cuan())
+    assert _armar_prompt_historia_unica(config_cuan(), formato="inventado", tema="   ") == base
+    assert _armar_prompt_historia_unica(config_cuan(), formato=None, tema=None) == base
+    assert "Formato de esta historia" not in base and "Tema de esta historia" not in base
+
+
+def test_generar_texto_para_imagen_pasa_formato_y_tema_al_prompt(monkeypatch):
+    capturado = {}
+
+    def armar(config, formato=None, tema=None):
+        capturado.update(formato=formato, tema=tema)
+        raise RuntimeError("corte antes de llamar a Claude")
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setattr(content, "_armar_prompt_historia_unica", armar)
+    with pytest.raises(RuntimeError):
+        content.generar_texto_para_imagen(config_cuan(), imagen_falsa(), formato="teaser", tema="Garmin")
+    assert capturado == {"formato": "teaser", "tema": "Garmin"}

@@ -45,6 +45,7 @@ def build_content_config(row: dict) -> ClientContentConfig:
         calendly_link=row.get("calendly_link"), prob_link=row.get("prob_link") or 0.0,
         font_choice=row.get("font_choice"),
         weekly_format=row.get("weekly_format"),
+        voice_style=row.get("voice_style"),
     )
 
 
@@ -252,6 +253,17 @@ def es_relevante(enfoque: str | None, nombre: str, producto: str | None) -> bool
     enfoque con la ruta del archivo (incluye la subcarpeta) y con el producto que vio Claude."""
     palabras = _tokens_producto(enfoque)
     return bool(palabras) and bool(palabras & _tokens_producto(f"{nombre} {producto or ''}"))
+
+
+def priorizar_por_tema(ranked: list[tuple], tema: str | None) -> list[tuple]:
+    """Para una historia suelta con tema (a82): adelanta, sin perder ni duplicar nada y
+    respetando el orden de no-repetición, las fotos cuyo nombre o subcarpeta coinciden
+    con el tema. Solo mira la ruta (image[1]); no llama a la visión."""
+    if not (tema or "").strip():
+        return list(ranked)
+    primero = [image for image in ranked if es_relevante(tema, image[1], None)]
+    resto = [image for image in ranked if not es_relevante(tema, image[1], None)]
+    return primero + resto
 
 
 def tema_de_la_semana(topics: list[str] | None, client_id: str, today: date) -> str | None:

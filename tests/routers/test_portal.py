@@ -2777,3 +2777,108 @@ def test_portal_frontend_wires_client_access_row():
     assert "Vale 7 días. Mandáselo al cliente por WhatsApp." in page
     assert "/acceso" in source and "Quitar acceso" in source and "'Copiado'" in source
     assert "localStorage" not in source.split("function resetClientAccess", 1)[1].split("async function saveClientContact", 1)[0]
+
+
+# ---------------------------------------------------------------------------
+# a82: estilo de voz y formato/tema por día
+# ---------------------------------------------------------------------------
+def test_list_weekly_formats_has_the_nine_formats(client):
+    keys = [f["key"] for f in client.get("/portal/formatos").json()]
+    assert len(keys) == 9 and {"cuenta_regresiva", "teaser", "resultado"} <= set(keys)
+
+
+def test_list_voice_styles(client):
+    from app.engine.voces import VOCES
+    response = client.get("/portal/estilos-voz")
+    assert response.status_code == 200
+    assert response.json() == [{"key": k, "label": v["label"], "hint": v["hint"]} for k, v in VOCES.items()]
+
+
+def test_patch_client_voice_saves_choice(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "c1", "voice_style": "canchero"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/estilo-voz", json={"voice_style": "canchero"})
+    assert response.status_code == 200
+    assert response.json()["voice_style"] == "canchero"
+    assert db.updates == [("clients", {"voice_style": "canchero"}, [("id", "c1")])]
+
+
+def test_patch_client_voice_allows_null(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "c1", "voice_style": None}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/estilo-voz", json={"voice_style": None})
+    assert response.status_code == 200
+    assert db.updates == [("clients", {"voice_style": None}, [("id", "c1")])]
+
+
+def test_patch_client_voice_rejects_unknown_key(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    assert client.patch("/portal/clientes/c1/estilo-voz", json={"voice_style": "inventado"}).status_code == 422
+    assert db.updates == []
+
+
+def test_patch_client_voice_client_of_another_agency_is_403(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "other-agency"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    assert client.patch("/portal/clientes/c1/estilo-voz", json={"voice_style": "sobrio"}).status_code == 403
+    assert db.updates == []
+
+
+def test_client_detail_includes_voice_style():
+    assert "voice_style" in portal._CLIENT_DETAIL.split(",")
+
+
+def test_generate_story_for_day_passes_format_and_theme_and_prefers_theme_photos(monkeypatch, client):
+    db = DB([
+        {"id": "c1", "agency_id": "agency-1", "name": "Cliente Test", "drive_folder_id": "folder-1"},
+        [], [{"id": "g1"}], {"id": "reserved-1", "order": 1}, [],
+        {"id": "s1", "order": 1, "text": "Texto", "image_url": "https://cdn/compuesta.jpg"},
+    ])
+    seen = {}
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder_id, *a, **k:
+                        [("k1", "Kindle/1.jpg"), ("g1", "Garmin/1.jpg")])
+
+    def download(images, limit=None, *a, **k):
+        seen["order"] = [image[0] for image in images]
+        return [(images[0][0], images[0][1], b"bytes")]
+
+    def generate(config, image_bytes, **kwargs):
+        seen["kwargs"] = kwargs
+        return "Texto"
+
+    monkeypatch.setattr("app.routers.portal.drive.download_images", download)
+    monkeypatch.setattr("app.routers.portal.content.generar_texto_para_imagen", generate)
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k:
+                        SimpleNamespace(url="https://cdn/compuesta.jpg", public_id="edit/s1"))
+    monkeypatch.setattr("app.routers.portal.uploads.upload_image", lambda data, client_id, tag:
+                        SimpleNamespace(url="https://cdn/original.jpg", public_id="ia/one"))
+
+    response = client.post("/portal/clientes/c1/historias/generar", json={
+        "fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00",
+        "formato": "teaser", "tema": "  Garmin para running  "})
+
+    assert response.status_code == 200
+    assert seen["kwargs"] == {"formato": "teaser", "tema": "Garmin para running"}
+    assert seen["order"] == ["g1", "k1"]
+
+
+@pytest.mark.parametrize("extra", [{"formato": "inventado"}, {"tema": "x" * 201}])
+def test_generate_story_for_day_rejects_bad_format_or_long_theme(monkeypatch, client, extra):
+    db = DB([])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.post("/portal/clientes/c1/historias/generar",
+                           json={"fecha_publicacion": "2026-09-25", "hora_publicacion": "10:00", **extra})
+    assert response.status_code == 422
+    assert db.inserts == [] and db.updates == []
+
+
+def test_portal_frontend_wires_voice_style_and_day_format_theme():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+    assert 'id="client-voice"' in page and "Estilo de voz" in page
+    assert "/estilo-voz" in source and "/portal/estilos-voz" in source
+    assert ".day-format" in source and ".day-theme" in source
+    assert "formato, tema" in source
+    assert "'client-voice'" in source

@@ -50,6 +50,7 @@ from .exceptions import (
 )
 from .formatos import FORMATOS
 from .imaging import componer_historia
+from .voces import VOCES
 from .schemas import (
     ClientContentConfig,
     HiloGenerado,
@@ -111,6 +112,21 @@ def _bloque_arco(config: ClientContentConfig) -> str:
     return cabecera + "".join(lineas)
 
 
+# Las dos viñetas de vocabulario de siempre. Un estilo de voz (voces.VOCES) las
+# reemplaza; sin estilo (o con uno desconocido) el prompt queda idéntico al de antes.
+_REGLAS_TONO_POR_DEFECTO = (
+    "- Lenguaje simple, cotidiano, como le hablarías a un amigo\n"
+    "- PROHIBIDO usar vocabulario técnico o de moda del rubro, "
+    "salvo que sea una palabra que cualquier persona común "
+    "entendería sin pensar\n"
+)
+
+
+def _bloque_voz(config: ClientContentConfig) -> str:
+    voz = VOCES.get(config.voice_style or "")
+    return "".join(f"- {regla}\n" for regla in voz["reglas"]) if voz else _REGLAS_TONO_POR_DEFECTO
+
+
 def _armar_prompt(config: ClientContentConfig) -> str:
     """Arma el prompt completo de Claude a partir de la config del cliente.
 
@@ -135,10 +151,7 @@ def _armar_prompt(config: ClientContentConfig) -> str:
         f"{consigna_tema}\n\n"
         f"{_bloque_ejemplos(config)}"
         "REGLAS DE TONO (muy importante):\n"
-        "- Lenguaje simple, cotidiano, como le hablarías a un amigo\n"
-        "- PROHIBIDO usar vocabulario técnico o de moda del rubro, "
-        "salvo que sea una palabra que cualquier persona común "
-        "entendería sin pensar\n"
+        f"{_bloque_voz(config)}"
         "- Cada historia es UNA sola idea, corta, con gancho\n"
         f"{_bloque_arco(config)}\n"
         "La imagen adjunta es solo inspiración visual de fondo, NO "
@@ -266,24 +279,51 @@ def _llamar_claude(config: ClientContentConfig, image_bytes: bytes) -> list[str]
         raise ClaudeGenerationError(f"Error parseando respuesta de Claude: {e}") from e
 
 
-def _armar_prompt_historia_unica(config: ClientContentConfig) -> str:
+def _armar_prompt_historia_unica(config: ClientContentConfig, formato: str | None = None,
+                                 tema: str | None = None) -> str:
     """Prompt para UNA historia a partir de UNA imagen subida a mano (no un
     hilo semanal): a diferencia de ``_armar_prompt``, acá la imagen no es
     "inspiración de fondo" — Claude tiene que mirarla y escribir sobre lo
-    que realmente muestra, con el tono y rubro del cliente."""
+    que realmente muestra, con el tono y rubro del cliente.
+
+    a82: ``formato`` (clave de FORMATOS) y ``tema`` son opcionales. Con tema,
+    el tema manda y la imagen pasa a ser el contexto visual. Sin ninguno de
+    los dos el prompt es exactamente el de antes; un formato desconocido se
+    ignora."""
+    datos_formato = FORMATOS.get(formato or "")
+    tema = (tema or "").strip() or None
+    if tema:
+        mirada = (
+            f"Tema de esta historia: {tema}. El tema tiene prioridad; "
+            "la imagen es el contexto visual.\n\n"
+        )
+        consigna = (
+            "Escribí UNA sola historia de Instagram (una idea, un texto corto) "
+            "sobre ese tema, conectada con el negocio.\n\n"
+        )
+    else:
+        mirada = (
+            "Mirá la imagen adjunta con atención: qué muestra, qué transmite, "
+            "qué se puede contar a partir de ella para este negocio.\n\n"
+        )
+        consigna = (
+            "Escribí UNA sola historia de Instagram (una idea, un texto corto) "
+            "que describa o se inspire en lo que se ve en la imagen, conectado "
+            "con el negocio.\n\n"
+        )
+    bloque_formato = (
+        f"Formato de esta historia: {datos_formato['label']}. "
+        f"{datos_formato['unica'].format(negocio=config.nombre_negocio)}\n\n"
+        if datos_formato else ""
+    )
     return (
         f"{config.business_description}\n\n"
-        "Mirá la imagen adjunta con atención: qué muestra, qué transmite, "
-        "qué se puede contar a partir de ella para este negocio.\n\n"
+        f"{mirada}"
         f"{_bloque_ejemplos(config)}"
-        "Escribí UNA sola historia de Instagram (una idea, un texto corto) "
-        "que describa o se inspire en lo que se ve en la imagen, conectado "
-        "con el negocio.\n\n"
+        f"{consigna}"
+        f"{bloque_formato}"
         "REGLAS DE TONO (muy importante):\n"
-        "- Lenguaje simple, cotidiano, como le hablarías a un amigo\n"
-        "- PROHIBIDO usar vocabulario técnico o de moda del rubro, salvo "
-        "que sea una palabra que cualquier persona común entendería sin "
-        "pensar\n"
+        f"{_bloque_voz(config)}"
         "- Máximo 12 palabras\n"
         "- Una sola frase. NUNCA uses el símbolo ||| ni numeres varias "
         "opciones — se descarta todo lo que venga después de la primera "
@@ -299,7 +339,8 @@ def _armar_prompt_historia_unica(config: ClientContentConfig) -> str:
 _MAX_TEXTO_HISTORIA_UNICA = 90
 
 
-def generar_texto_para_imagen(config: ClientContentConfig, image_bytes: bytes) -> str:
+def generar_texto_para_imagen(config: ClientContentConfig, image_bytes: bytes,
+                              formato: str | None = None, tema: str | None = None) -> str:
     """Para una imagen subida manualmente (no parte de un hilo semanal):
     Claude analiza esa imagen puntual y devuelve UNA historia, no un hilo de
     4. Comparte la preparación de imagen y el cliente de Claude con
@@ -315,7 +356,7 @@ def generar_texto_para_imagen(config: ClientContentConfig, image_bytes: bytes) -
 
     prepared_bytes, media_type = _preparar_imagen_para_claude(image_bytes)
     imagen_b64 = base64.standard_b64encode(prepared_bytes).decode("utf-8")
-    prompt = _armar_prompt_historia_unica(config)
+    prompt = _armar_prompt_historia_unica(config, formato=formato, tema=tema)
 
     client = anthropic.Anthropic(api_key=api_key)
     try:

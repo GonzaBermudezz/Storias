@@ -1298,3 +1298,31 @@ def test_generate_for_client_sin_enfoque_elige_fotos_del_tema(generation, monkey
     assert engine.call_args.args[0].tema_elegido == tema
     assert [image.drive_file_id for image in engine.call_args.args[1]] == [f"{prefijo}-{i}" for i in range(4)]
     assert db.saved[0]["p_used_focus"] is None
+
+
+# ---------------------------------------------------------------------------
+# a82: estilo de voz y foto según el tema de una historia suelta
+# ---------------------------------------------------------------------------
+def test_build_content_config_copies_voice_style():
+    assert jobs.build_content_config(client(voice_style="canchero")).voice_style == "canchero"
+    assert jobs.build_content_config(client()).voice_style is None
+
+
+def test_priorizar_por_tema_es_estable_y_no_pierde_ni_duplica():
+    ranked = [("a", "Kindle/1.jpg"), ("b", "Garmin/1.jpg"), ("c", "suelta.jpg"), ("d", "Garmin/2.jpg")]
+
+    resultado = jobs.priorizar_por_tema(ranked, "Garmin para running")
+
+    assert resultado == [("b", "Garmin/1.jpg"), ("d", "Garmin/2.jpg"), ("a", "Kindle/1.jpg"), ("c", "suelta.jpg")]
+    assert sorted(resultado) == sorted(ranked)
+
+
+@pytest.mark.parametrize("tema", [None, "", "   "])
+def test_priorizar_sin_tema_devuelve_lo_mismo(tema):
+    ranked = [("a", "Kindle/1.jpg"), ("b", "Garmin/1.jpg")]
+    assert jobs.priorizar_por_tema(ranked, tema) == ranked
+
+
+def test_priorizar_sin_coincidencias_mantiene_el_orden():
+    ranked = [("a", "x.jpg"), ("b", "y.jpg")]
+    assert jobs.priorizar_por_tema(ranked, "Garmin") == ranked

@@ -139,7 +139,7 @@
     return client.avatar_url ? `<img src="${escapeHtml(client.avatar_url)}" alt="">` : escapeHtml(initials(client.name));
   }
   function setControlsDisabled(disabled) {
-    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-format','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload','tone-add','cta-link','logo-upload','logo-remove','client-access-email','client-access-create'].forEach((id) => { $(id).disabled = disabled; });
+    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-format','client-voice','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload','tone-add','cta-link','logo-upload','logo-remove','client-access-email','client-access-create'].forEach((id) => { $(id).disabled = disabled; });
     $('cta-prob').disabled = disabled || !state.client?.calendly_link;
     updateStyleControls(disabled);
     if (disabled && $('tone-dialog').open) $('tone-dialog').close();
@@ -735,12 +735,14 @@
 
   async function loadMeAndOptions() {
     try {
-      const [me, fonts, employees, focusPresets, formats] = await Promise.all([
+      const [me, fonts, employees, focusPresets, formats, voices] = await Promise.all([
         api('/portal/me'), api('/portal/tipografias'), api('/portal/empleados'), api('/portal/enfoques'),
-        api('/portal/formatos').catch(() => []),
+        api('/portal/formatos').catch(() => []), api('/portal/estilos-voz').catch(() => []),
       ]);
       state.me = me; state.fontChoices = fonts; state.employees = employees; state.focusPresets = focusPresets;
       state.formatChoices = formats;
+      state.voiceChoices = voices;
+      $('client-voice').innerHTML = '<option value="">Estándar</option>' + voices.map((v) => `<option value="${escapeHtml(v.key)}" title="${escapeHtml(v.hint)}">${escapeHtml(v.label)}</option>`).join('');
       $('client-format').innerHTML = '<option value="">Automático</option>' + formats.map((f) => `<option value="${escapeHtml(f.key)}" title="${escapeHtml(f.hint)}">${escapeHtml(f.label)}</option>`).join('');
       injectFontFaces(fonts);
       const fontOptions = fonts.map((font) => `<option value="${escapeHtml(font.key)}" style="font-family:'sf-${escapeHtml(font.key)}',sans-serif">${escapeHtml(font.label)}</option>`).join('');
@@ -1038,6 +1040,7 @@
     setFieldMode('description', false); setFieldMode('topics', false);
     renderFocusSelect();
     $('client-format').value = (state.formatChoices || []).some((f) => f.key === state.client.weekly_format) ? state.client.weekly_format : '';
+    $('client-voice').value = (state.voiceChoices || []).some((v) => v.key === state.client.voice_style) ? state.client.voice_style : '';
     $('client-pm').value = state.client.assigned_employee_id || '';
     $('client-font').value = state.client.font_choice || '';
     $('client-instagram').value = state.client.instagram_profile_url || '';
@@ -1329,8 +1332,10 @@
       const timeValue = timeSource?.hora_publicacion ? String(timeSource.hora_publicacion).slice(0,5) : '09:00';
       const timeInput = `<input type="time" class="day-time" data-time-for="${escapeHtml(iso)}" value="${escapeHtml(timeValue)}"${dayLocked ? ' disabled title="La publicación de este día ya está en curso o finalizada"' : ''}>`;
       const descInput = manualGroup ? `<input type="text" class="day-desc" data-desc-for="${escapeHtml(iso)}" maxlength="200" value="${escapeHtml(manualGroup.descripcion || '')}" placeholder="Descripción interna (opcional) — ¿de qué van estas historias?"${dayLocked ? ' disabled' : ''}>` : '';
+      const dayFormatOptions = (state.formatChoices || []).map((f) => `<option value="${escapeHtml(f.key)}" title="${escapeHtml(f.hint)}">${escapeHtml(f.label)}</option>`).join('');
+      const aiOptions = dayLocked ? '' : `<div class="day-ai-options"><span class="day-ai-label">Generar con IA:</span><select class="day-format" data-format-for="${escapeHtml(iso)}" aria-label="Formato de la historia"><option value="">Automático</option>${dayFormatOptions}</select><input type="text" class="day-theme" data-theme-for="${escapeHtml(iso)}" maxlength="200" placeholder="Sobre qué (opcional)" aria-label="Tema de la historia"></div>`;
       const addRow = dayLocked ? '' : `<div class="day-row-cards"><div class="story add-placeholder" data-add-date="${escapeHtml(iso)}"><span class="add-icon">+</span><span class="add-label">Subir imagen</span></div><div class="story add-placeholder add-placeholder-ai" data-generate-date="${escapeHtml(iso)}"><span class="add-icon">IA</span><span class="add-label">Generar con IA</span></div></div>`;
-      return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${approveAllBtn}${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
+      return `<div class="day-row" data-date="${escapeHtml(iso)}"><div class="day-row-head"><div class="day-row-top"><span class="section-title">${escapeHtml(dayLabel(iso))}</span>${approveAllBtn}${scheduleBtn}${publishNowBtn}${timeInput}</div>${descInput}${aiOptions}</div><div class="story-batches">${batchRows}${addRow}</div></div>`;
     }).join('');
     $('stories').innerHTML = `<section class="group">${rows}</section>`;
     updateApproveAllClient();
@@ -1499,6 +1504,18 @@
     } catch (error) {
       if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
     }
+  }
+  async function saveClientVoice() {
+    const select = $('client-voice'), clientId = state.client?.id, selectionVersion = state.selectionVersion, value = select.value || null;
+    if (!clientId || value === (state.client?.voice_style || null)) return; select.disabled = true;
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/estilo-voz`, {method:'PATCH', body:JSON.stringify({voice_style: value})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.voice_style = updated.voice_style ?? value;
+      showMessage(value ? 'Estilo de voz guardado: se usa en las próximas historias.' : 'Estilo de voz en Estándar.');
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message, true); select.value = state.client?.voice_style || ''; }
+    } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled = false; }
   }
   async function saveClientContact(field, inputId) {
     const input=$(`${inputId}`), clientId=state.client?.id, selectionVersion=state.selectionVersion, value=input.value.trim() || null;
@@ -2027,10 +2044,14 @@
     generatingDates.add(operationKey);
     const timeInput = document.querySelector(`.day-time[data-time-for="${CSS.escape(iso)}"]`);
     const hora = timeInput ? timeInput.value : '09:00';
+    const formatSelect = document.querySelector(`.day-format[data-format-for="${CSS.escape(iso)}"]`);
+    const themeInput = document.querySelector(`.day-theme[data-theme-for="${CSS.escape(iso)}"]`);
+    const formato = formatSelect && formatSelect.value ? formatSelect.value : null;
+    const tema = themeInput && themeInput.value.trim() ? themeInput.value.trim() : null;
     const tile = document.querySelector(`[data-generate-date="${CSS.escape(iso)}"]`);
     if (tile) { tile.classList.add('loading'); const label = tile.querySelector('.add-label'); if (label) label.textContent = 'Generando...'; }
     try {
-      const story = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias/generar`, {method:'POST', body:JSON.stringify({fecha_publicacion:iso, hora_publicacion:hora})});
+      const story = await api(`/portal/clientes/${encodeURIComponent(clientId)}/historias/generar`, {method:'POST', body:JSON.stringify({fecha_publicacion:iso, hora_publicacion:hora, formato, tema})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
       let group = state.groups.find((g) => g.id === story.story_group_id);
       if (!group) {
@@ -2637,6 +2658,7 @@
   $('client-pm').addEventListener('change',saveClientPm);
   $('client-font').addEventListener('change',saveClientFont);
   $('client-format').addEventListener('change',saveClientFormat);
+  $('client-voice').addEventListener('change',saveClientVoice);
   $('client-access-create').addEventListener('click',createClientAccess);
   $('client-access-copy').addEventListener('click',copyClientAccessLink);
   $('client-access-list').addEventListener('click',(event)=>{ const button=event.target.closest('[data-access-remove]'); if (button) removeClientAccess(button.dataset.accessRemove, button.dataset.accessEmail); });
