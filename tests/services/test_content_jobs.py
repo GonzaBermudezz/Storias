@@ -261,6 +261,84 @@ def test_generate_for_client_keeps_success_when_pool_bookkeeping_fails(generatio
     assert len(db.saved) == 1
 
 
+class RecordingDatabase(Database):
+    """Records every `clients` update with its filters, so tests can assert on
+    the conditional weekly_format clear (filtered by id AND by the format used)."""
+    def __init__(self, *args, fail_format_clear=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.client_updates = []
+        self.fail_format_clear = fail_format_clear
+
+    def table(self, name):
+        if name != "clients":
+            return super().table(name)
+        db = self
+
+        class RecordingQuery(Query):
+            def execute(self):
+                if self.op == "update":
+                    db.client_updates.append((self.values, list(self.filters)))
+                    if db.fail_format_clear and "weekly_format" in self.values:
+                        raise RuntimeError("format clear unavailable")
+                return super().execute()
+
+        return RecordingQuery(self, name)
+
+
+def _format_clears(db):
+    return [(values, filters) for values, filters in db.client_updates if "weekly_format" in values]
+
+
+def test_build_content_config_copies_weekly_format():
+    assert jobs.build_content_config(client(weekly_format="promo")).weekly_format == "promo"
+    assert jobs.build_content_config(client()).weekly_format is None
+
+
+def test_generacion_consume_el_formato_de_la_semana(generation):
+    _, engine = generation
+    db = RecordingDatabase([client(weekly_format="promo")])
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result["created"] is True
+    assert engine.call_args.args[0].weekly_format == "promo"
+    assert _format_clears(db) == [
+        ({"weekly_format": None}, [("id", "good"), ("weekly_format", "promo")])
+    ]
+    assert db.rows["clients"][0]["weekly_format"] is None
+
+
+def test_generacion_sin_formato_no_toca_la_columna(generation):
+    db = RecordingDatabase([client()])
+
+    jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert _format_clears(db) == []
+
+
+def test_falla_al_limpiar_el_formato_no_rompe_el_hilo(generation):
+    db = RecordingDatabase([client(weekly_format="promo")], fail_format_clear=True)
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result == {"created": True, "group_id": "group-id", "recycled": False}
+    assert len(db.saved) == 1
+    assert "generation_error" not in db.rows["clients"][0]
+
+
+def test_hilo_ya_existente_no_consume_el_formato(generation):
+    db = RecordingDatabase([client(weekly_format="promo")])
+    db.rows["story_groups"].append({
+        "id": "existing-group", "client_id": "good", "generation_week": "2026-09-14",
+    })
+
+    result = jobs.generate_for_client(db, db.rows["clients"][0], date(2026, 9, 18))
+
+    assert result["created"] is False
+    assert _format_clears(db) == []
+    assert db.rows["clients"][0]["weekly_format"] == "promo"
+
+
 def test_generate_for_client_propagates_operational_errors(generation):
     drive, _ = generation
     drive.side_effect = RuntimeError("Drive unavailable")

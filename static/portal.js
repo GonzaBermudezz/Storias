@@ -139,7 +139,7 @@
     return client.avatar_url ? `<img src="${escapeHtml(client.avatar_url)}" alt="">` : escapeHtml(initials(client.name));
   }
   function setControlsDisabled(disabled) {
-    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload','tone-add','cta-link','logo-upload','logo-remove'].forEach((id) => { $(id).disabled = disabled; });
+    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-format','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload','tone-add','cta-link','logo-upload','logo-remove'].forEach((id) => { $(id).disabled = disabled; });
     $('cta-prob').disabled = disabled || !state.client?.calendly_link;
     updateStyleControls(disabled);
     if (disabled && $('tone-dialog').open) $('tone-dialog').close();
@@ -735,10 +735,13 @@
 
   async function loadMeAndOptions() {
     try {
-      const [me, fonts, employees, focusPresets] = await Promise.all([
+      const [me, fonts, employees, focusPresets, formats] = await Promise.all([
         api('/portal/me'), api('/portal/tipografias'), api('/portal/empleados'), api('/portal/enfoques'),
+        api('/portal/formatos').catch(() => []),
       ]);
       state.me = me; state.fontChoices = fonts; state.employees = employees; state.focusPresets = focusPresets;
+      state.formatChoices = formats;
+      $('client-format').innerHTML = '<option value="">Automático</option>' + formats.map((f) => `<option value="${escapeHtml(f.key)}" title="${escapeHtml(f.hint)}">${escapeHtml(f.label)}</option>`).join('');
       injectFontFaces(fonts);
       const fontOptions = fonts.map((font) => `<option value="${escapeHtml(font.key)}" style="font-family:'sf-${escapeHtml(font.key)}',sans-serif">${escapeHtml(font.label)}</option>`).join('');
       $('client-pm').innerHTML = '<option value="">Sin PM</option>' + employees.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name || person.email)}</option>`).join('');
@@ -1034,6 +1037,7 @@
     renderTopicsView(state.client.topics);
     setFieldMode('description', false); setFieldMode('topics', false);
     renderFocusSelect();
+    $('client-format').value = (state.formatChoices || []).some((f) => f.key === state.client.weekly_format) ? state.client.weekly_format : '';
     $('client-pm').value = state.client.assigned_employee_id || '';
     $('client-font').value = state.client.font_choice || '';
     $('client-instagram').value = state.client.instagram_profile_url || '';
@@ -1417,6 +1421,18 @@
       state.client.font_choice = updated.font_choice; showMessage('Tipografía actualizada.');
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message,true); select.value = state.client?.font_choice || ''; } }
     finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled=false; }
+  }
+  async function saveClientFormat() {
+    const select = $('client-format'), clientId = state.client?.id, selectionVersion = state.selectionVersion, value = select.value || null;
+    if (!clientId || value === (state.client?.weekly_format || null)) return; select.disabled = true;
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/formato`, {method:'PATCH', body:JSON.stringify({weekly_format: value})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      state.client.weekly_format = updated.weekly_format ?? value;
+      showMessage(value ? 'Formato aplicado: se usa en la próxima generación y después vuelve a Automático.' : 'Formato en Automático.');
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message, true); select.value = state.client?.weekly_format || ''; }
+    } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled = false; }
   }
   async function saveClientContact(field, inputId) {
     const input=$(`${inputId}`), clientId=state.client?.id, selectionVersion=state.selectionVersion, value=input.value.trim() || null;
@@ -2554,6 +2570,7 @@
   $('try-prompt').addEventListener('click',tryPrompt);
   $('client-pm').addEventListener('change',saveClientPm);
   $('client-font').addEventListener('change',saveClientFont);
+  $('client-format').addEventListener('change',saveClientFormat);
   $('client-focus').addEventListener('change',saveClientFocus);
   $('drive-disconnect-btn').addEventListener('click',disconnectDrive);
   $('client-instagram').addEventListener('change',()=>saveClientContact('instagram_profile_url','client-instagram'));

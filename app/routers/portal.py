@@ -21,6 +21,7 @@ from app.db.supabase import get_admin_client
 from app.deps import AdminDep, EmployeeDep
 from app.engine import content
 from app.engine.exceptions import ClaudeGenerationError, EngineError
+from app.engine.formatos import FORMATOS
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
 from app.services import content_jobs, drive, uploads
@@ -40,7 +41,7 @@ _CLIENT_DETAIL = (
     "avatar_url,avatar_public_id,instagram_profile_url,whatsapp_contact,"
     "contact_email,calendly_link,prob_link,generation_error,"
     "generation_error_at,publish_days,"
-    "publish_together,font_choice,drive_connected_email"
+    "publish_together,font_choice,drive_connected_email,weekly_format"
 )
 
 # The sidebar gets identity + status; setup fields are read to derive gaps and
@@ -803,6 +804,11 @@ def list_font_choices(employee: EmployeeDep):
     ]
 
 
+@router.get("/formatos")
+def list_weekly_formats(employee: EmployeeDep):
+    return [{"key": key, "label": f["label"], "hint": f["hint"]} for key, f in FORMATOS.items()]
+
+
 class ClientContactPatch(BaseModel):
     instagram_profile_url: str | None = None
     whatsapp_contact: str | None = None
@@ -851,6 +857,28 @@ def patch_client_font(client_id: str, body: ClientFontPatch, employee: EmployeeD
         "id", client_id
     ).execute().data
     return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, "font_choice": body.font_choice}
+
+
+class ClientFormatPatch(BaseModel):
+    weekly_format: str | None = None
+
+    @field_validator("weekly_format")
+    @classmethod
+    def known_format(cls, value):
+        if value is not None and value not in FORMATOS:
+            raise ValueError("Formato desconocido.")
+        return value
+
+
+@router.patch("/clientes/{client_id}/formato")
+def patch_client_format(client_id: str, body: ClientFormatPatch, employee: EmployeeDep):
+    """Formato de la próxima generación (null = automático). Estilístico, sin auditoría."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    updated = db.table("clients").update({"weekly_format": body.weekly_format}).eq(
+        "id", client_id
+    ).execute().data
+    return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, "weekly_format": body.weekly_format}
 
 
 @router.patch("/clientes/{client_id}/contacto")

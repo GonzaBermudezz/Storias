@@ -33,6 +33,7 @@ Extienden el `supabase_schema.sql` que ya armó Matías.
 | `logo_url` | text, nullable | Ya existe como concepto en `main.py` (`cuan_logo.png`); acá es una URL |
 | `calendly_link` | text, nullable | Ya existía en `CONFIG` de `main.py`, ahora por cliente |
 | `prob_link` | float, default 0 | Ídem |
+| `weekly_format` | text, nullable | Formato de la próxima generación (clave de app/engine/formatos.py). null = arco por defecto. Se consume en la generación y vuelve a null |
 
 **`client_images`** (nueva) — tracking de no-repetición:
 | Campo | Tipo |
@@ -76,6 +77,7 @@ class ClientContentConfig(BaseModel):
     logo_url: str | None = None
     calendly_link: str | None = None
     prob_link: float = 0.0              # probabilidad (0-1) de agregar el CTA en la historia 4, sorteada por el motor
+    weekly_format: str | None = None
 
 class ImagenCandidata(BaseModel):
     drive_file_id: str

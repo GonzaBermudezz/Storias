@@ -42,6 +42,7 @@ def build_content_config(row: dict) -> ClientContentConfig:
         topics=row.get("topics"), logo_url=row.get("logo_url"),
         calendly_link=row.get("calendly_link"), prob_link=row.get("prob_link") or 0.0,
         font_choice=row.get("font_choice"),
+        weekly_format=row.get("weekly_format"),
     )
 
 
@@ -381,6 +382,12 @@ def generate_for_client(db, row: dict, today: date) -> dict:
         }).eq("id", row["id"]).execute()
     except Exception:
         logger.exception("Could not persist pool_bajo_at for client %s", row["id"])
+    if row.get("weekly_format"):
+        try:
+            db.table("clients").update({"weekly_format": None}).eq(
+                "id", row["id"]).eq("weekly_format", row["weekly_format"]).execute()
+        except Exception:
+            logger.exception("Could not clear weekly_format for client %s", row["id"])
     group_id = str(persisted.data) if persisted.data is not None else None
     return {"created": True, "group_id": group_id, "recycled": recycled}
 

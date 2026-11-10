@@ -28,6 +28,8 @@ def test_portal_page_renders_authenticated_employee_shell():
     assert 'id="business-description"' in response.text
     assert 'id="client-focus"' in response.text
     assert "Enfoque semanal" in response.text
+    assert 'id="client-format"' in response.text
+    assert "Formato de la semana" in response.text
     assert "pm@example.com" not in response.text
     assert "agency-1" not in response.text
     assert '<script src="/static/portal.js" defer></script>' in response.text

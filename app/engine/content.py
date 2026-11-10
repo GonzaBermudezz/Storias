@@ -48,6 +48,7 @@ from .exceptions import (
     ImageProcessingError,
     MetaPublishError,
 )
+from .formatos import FORMATOS
 from .imaging import componer_historia
 from .schemas import (
     ClientContentConfig,
@@ -91,6 +92,25 @@ _LOGO_CACHE: dict[str, bytes | None] = {}
 # -----------------------------------------
 # PROMPT
 # -----------------------------------------
+_ARCO_POR_DEFECTO = (
+    "una afirmación o pregunta que genera intriga, conectada al tema (máx 10 palabras)",
+    "desarrolla la tensión o el problema (máx 8 palabras)",
+    "el diferencial de {negocio}, la solución (máx 8 palabras)",
+    "CTA con una palabra clave en mayúsculas para escribir y agendar (máx 10 palabras)",
+)
+
+
+def _bloque_arco(config: ClientContentConfig) -> str:
+    """Las 4 consignas 'Historia N' del prompt. Si el formato de la semana no existe
+    o es desconocido, se usa el arco de siempre (nunca levanta)."""
+    formato = FORMATOS.get(config.weekly_format or "")
+    arco = formato["arco"] if formato else _ARCO_POR_DEFECTO
+    lineas = [f"- Historia {i}: {texto.format(negocio=config.nombre_negocio)}\n"
+              for i, texto in enumerate(arco, 1)]
+    cabecera = f"Formato de esta semana: {formato['label']}. Contá las 4 historias así:\n" if formato else ""
+    return cabecera + "".join(lineas)
+
+
 def _armar_prompt(config: ClientContentConfig) -> str:
     """Arma el prompt completo de Claude a partir de la config del cliente.
 
@@ -120,13 +140,7 @@ def _armar_prompt(config: ClientContentConfig) -> str:
         "salvo que sea una palabra que cualquier persona común "
         "entendería sin pensar\n"
         "- Cada historia es UNA sola idea, corta, con gancho\n"
-        "- Historia 1: una afirmación o pregunta que genera intriga, "
-        "conectada al tema (máx 10 palabras)\n"
-        "- Historia 2: desarrolla la tensión o el problema (máx 8 palabras)\n"
-        f"- Historia 3: el diferencial de {config.nombre_negocio}, "
-        "la solución (máx 8 palabras)\n"
-        "- Historia 4: CTA con una palabra clave en mayúsculas para "
-        "escribir y agendar (máx 10 palabras)\n\n"
+        f"{_bloque_arco(config)}\n"
         "La imagen adjunta es solo inspiración visual de fondo, NO "
         "es necesario describir literalmente lo que se ve en ella. "
         "El tema asignado y el tono de los ejemplos tienen prioridad "

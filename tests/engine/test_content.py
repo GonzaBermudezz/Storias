@@ -23,6 +23,7 @@ from app.engine.content import (
     _elegir_tema,
 )
 from app.engine.exceptions import EngineError, MetaPublishError
+from app.engine.formatos import FORMATOS
 from app.engine.schemas import (
     ClientContentConfig,
     HiloGenerado,
@@ -267,6 +268,55 @@ def test_prompt_generalizado_no_menciona_cocinas_por_defecto():
     prompt = _armar_prompt(config_cuan(weekly_focus="campaña de mes de aniversario"))
     assert "el diferencial de CUAN" in prompt  # por config.nombre_negocio
     assert "arquitectura" not in prompt.lower()
+
+
+# ---------------------------------------------------------------------------
+# Formato de la semana (a78)
+# ---------------------------------------------------------------------------
+_ARCO_DE_HOY = (
+    "- Historia 1: una afirmación o pregunta que genera intriga, conectada al tema (máx 10 palabras)\n"
+    "- Historia 2: desarrolla la tensión o el problema (máx 8 palabras)\n"
+    "- Historia 3: el diferencial de CUAN, la solución (máx 8 palabras)\n"
+    "- Historia 4: CTA con una palabra clave en mayúsculas para escribir y agendar (máx 10 palabras)\n\n"
+)
+
+
+def test_arco_por_defecto_no_cambia():
+    prompt = _armar_prompt(config_cuan(weekly_format=None))
+
+    assert _ARCO_DE_HOY in prompt
+    assert "- Cada historia es UNA sola idea, corta, con gancho\n" + _ARCO_DE_HOY + "La imagen adjunta" in prompt
+    assert "Formato de esta semana" not in prompt
+
+
+@pytest.mark.parametrize("clave", sorted(FORMATOS))
+def test_cada_formato_reemplaza_el_arco(clave):
+    formato = FORMATOS[clave]
+
+    prompt = _armar_prompt(config_cuan(weekly_format=clave))
+
+    assert f"Formato de esta semana: {formato['label']}" in prompt
+    for i, texto in enumerate(formato["arco"], 1):
+        assert f"- Historia {i}: {texto.format(negocio='CUAN')}\n" in prompt
+    assert "{negocio}" not in prompt
+    assert "desarrolla la tensión o el problema" not in prompt
+
+
+def test_formato_desconocido_usa_el_arco_por_defecto():
+    prompt = _armar_prompt(config_cuan(weekly_format="inventado"))
+
+    assert _ARCO_DE_HOY in prompt
+    assert "Formato de esta semana" not in prompt
+
+
+def test_formatos_estan_bien_formados():
+    assert FORMATOS
+    for clave, formato in FORMATOS.items():
+        assert formato["label"].strip(), clave
+        assert formato["hint"].strip(), clave
+        assert len(formato["arco"]) == 4, clave
+        for texto in formato["arco"]:
+            assert texto.strip() and "máx" in texto, clave
 
 
 # ---------------------------------------------------------------------------

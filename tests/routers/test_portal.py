@@ -964,6 +964,68 @@ def test_patch_client_font_rejects_unknown_key(monkeypatch, client):
     assert db.updates == []
 
 
+def test_list_weekly_formats_reports_every_engine_format(client):
+    from app.engine.formatos import FORMATOS
+    response = client.get("/portal/formatos")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"key": k, "label": f["label"], "hint": f["hint"]} for k, f in FORMATOS.items()
+    ]
+
+
+def test_patch_client_format_saves_choice(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "c1", "weekly_format": "promo"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/formato", json={"weekly_format": "promo"})
+    assert response.status_code == 200
+    assert response.json()["weekly_format"] == "promo"
+    assert db.updates == [("clients", {"weekly_format": "promo"}, [("id", "c1")])]
+
+
+def test_patch_client_format_allows_clearing_to_null(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "c1", "weekly_format": None}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/formato", json={"weekly_format": None})
+    assert response.status_code == 200
+    assert db.updates == [("clients", {"weekly_format": None}, [("id", "c1")])]
+
+
+def test_patch_client_format_rejects_unknown_key(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/formato", json={"weekly_format": "inventado"})
+    assert response.status_code == 422
+    assert db.updates == []
+
+
+def test_patch_client_format_missing_client_is_404(monkeypatch, client):
+    db = DB([None])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/missing/formato", json={"weekly_format": "promo"})
+    assert response.status_code == 404
+    assert db.updates == []
+
+
+def test_patch_client_format_rejects_client_of_another_agency(monkeypatch, client):
+    # Same guard as /tipografia: _client_or_error answers 403 for another agency.
+    db = DB([{"id": "c1", "agency_id": "other-agency"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/formato", json={"weekly_format": "promo"})
+    assert response.status_code == 403
+    assert db.updates == []
+
+
+def test_client_detail_includes_weekly_format():
+    assert "weekly_format" in portal._CLIENT_DETAIL.split(",")
+
+
+def test_portal_js_wires_weekly_format_selector():
+    source = TestClient(app).get("/static/portal.js").text
+    assert "/portal/formatos" in source
+    assert "saveClientFormat" in source
+    assert "'client-format'" in source
+
+
 def test_patch_client_contact_persists_only_the_supplied_contact_field(monkeypatch, client):
     db = DB([
         {"id": "c1", "agency_id": "agency-1"},
