@@ -13,7 +13,10 @@ class Employee(BaseModel):
 
 
 class ClientUser(BaseModel):
-    """Cliente final — accede a su portal o aprueba por link."""
+    """Usuario de un cliente final — entra al panel /app con un link de acceso."""
     id: str
     client_id: str
     agency_id: str
+    email: str
+    name: str | None = None
+    role: Literal["owner", "editor"]

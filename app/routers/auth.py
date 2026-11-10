@@ -1,8 +1,9 @@
 """
 Autenticación — dos flujos:
 
-1. Empleados de agencia → Google OAuth
-2. Clientes finales    → Magic link por email (Supabase Auth)
+1. Empleados de agencia → Google OAuth (este módulo, cookie `session`)
+2. Clientes finales    → link de acceso de un solo uso generado desde la
+                         consola (POST /entrar en app/main.py, cookie `client_session`)
 """
 from __future__ import annotations
 import logging
@@ -37,14 +38,15 @@ def _canonical_authority(s: Settings) -> str:
     return urlparse(s.google_redirect_uri).netloc
 
 
-def _set_session_cookie(response: Response, token: str, s: Settings) -> None:
+def _set_session_cookie(response: Response, token: str, s: Settings,
+                        key: str = "session", max_age: int = 60 * 60 * 8) -> None:
     response.set_cookie(
-        key="session",
+        key=key,
         value=token,
         httponly=True,          # inaccesible desde JS — previene XSS
         secure=s.is_production, # solo HTTPS en producción
         samesite="lax",
-        max_age=60 * 60 * 8,    # 8 horas
+        max_age=max_age,        # 8 horas por defecto (empleados)
     )
 
 
@@ -133,56 +135,6 @@ async def google_callback(request: Request, code: str, state: str):
 
     response = RedirectResponse(url="/portal", status_code=302)
     _set_session_cookie(response, token, s)
-    return response
-
-
-# ── Magic link (clientes finales — opción 1) ──────────────────────────────────
-
-@router.post("/magic-link")
-async def send_magic_link(email: str):
-    """
-    El cliente pide acceso a su portal ingresando su email.
-    Supabase manda el magic link — nosotros no manejamos contraseñas.
-    """
-    db = get_admin_client()
-
-    # Verificar que el email pertenece a un cliente registrado
-    result = db.table("clients").select("id,agency_id").eq("contact_email", email).maybe_single().execute()
-    if not result or not result.data:
-        # Respuesta genérica — no revelar si el email existe o no
-        return {"detail": "Si tu email está registrado, recibirás el link en breve."}
-
-    # Supabase envía el magic link
-    db.auth.sign_in_with_otp({"email": email})
-    return {"detail": "Si tu email está registrado, recibirás el link en breve."}
-
-
-@router.get("/magic-callback")
-async def magic_callback(token_hash: str, type: str):
-    """Supabase redirige acá cuando el cliente hace clic en el magic link."""
-    s = get_settings()
-    db = get_admin_client()
-
-    # Verificar el token con Supabase
-    session = db.auth.verify_otp({"token_hash": token_hash, "type": type})
-    if not session or not session.user:
-        raise HTTPException(status_code=400, detail="Link inválido o expirado")
-
-    user = session.user
-    client = db.table("clients").select("id,agency_id").eq("contact_email", user.email).maybe_single().execute()
-    if not client or not client.data:
-        raise HTTPException(status_code=403, detail="Cliente no encontrado")
-
-    our_token = _make_jwt({
-        "sub": user.id,
-        "email": user.email,
-        "client_id": client.data["id"],
-        "agency_id": client.data["agency_id"],
-        "role": "client",
-    }, expires_minutes=60 * 24)  # 24hs para el cliente
-
-    response = RedirectResponse(url="/cliente/portal", status_code=302)
-    _set_session_cookie(response, our_token, s)
     return response
 
 

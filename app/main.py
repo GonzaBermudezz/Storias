@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Form, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -29,7 +29,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.observability import init_sentry
-from app.routers import auth, aprobar, demo, portal
+from app.routers import auth, aprobar, cliente, demo, portal
 
 s = get_settings()
 
@@ -105,6 +105,7 @@ app.include_router(auth.router)
 # app.include_router(aprobar.router)
 app.include_router(demo.router)
 app.include_router(portal.router)
+app.include_router(cliente.router)
 
 # Same-origin assets let the portal API receive the HTTP-only session cookie.
 _STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -156,6 +157,76 @@ async def portal_page(request: Request):
     if payload.get("role") not in ("employee", "admin"):
         return RedirectResponse("/login")
     return HTMLResponse(_render_template("portal.html"))
+
+
+# ── Panel del cliente (a81) ───────────────────────────────────────────────────
+# El cliente entra con un link de un solo uso que el equipo genera en la consola.
+# Abrir el link (GET) NO lo gasta: WhatsApp, mails y chats visitan los links para
+# armar la vista previa. El canje es el POST del botón "Entrar".
+_ENTRAR_NO_STORE = {"Cache-Control": "no-store"}
+_LINK_INVALIDO = "Este link venció o ya se usó. Pedile uno nuevo a quien te lo mandó."
+_SIN_SESION = "Entrá desde el link que te mandamos. Si se venció, pedí uno nuevo."
+
+
+def _entrar_page(status_code: int = 200, token: str = "", error: str = "", aviso: str = ""):
+    from fastapi.responses import HTMLResponse
+    html = _render_template("entrar.html", token=token, error=error, aviso=aviso)
+    return HTMLResponse(html, status_code=status_code, headers=_ENTRAR_NO_STORE)
+
+
+@app.get("/entrar")
+async def entrar_page(token: str = ""):
+    if not token:
+        return _entrar_page(400, error=_LINK_INVALIDO)
+    return _entrar_page(token=token)
+
+
+@app.post("/entrar")
+def entrar_submit(token: str = Form("")):
+    from fastapi.responses import RedirectResponse
+    from app.db.supabase import get_admin_client
+    from app.deps import CLIENT_COOKIE
+    from app.routers.auth import _make_jwt, _set_session_cookie
+    from app.services.client_access import redeem_login_link
+
+    user = redeem_login_link(get_admin_client(), token)
+    if not user:
+        return _entrar_page(400, error=_LINK_INVALIDO)
+    session_token = _make_jwt({
+        "sub": user["id"], "client_id": user["client_id"],
+        "agency_id": user["agency_id"], "role": "client",
+    }, expires_minutes=60 * 24 * s.client_session_days)
+    response = RedirectResponse("/app", status_code=303)
+    _set_session_cookie(response, session_token, s, key=CLIENT_COOKIE,
+                        max_age=60 * 60 * 24 * s.client_session_days)
+    return response
+
+
+@app.get("/app")
+def client_app_page(request: Request):
+    """Shell del panel del cliente: sin datos adentro, todo sale de /app/api."""
+    from fastapi.responses import HTMLResponse
+    from app.deps import CLIENT_COOKIE, client_user_from_token
+
+    token = request.cookies.get(CLIENT_COOKIE)
+    if token:
+        try:
+            client_user_from_token(token)
+        except HTTPException:
+            token = None
+    if not token:
+        return _entrar_page(401, aviso=_SIN_SESION)
+    return HTMLResponse(_render_template("app.html"), headers=_ENTRAR_NO_STORE)
+
+
+@app.get("/app/salir")
+async def client_app_logout():
+    from fastapi.responses import RedirectResponse
+    from app.deps import CLIENT_COOKIE
+
+    response = RedirectResponse("/app", status_code=303)
+    response.delete_cookie(CLIENT_COOKIE)
+    return response
 
 
 @app.get("/login")

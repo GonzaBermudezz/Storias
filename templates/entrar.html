@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Entrar · Storias</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap">
+  <style>
+    :root{--bg:#F6F6FB;--surface:#FFFFFF;--border:#E6E6F0;--fg:#16162C;--muted:#6C6C84;--accent:#6D5EF5;--accent-strong:#5646E0;--accent-soft:#EFEDFF;--danger:#DC2626;--danger-soft:#FEF2F2;--shadow:0 1px 2px rgba(22,22,44,.04),0 10px 28px -16px rgba(22,22,44,.14);--radius:16px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--fg);font-family:Geist,system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;-webkit-font-smoothing:antialiased}
+    .card{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:32px 24px;text-align:center}
+    .logo{font-size:24px;font-weight:800;letter-spacing:-.045em;background:linear-gradient(90deg,#6D5EF5,#E1469A);-webkit-background-clip:text;background-clip:text;color:transparent;display:inline-block;margin-bottom:20px}
+    h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:8px}
+    p{font-size:14px;color:var(--muted);line-height:1.5}
+    .error{margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--danger-soft);color:var(--danger);font-size:14px;line-height:1.45}
+    form{margin-top:24px}
+    button{font:inherit;width:100%;border:0;border-radius:12px;background:var(--accent);color:#fff;font-size:16px;font-weight:650;padding:14px 16px;cursor:pointer}
+    button:hover{background:var(--accent-strong)}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <span class="logo">Storias</span>
+    {% if token and not error %}
+      <h1>Tu panel de historias</h1>
+      <p>Acá ves las historias de tu semana y las aprobás antes de que se publiquen.</p>
+      <form method="post" action="/entrar">
+        <input type="hidden" name="token" value="{{ token }}">
+        <button type="submit">Entrar a mi panel</button>
+      </form>
+    {% elif error %}
+      <h1>No pudimos abrir tu panel</h1>
+      <p class="error" role="alert">{{ error }}</p>
+    {% else %}
+      <h1>Tu panel de historias</h1>
+      <p>{{ aviso }}</p>
+    {% endif %}
+  </main>
+</body>
+</html>

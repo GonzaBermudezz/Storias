@@ -82,7 +82,8 @@ class Settings(BaseSettings):
 
     # ── Tokens ─────────────────────────────────────────────────────────────────
     approval_token_ttl_hours: int = 48   # cuánto dura el link de aprobación
-    magic_link_ttl_minutes: int = 15     # cuánto dura el link de login cliente
+    client_session_days: int = 30        # cuánto dura la sesión del cliente en /app
+    client_link_days: int = 7            # cuánto dura un link de acceso sin canjear
 
     # ── Rate limiting ──────────────────────────────────────────────────────────
     rate_limit_per_minute: int = 60

@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import io
 from dataclasses import dataclass
+from pathlib import Path
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -2694,3 +2695,85 @@ def test_upload_client_logo_reads_only_limit_plus_one_bytes(monkeypatch, employe
     image.file.read.assert_called_once_with(portal._LOGO_MAX_BYTES + 1)
     uploaded.assert_not_called()
     assert db.updates == []
+
+
+# ---------------------------------------------------------------------------
+# a81: the console gives the client its own access to /app
+# ---------------------------------------------------------------------------
+def test_create_client_access_returns_link_and_stores_only_the_hash(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [], [{"id": "u1", "client_id": "c1", "email": "ana@gba.com", "name": None}], [{"id": "l1"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    response = client.post("/portal/clientes/c1/acceso", json={"email": " Ana@GBA.com "})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == "ana@gba.com"
+    assert "/entrar?token=" in body["url"]
+    token = body["url"].split("token=", 1)[1]
+    assert len(token) >= 40
+    link_insert = [payload for table, payload in db.inserts if table == "client_login_links"][0]
+    assert token not in repr(db.inserts)
+    assert link_insert["created_by"] == "emp-1" and link_insert["client_user_id"] == "u1"
+    assert body["expires_at"]
+
+
+def test_create_client_access_email_of_another_client_is_409(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "u9", "client_id": "other", "email": "ana@gba.com", "active": True}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.post("/portal/clientes/c1/acceso", json={"email": "ana@gba.com"})
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Ese email ya tiene acceso a otro cliente"
+    assert db.inserts == [] and db.updates == []
+
+
+def test_create_client_access_invalid_email_is_422(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.post("/portal/clientes/c1/acceso", json={"email": "no-es-un-mail"})
+    assert response.status_code == 422
+    assert db.inserts == []
+
+
+def test_create_client_access_client_of_another_agency_is_403(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "other-agency"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.post("/portal/clientes/c1/acceso", json={"email": "ana@gba.com"})
+    assert response.status_code == 403
+    assert db.inserts == []
+
+
+def test_list_client_access(monkeypatch, client):
+    rows = [{"id": "u1", "email": "ana@gba.com", "name": "Ana", "active": True, "last_login_at": None}]
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, rows])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.get("/portal/clientes/c1/acceso")
+    assert response.status_code == 200
+    assert response.json() == rows
+
+
+def test_delete_client_access_of_another_client_is_404(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.delete("/portal/clientes/c1/acceso/u-other")
+    assert response.status_code == 404
+    assert db.updates == [("client_users", {"active": False}, [("id", "u-other"), ("client_id", "c1")])]
+
+
+def test_delete_client_access_deactivates_user(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "u1"}], []])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.delete("/portal/clientes/c1/acceso/u1")
+    assert response.status_code == 200
+    assert response.json() == {"id": "u1", "active": False}
+
+
+def test_portal_frontend_wires_client_access_row():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+    for element_id in ("client-access-email", "client-access-create", "client-access-link", "client-access-copy", "client-access-list"):
+        assert f'id="{element_id}"' in page
+    assert "Acceso del cliente" in page
+    assert "Vale 7 días. Mandáselo al cliente por WhatsApp." in page
+    assert "/acceso" in source and "Quitar acceso" in source and "'Copiado'" in source
+    assert "localStorage" not in source.split("function resetClientAccess", 1)[1].split("async function saveClientContact", 1)[0]

@@ -139,7 +139,7 @@
     return client.avatar_url ? `<img src="${escapeHtml(client.avatar_url)}" alt="">` : escapeHtml(initials(client.name));
   }
   function setControlsDisabled(disabled) {
-    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-format','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload','tone-add','cta-link','logo-upload','logo-remove'].forEach((id) => { $(id).disabled = disabled; });
+    ['save-description','save-topics','try-prompt','save-story','generate-weekly','client-pm','client-font','client-focus','client-format','client-instagram','client-whatsapp','client-email','client-drive-folder','client-avatar-upload','tone-add','cta-link','logo-upload','logo-remove','client-access-email','client-access-create'].forEach((id) => { $(id).disabled = disabled; });
     $('cta-prob').disabled = disabled || !state.client?.calendly_link;
     updateStyleControls(disabled);
     if (disabled && $('tone-dialog').open) $('tone-dialog').close();
@@ -1043,6 +1043,7 @@
     $('client-instagram').value = state.client.instagram_profile_url || '';
     $('client-whatsapp').value = state.client.whatsapp_contact || '';
     $('client-email').value = state.client.contact_email || '';
+    resetClientAccess();
     updateContactLinks();
     renderDriveConnectStatus();
     renderDriveFolderState();
@@ -1433,6 +1434,71 @@
     } catch (error) {
       if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) { showMessage(error.message, true); select.value = state.client?.weekly_format || ''; }
     } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) select.disabled = false; }
+  }
+  // a81: the client's own access to /app. The link carries a one-time token:
+  // it is shown once, right after generating it, and never stored in the browser.
+  function resetClientAccess() {
+    $('client-access-email').value = state.client?.contact_email || '';
+    $('client-access-link').value = '';
+    $('client-access-link-row').classList.add('hidden');
+    $('client-access-list').innerHTML = '';
+    loadClientAccess();
+  }
+  function renderClientAccess(users) {
+    const active = (users || []).filter((user) => user.active);
+    $('client-access-list').innerHTML = active.length ? active.map((user) => {
+      const lastLogin = user.last_login_at ? `Último ingreso: ${new Date(user.last_login_at).toLocaleString('es-AR', {dateStyle:'medium', timeStyle:'short'})}` : 'Todavía no entró';
+      return `<li class="access-item"><div><strong>${escapeHtml(user.name || user.email)}</strong>${user.name ? `<span>${escapeHtml(user.email)}</span>` : ''}<span>${escapeHtml(lastLogin)}</span></div><button type="button" class="btn" data-access-remove="${escapeHtml(user.id)}" data-access-email="${escapeHtml(user.email)}">Quitar acceso</button></li>`;
+    }).join('') : '<li class="access-empty">Todavía nadie del cliente tiene acceso a su panel.</li>';
+  }
+  async function loadClientAccess() {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    try {
+      const users = await api(`/portal/clientes/${encodeURIComponent(clientId)}/acceso`);
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      renderClientAccess(users);
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) {
+        $('client-access-list').innerHTML = '<li class="access-empty">No se pudieron cargar los accesos del cliente.</li>';
+      }
+    }
+  }
+  async function createClientAccess() {
+    const button = $('client-access-create'), clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    const email = $('client-access-email').value.trim();
+    if (!clientId) return;
+    if (!email) { showMessage('Escribí el email de la persona del cliente.', true); return; }
+    button.disabled = true;
+    try {
+      const created = await api(`/portal/clientes/${encodeURIComponent(clientId)}/acceso`, {method:'POST', body:JSON.stringify({email})});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      $('client-access-link').value = created.url;
+      $('client-access-link-row').classList.remove('hidden');
+      showMessage('Link generado. Copialo y mandáselo al cliente.');
+      loadClientAccess();
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    } finally { if (selectionVersion === state.selectionVersion && clientId === state.client?.id) button.disabled = false; }
+  }
+  async function copyClientAccessLink() {
+    const input = $('client-access-link');
+    if (!input.value) return;
+    try { await navigator.clipboard.writeText(input.value); showMessage('Copiado'); }
+    catch (_) { input.select(); showMessage('No se pudo copiar solo: el link quedó seleccionado, copialo a mano.', true); }
+  }
+  async function removeClientAccess(userId, email) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId || !userId) return;
+    if (!await confirmDialog(`¿Quitarle el acceso a ${email}? Su sesión se corta en el momento.`, {okLabel:'Quitar acceso', danger:true})) return;
+    try {
+      await api(`/portal/clientes/${encodeURIComponent(clientId)}/acceso/${encodeURIComponent(userId)}`, {method:'DELETE'});
+      if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      showMessage('Acceso quitado.');
+      loadClientAccess();
+    } catch (error) {
+      if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    }
   }
   async function saveClientContact(field, inputId) {
     const input=$(`${inputId}`), clientId=state.client?.id, selectionVersion=state.selectionVersion, value=input.value.trim() || null;
@@ -2571,6 +2637,9 @@
   $('client-pm').addEventListener('change',saveClientPm);
   $('client-font').addEventListener('change',saveClientFont);
   $('client-format').addEventListener('change',saveClientFormat);
+  $('client-access-create').addEventListener('click',createClientAccess);
+  $('client-access-copy').addEventListener('click',copyClientAccessLink);
+  $('client-access-list').addEventListener('click',(event)=>{ const button=event.target.closest('[data-access-remove]'); if (button) removeClientAccess(button.dataset.accessRemove, button.dataset.accessEmail); });
   $('client-focus').addEventListener('change',saveClientFocus);
   $('drive-disconnect-btn').addEventListener('click',disconnectDrive);
   $('client-instagram').addEventListener('change',()=>saveClientContact('instagram_profile_url','client-instagram'));

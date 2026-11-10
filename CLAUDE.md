@@ -51,6 +51,29 @@ Extienden el `supabase_schema.sql` que ya armó Matías.
 | `employee_id` | uuid fk |
 | `client_id` | uuid fk |
 
+**`client_users`** (nueva, a81) — usuarios del cliente que entran a su panel `/app`:
+| Campo | Tipo |
+|---|---|
+| `id` | uuid pk |
+| `client_id` | uuid fk → clients |
+| `email` | text — único en toda la base (`lower(email)`): un email pertenece a un solo cliente |
+| `name` | text, nullable |
+| `role` | text — `'owner'` \| `'editor'` |
+| `active` | boolean — `false` corta la sesión al instante |
+| `last_login_at` | timestamptz, nullable |
+| `created_at` | timestamptz |
+
+**`client_login_links`** (nueva, a81) — links de acceso de un solo uso:
+| Campo | Tipo |
+|---|---|
+| `id` | uuid pk |
+| `client_user_id` | uuid fk → client_users |
+| `token_hash` | text único — sha256 del token; el token en claro nunca se guarda |
+| `expires_at` | timestamptz |
+| `used_at` | timestamptz, nullable |
+| `created_by` | uuid fk → employees, nullable |
+| `created_at` | timestamptz |
+
 **`prompt_history`** (nueva, recomendada) — auditoría del prompt evolutivo:
 | Campo | Tipo |
 |---|---|
@@ -164,3 +187,13 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - A2 toma las primeras cuatro imágenes de Drive. La lectura del historial y el filtro de no-repetición quedan para A3.
 - El portal reordena historias mediante la RPC backend-only `reorder_stories`, que difiere la unicidad `(story_group_id, order)` durante el intercambio y valida que todas las filas pertenezcan al mismo grupo.
 - El portal actualiza campos de prompt mediante la RPC backend-only `update_client_prompt`, que valida empleado y cliente contra la agencia esperada y guarda la actualización junto con sus filas de `prompt_history` en una única transacción.
+
+## 8. Panel del cliente — a81
+
+- El cliente usa su propio panel en `/app`. La consola interna del equipo sigue en `/portal`, sin cambios de comportamiento.
+- La consola genera el acceso con `POST /portal/clientes/{id}/acceso` (`{email, name?}` → `{email, name, url, expires_at}`). El link (`/entrar?token=...`) vale `client_link_days` (7 por defecto), sirve una sola vez y el equipo lo manda a mano (por ejemplo, WhatsApp). `GET` lista los accesos y `DELETE .../acceso/{user_id}` los desactiva (y gasta los links pendientes de ese usuario).
+- `GET /entrar?token=...` solo muestra el botón "Entrar a mi panel", sin tocar la base, porque las vistas previas de WhatsApp o de los mails no tienen que gastar el link. El canje es `POST /entrar`. Es atómico (`update ... where used_at is null`) y responde siempre el mismo mensaje genérico, sea cual sea el motivo del fallo.
+- La sesión del cliente usa la cookie `client_session` (httponly, samesite lax y `secure` en producción) y dura `client_session_days` (30). Es distinta de `session`, la de empleados: ninguna autentica a la otra. `require_client` acepta el Bearer o `client_session`, exige `role == "client"` y en cada request lee `client_users` junto con `clients(agency_id,active)`. Si el usuario o el cliente están inactivos, responde 401.
+- API del cliente en `/app/api`: `GET /me`, `GET /semana`, `PATCH /historias/{id}/aprobar`, `PATCH /dias/{fecha}/aprobar` y `PATCH /semana` (`{enfoque, formato}` → `clients.weekly_focus` / `weekly_format`). **El `client_id` sale siempre de la sesión, nunca de la URL ni del body, y lo ajeno responde 404 igual que lo inexistente.** Como la base se usa con service role, este filtro es lo único que aísla a un cliente de otro.
+- Aprobar desde el panel = `stories.aprobado`, que es lo único que habilita la publicación. El panel no toca `agendado`. `GET /app/salir` cierra la sesión del cliente.
+

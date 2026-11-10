@@ -24,7 +24,7 @@ from app.engine.exceptions import ClaudeGenerationError, EngineError
 from app.engine.formatos import FORMATOS
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
-from app.services import content_jobs, drive, uploads
+from app.services import client_access, content_jobs, drive, uploads
 from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config, setup_gaps
 from app.services.encryption import decrypt, encrypt
 
@@ -879,6 +879,44 @@ def patch_client_format(client_id: str, body: ClientFormatPatch, employee: Emplo
         "id", client_id
     ).execute().data
     return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, "weekly_format": body.weekly_format}
+
+
+class ClientAccessCreate(BaseModel):
+    email: str = Field(max_length=254)
+    name: str | None = Field(default=None, max_length=120)
+
+
+@router.post("/clientes/{client_id}/acceso")
+def create_client_access(client_id: str, body: ClientAccessCreate, request: Request, employee: EmployeeDep):
+    """Gives the client's own user a one-time login link for /app (a81). The
+    team sends the URL by hand (WhatsApp); only the token's hash is stored."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    try:
+        user = client_access.get_or_create_client_user(db, client_id, body.email, body.name)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Email inválido")
+    except client_access.EmailTakenError:
+        raise HTTPException(status_code=409, detail="Ese email ya tiene acceso a otro cliente")
+    token, expires_at = client_access.create_login_link(db, user["id"], created_by=employee.id)
+    url = str(request.base_url).rstrip("/") + "/entrar?token=" + token
+    return {"email": user["email"], "name": user.get("name"), "url": url, "expires_at": expires_at.isoformat()}
+
+
+@router.get("/clientes/{client_id}/acceso")
+def list_client_access(client_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    return client_access.list_client_users(db, client_id)
+
+
+@router.delete("/clientes/{client_id}/acceso/{user_id}")
+def delete_client_access(client_id: str, user_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    if not client_access.deactivate_client_user(db, client_id, user_id):
+        raise HTTPException(status_code=404, detail="Acceso no encontrado")
+    return {"id": user_id, "active": False}
 
 
 @router.patch("/clientes/{client_id}/contacto")

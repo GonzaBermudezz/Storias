@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Tu semana · Storias</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap">
+  <style>
+    :root{--bg:#F6F6FB;--surface:#FFFFFF;--border:#E6E6F0;--fg:#16162C;--muted:#6C6C84;--accent:#6D5EF5;--accent-strong:#5646E0;--accent-soft:#EFEDFF;--danger:#DC2626;--danger-soft:#FEF2F2;--success:#16A34A;--success-soft:#DCFCE7;--shadow:0 1px 2px rgba(22,22,44,.04),0 10px 28px -16px rgba(22,22,44,.14);--radius:16px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--fg);font-family:Geist,system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
+    button,input,select,textarea{font:inherit}
+    .hidden{display:none!important}
+    a{color:inherit}
+
+    .topbar{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--border)}
+    .topbar-inner{max-width:720px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+    .brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+    .avatar{width:36px;height:36px;flex-shrink:0;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;overflow:hidden}
+    .avatar img{width:100%;height:100%;object-fit:cover}
+    .client-name{font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .logout{font-size:14px;color:var(--muted);text-decoration:none;padding:8px 4px}
+    .logout:hover{color:var(--accent-strong)}
+
+    main{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+    h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
+    .status{margin-top:6px;font-size:15px;color:var(--muted);display:flex;align-items:center;gap:6px}
+    .status.ok{color:var(--success)}
+    .status svg{flex-shrink:0}
+
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 16px;margin-top:16px}
+    .card h2{font-size:16px;font-weight:700}
+    .help{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.45}
+    .focus-form{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+    .focus-form label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+    .focus-form input,.focus-form select{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--fg)}
+    .focus-form input:focus,.focus-form select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(109,94,245,.15)}
+    .form-row{display:flex;flex-direction:column;gap:6px}
+
+    .btn{border:1px solid var(--border);background:var(--surface);color:var(--fg);padding:10px 14px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:650;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+    .btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent-strong)}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .btn.primary:hover:not(:disabled){background:var(--accent-strong);color:#fff}
+    .btn.approved{background:var(--success-soft);border-color:var(--success);color:var(--success)}
+    .btn:disabled{opacity:.55;cursor:wait}
+
+    .day-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .day-title{font-size:16px;font-weight:700}
+    .day-title::first-letter{text-transform:uppercase}
+    .stories{display:flex;gap:12px;overflow-x:auto;margin-top:14px;padding-bottom:6px;scroll-snap-type:x mandatory}
+    .story{flex:0 0 150px;scroll-snap-align:start;display:flex;flex-direction:column;gap:8px}
+    .story-img{width:100%;aspect-ratio:9/16;border-radius:12px;background:var(--accent-soft);overflow:hidden;border:1px solid var(--border)}
+    .story-img img{width:100%;height:100%;object-fit:cover;display:block}
+    .story-text{font-size:13px;line-height:1.4;color:var(--fg);overflow-wrap:anywhere}
+    .story .btn{font-size:13px;padding:8px 10px}
+    .tag{align-self:flex-start;font-size:12px;font-weight:650;padding:4px 9px;border-radius:99px;background:var(--accent-soft);color:var(--accent-strong)}
+
+    .loading{display:flex;flex-direction:column;align-items:center;gap:12px;padding:48px 0;color:var(--muted);font-size:14px}
+    .spinner{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .empty{text-align:center;color:var(--muted);font-size:15px;line-height:1.5;padding:28px 12px}
+    .error-box{margin-top:16px;padding:14px 16px;border-radius:12px;background:var(--danger-soft);color:var(--danger);font-size:14px;line-height:1.45}
+
+    .toast{position:fixed;left:16px;right:16px;top:12px;z-index:50;margin:0 auto;max-width:420px;padding:12px 16px;border-radius:12px;font-size:14px;background:var(--surface);border:1px solid var(--border);box-shadow:0 14px 32px -12px rgba(22,22,44,.3);display:flex;align-items:center;gap:8px}
+    .toast.error{color:var(--danger);border-color:#FDA29B;background:var(--danger-soft)}
+
+    @media(min-width:720px){
+      main{padding-top:32px}
+      .card{padding:22px 24px}
+      .focus-form{flex-direction:row;align-items:flex-end;flex-wrap:wrap}
+      .focus-form .form-row:first-child{flex:2 1 260px}
+      .focus-form .form-row{flex:1 1 160px}
+      .story{flex-basis:150px}
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="avatar" id="client-avatar"></span><span class="client-name" id="client-name"></span></div>
+      <a class="logout" href="/app/salir">Salir</a>
+    </div>
+  </header>
+  <main>
+    <h1>Tu semana</h1>
+    <p class="status" id="week-status" aria-live="polite"></p>
+
+    <section class="card" id="focus-card" aria-labelledby="focus-title">
+      <h2 id="focus-title">Qué querés destacar esta semana</h2>
+      <p class="help">Si lo dejás vacío, elegimos un tema por vos.</p>
+      <form class="focus-form" id="focus-form">
+        <div class="form-row">
+          <label for="week-focus">Qué destacar</label>
+          <input type="text" id="week-focus" maxlength="200" placeholder="Llegó el nuevo Garmin Forerunner" autocomplete="off">
+        </div>
+        <div class="form-row">
+          <label for="week-format">Formato</label>
+          <select id="week-format"><option value="">Automático</option></select>
+        </div>
+        <button type="submit" class="btn primary" id="save-week">Guardar</button>
+      </form>
+    </section>
+
+    <div id="days"><div class="loading"><span class="spinner" aria-hidden="true"></span>Cargando tu semana…</div></div>
+  </main>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

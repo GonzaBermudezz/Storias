@@ -12,7 +12,12 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from app.config import get_settings
+from app.db.supabase import get_admin_client
 from app.models.user import Employee, ClientUser
+from app.services.client_access import fetch_active_client_user
+
+# Cookie de sesión del panel del cliente (/app). Distinta de `session` (empleados).
+CLIENT_COOKIE = "client_session"
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -79,21 +84,47 @@ async def require_admin(
     return employee
 
 
-async def require_client(
-    token: Annotated[str, Depends(_get_token_from_request)],
-) -> ClientUser:
-    """
-    Verifica que el request viene de un cliente final autenticado.
-    Inyectar en los endpoints del portal del cliente (opción 1).
-    """
+def _get_client_token(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    """Token del cliente: header Bearer o cookie `client_session`. Nunca la
+    cookie `session` de empleados — una sesión no autentica a la otra."""
+    if creds:
+        return creds.credentials
+    cookie = request.cookies.get(CLIENT_COOKIE)
+    if cookie:
+        return cookie
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No autenticado",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def client_user_from_token(token: str) -> ClientUser:
+    """Valida un JWT de cliente contra la base. Lo usan require_client y la
+    página GET /app. El client_id sale de la fila de client_users, no del token;
+    quitar el acceso (usuario o cliente inactivo) corta la sesión al instante."""
     payload = _decode_token(token)
     if payload.get("role") != "client":
         raise HTTPException(status_code=403, detail="Acceso restringido a clientes")
-    return ClientUser(
-        id=payload["sub"],
-        client_id=payload["client_id"],
-        agency_id=payload["agency_id"],
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No autenticado",
+        headers={"WWW-Authenticate": "Bearer"},
     )
+    user = fetch_active_client_user(get_admin_client(), str(payload.get("sub") or ""))
+    if not user or user["client_id"] != payload.get("client_id"):
+        raise unauthorized
+    return ClientUser(**user)
+
+
+def require_client(
+    token: Annotated[str, Depends(_get_client_token)],
+) -> ClientUser:
+    """Usuario de cliente autenticado — inyectar en los endpoints de /app/api."""
+    return client_user_from_token(token)
 
 
 # Tipos anotados para usar en los endpoints
