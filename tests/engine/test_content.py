@@ -1062,3 +1062,14 @@ def test_prompt_marca_no_deja_prometer_ofertas_ni_inventar_publico():
     prompt = content._armar_prompt_marca("GBA", "Vendemos Garmin.", "")
     assert "combos" in prompt and "servicios" in prompt
     assert "público" in prompt.lower()
+
+
+def test_recortar_descripcion_corta_en_el_ultimo_punto_si_puede():
+    texto = "Primera oración completa. Segunda oración completa. Tercera que se pasa del límite y queda"
+    recortado = content._recortar_descripcion(texto, 60)
+    assert recortado == "Primera oración completa. Segunda oración completa."
+
+
+def test_recortar_descripcion_sin_punto_cerca_corta_por_palabra():
+    texto = "Una sola oración larguísima sin ningún punto que sigue y sigue y sigue"
+    assert content._recortar_descripcion(texto, 30) == content._recortar(texto, 30)

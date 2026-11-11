@@ -804,7 +804,8 @@ def _armar_prompt_marca(nombre_negocio: str, texto_web: str, notas: str) -> str:
         "Devolvé SOLO un JSON con esta forma, sin texto antes ni después:\n"
         "{\n"
         '  "business_description": "Quién es el negocio, qué vende, a quién le habla y cómo habla. '
-        'Escrita en segunda persona, como instrucción para quien escribe sus historias. Máximo 450 caracteres.",\n'
+        'Escrita en segunda persona, como instrucción para quien escribe sus historias. '
+        'Máximo 400 caracteres y terminá siempre en una oración completa.",\n'
         '  "tone_examples": [["historia 1", "historia 2", "historia 3", "historia 4"]],\n'
         '  "topics": ["tema corto"]\n'
         "}\n\n"
@@ -816,7 +817,8 @@ def _armar_prompt_marca(nombre_negocio: str, texto_web: str, notas: str) -> str:
         "promociones, sucursales ni productos que no aparezcan.\n"
         "- Ninguna historia puede prometer algo que el texto no diga que el negocio ofrece: "
         "nada de combos, kits, packs, descuentos, servicios ni beneficios nuevos. "
-        "Para la solución usá productos, marcas o beneficios que figuren tal cual.\n"
+        "Para la solución usá productos, marcas o beneficios que figuren tal cual, "
+        "sin agregarles condiciones (tarjetas, bancos, plazos) que el texto no diga.\n"
         "- El público: describilo solo si la información lo dice o se deduce sin dudas de lo que vende. "
         "Si no, hablá de quien busca esos productos, sin inventar perfiles (creadores, deportistas, etc.).\n"
         "- Sin hashtags. Sin emojis."
@@ -828,6 +830,16 @@ def _recortar(texto: str, maximo: int) -> str:
     if len(texto) <= maximo:
         return texto
     return texto[:maximo].rsplit(" ", 1)[0].rstrip(" ,;:")
+
+
+def _recortar_descripcion(texto: str, maximo: int) -> str:
+    """Like ``_recortar`` but ends on a full sentence when one ends past half the limit,
+    so the description never stops mid-thought."""
+    recortado = _recortar(texto, maximo)
+    if len(" ".join(_limpiar_emojis(str(texto)).split())) <= maximo:
+        return recortado
+    fin = max(recortado.rfind(signo) for signo in ".!?")
+    return recortado[:fin + 1] if fin >= maximo // 2 else recortado
 
 
 def _extraer_json(raw: str) -> dict:
@@ -870,7 +882,7 @@ def proponer_marca(nombre_negocio: str, texto_web: str | None = None,
         raise ClaudeGenerationError(f"Error llamando a Claude: {e}") from e
 
     data = _extraer_json(raw)
-    descripcion = _recortar(data.get("business_description") or "", _MAX_DESCRIPCION)
+    descripcion = _recortar_descripcion(data.get("business_description") or "", _MAX_DESCRIPCION)
     if not descripcion:
         raise ClaudeGenerationError("La IA no pudo armar la descripción. Contá un poco más sobre el negocio.")
 
