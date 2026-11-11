@@ -28,25 +28,17 @@ from app.engine.formatos import FORMATOS
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
 from app.engine.voces import VOCES
-from app.services import client_access, content_jobs, drive, uploads, web_text
+from app.services import brand, client_access, content_jobs, drive, history, photos, uploads, web_text
 from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config, setup_gaps
 from app.services.encryption import decrypt, encrypt
+from app.services.stories import LOCKED_STATES, MAX_LEARNINGS, learned, list_week, remember_correction, update_story_text
+from app.services.tenancy import CLIENT_DETAIL, client_or_error, select_all, without_secrets
 
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
 
-# Stories in these states already happened (or are mid-flight) on Instagram:
-# editing or cancelling them would silently diverge the DB from what's live.
-_LOCKED_STATES = {"generando", "publicando", "publicado", "cancelada"}
-
-_CLIENT_DETAIL = (
-    "id,agency_id,name,business_description,weekly_focus,"
-    "weekly_focus_expires_at,tone_examples,topics,drive_folder_id,logo_url,"
-    "avatar_url,avatar_public_id,instagram_profile_url,whatsapp_contact,"
-    "contact_email,calendly_link,prob_link,generation_error,"
-    "generation_error_at,publish_days,"
-    "publish_together,font_choice,drive_connected_email,weekly_format,voice_style,learned_edits,website_url"
-)
+_LOCKED_STATES = LOCKED_STATES
+_CLIENT_DETAIL = CLIENT_DETAIL
 
 # The sidebar gets identity + status; setup fields are read to derive gaps and
 # removed from the response. Full _CLIENT_DETAIL is loaded on selection.
@@ -55,7 +47,6 @@ _CLIENT_LIST = "id,name,avatar_url,generation_error,generation_error_at,drive_fo
 # and long in_(...) URLs fail, so bulk reads go through small id chunks and
 # paged queries instead of one unbounded call.
 _IN_CHUNK = 100
-_PAGE_SIZE = 500
 
 
 def _chunks(values, size=_IN_CHUNK):
@@ -63,16 +54,7 @@ def _chunks(values, size=_IN_CHUNK):
         yield values[start:start + size]
 
 
-def _select_all(build_query):
-    """Read every row of a query, page by page. `build_query` must return a
-    FRESH, ordered query each call (a builder can't be reused after execute)."""
-    rows, offset = [], 0
-    while True:
-        page = build_query().range(offset, offset + _PAGE_SIZE - 1).execute().data or []
-        rows.extend(page)
-        if len(page) < _PAGE_SIZE:
-            return rows
-        offset += _PAGE_SIZE
+_select_all = select_all
 
 
 class ClientPatch(BaseModel):
@@ -221,15 +203,7 @@ class ReorderRequest(BaseModel):
     historias: list[StoryOrder] = Field(min_length=1)
 
 
-def _client_or_error(db, client_id: str, agency_id: str, select_fields: str = _CLIENT_DETAIL) -> dict:
-    result = db.table("clients").select(select_fields).eq("id", client_id).maybe_single().execute()
-    # postgrest-py's maybe_single() returns None outright (not a response with
-    # data=None) when zero rows match — never assume `result` itself is set.
-    if not result or not result.data:
-        raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    if result.data["agency_id"] != agency_id:
-        raise HTTPException(status_code=403, detail="Cliente fuera de la agencia")
-    return result.data
+_client_or_error = client_or_error
 
 
 # drive_refresh_token_encrypted is deliberately left out of _CLIENT_DETAIL
@@ -245,12 +219,7 @@ def _pop_drive_refresh_token(client: dict) -> str | None:
     return decrypt(encrypted) if encrypted else None
 
 
-_CLIENT_SECRET_COLUMNS = ("drive_refresh_token_encrypted", "meta_access_token_encrypted")
-
-
-def _without_secrets(row: dict) -> dict:
-    """Drop encrypted credential columns before a clients row goes back to the browser."""
-    return {key: value for key, value in row.items() if key not in _CLIENT_SECRET_COLUMNS}
+_without_secrets = without_secrets
 
 
 _DIRECT_MODE_DETAIL = "No disponible en el panel de cliente directo"
@@ -726,10 +695,6 @@ _THUMB_CACHE_MAX = 400
 _photo_ids: dict[str, tuple[float, frozenset]] = {}
 _thumb_cache: "OrderedDict[tuple[str, str], bytes]" = OrderedDict()
 _thumb_lock = threading.Lock()
-_SCENE_LABELS = {"producto": "Producto", "ambiente": "Ambiente", "detalle": "Detalle",
-                 "exterior": "Exterior", "grafico": "Gráfico", "otro": "Otra"}
-
-
 def _remember_photo_ids(client_id: str, ids) -> None:
     _photo_ids[client_id] = (time.monotonic(), frozenset(ids))
 
@@ -745,15 +710,6 @@ def _photo_belongs_to_client(client: dict, file_id: str, refresh_token: str | No
     return file_id in ids
 
 
-def _photo_state(last_used, now: datetime) -> str:
-    if last_used is None:
-        return "nueva"
-    used = content_jobs._parse_fecha(last_used)
-    if used is None or used <= now - timedelta(weeks=content_jobs.NO_REPEAT_WEEKS):
-        return "disponible"
-    return "reciente"
-
-
 @router.get("/clientes/{client_id}/fotos")
 def list_client_photos(client_id: str, employee: EmployeeDep):
     """Every image in the client's Drive folder (one level of subfolders), with the
@@ -761,34 +717,7 @@ def list_client_photos(client_id: str, employee: EmployeeDep):
     db = get_admin_client()
     client = _client_or_error(db, client_id, employee.agency_id, _CLIENT_DETAIL_WITH_DRIVE_SECRET)
     refresh_token = _pop_drive_refresh_token(client)
-    if not client.get("drive_folder_id"):
-        return {"carpeta": False, "fotos": [], "semanas_sin_repetir": content_jobs.NO_REPEAT_WEEKS}
-    try:
-        available = drive.list_image_metadata(client["drive_folder_id"], refresh_token)
-    except Exception as exc:
-        logger.warning("Could not list Drive photos for client %s", client_id, exc_info=True)
-        raise HTTPException(status_code=422, detail="No se pudo leer la carpeta de Drive. Revisá la conexión en Ajustes.") from exc
-    _remember_photo_ids(client_id, [file_id for file_id, _ in available])
-    tags = content_jobs._load_tags(db, client_id)
-    history = {row["drive_file_id"]: row for row in _select_all(lambda: db.table("client_images").select(
-        "drive_file_id,last_used_at,times_used").eq("client_id", client_id).order("drive_file_id"))}
-    now = datetime.now(timezone.utc)
-    photos = []
-    for file_id, name in available:
-        folder, _, file_name = name.rpartition("/")
-        tag = tags.get(file_id)
-        used = history.get(file_id) or {}
-        photos.append({
-            "id": file_id, "nombre": file_name, "carpeta": folder or None,
-            "analizada": tag is not None,
-            "producto": (tag or {}).get("producto") or None,
-            "escena": _SCENE_LABELS.get((tag or {}).get("escena")) if tag else None,
-            "persona": bool(tag and tag.get("persona")),
-            "veces_usada": int(used.get("times_used") or 0) if used else 0,
-            "ultima_vez": used.get("last_used_at"),
-            "estado": _photo_state(used.get("last_used_at") if used else None, now) if file_id in history else "nueva",
-        })
-    return {"carpeta": True, "fotos": photos, "semanas_sin_repetir": content_jobs.NO_REPEAT_WEEKS}
+    return photos.photos_summary(db, client, refresh_token, on_listed=lambda ids: _remember_photo_ids(client_id, ids))
 
 
 @router.get("/clientes/{client_id}/fotos/{file_id}/miniatura")
@@ -925,34 +854,14 @@ def disconnect_drive(client_id: str, employee: EmployeeDep):
 @router.patch("/clientes/{client_id}")
 def patch_client(client_id: str, body: ClientPatch, employee: EmployeeDep):
     db = get_admin_client()
-    current = _client_or_error(db, client_id, employee.agency_id)
-    supplied = body.model_dump(mode="json", exclude_unset=True)
-    changes = {key: value for key, value in supplied.items() if current.get(key) != value}
-    if not changes:
-        return current
-
-    updated = db.rpc("update_client_prompt", {
-        "p_client_id": client_id, "p_employee_id": employee.id,
-        "p_agency_id": employee.agency_id, "p_patch": changes,
-    }).execute().data
-    if isinstance(updated, dict):
-        return _without_secrets(updated)
-    if isinstance(updated, list) and updated:
-        return _without_secrets(updated[0])
-    return {**current, **changes}
+    return brand.apply_prompt_patch(
+        db, client_id, employee.id, employee.agency_id, body.model_dump(mode="json", exclude_unset=True))
 
 
 @router.get("/clientes/{client_id}/historial")
 def list_prompt_history(client_id: str, employee: EmployeeDep):
     db = get_admin_client()
-    _client_or_error(db, client_id, employee.agency_id)
-    rows = db.table("prompt_history").select(
-        "id,field,old_value,new_value,changed_at,changed_by,employees(name)"
-    ).eq("client_id", client_id).order("changed_at", desc=True).limit(50).execute().data or []
-    for row in rows:
-        row["changed_by_name"] = (row.pop("employees", None) or {}).get("name")
-    return rows
-
+    return history.prompt_history(db, client_id, employee.agency_id)
 
 
 @router.get("/tipografias")
@@ -1062,11 +971,7 @@ class ClientFormatPatch(BaseModel):
 def patch_client_format(client_id: str, body: ClientFormatPatch, employee: EmployeeDep):
     """Formato de la próxima generación (null = automático). Estilístico, sin auditoría."""
     db = get_admin_client()
-    _client_or_error(db, client_id, employee.agency_id)
-    updated = db.table("clients").update({"weekly_format": body.weekly_format}).eq(
-        "id", client_id
-    ).execute().data
-    return _without_secrets(updated[0]) if isinstance(updated, list) and updated else {"id": client_id, "weekly_format": body.weekly_format}
+    return brand.set_weekly_format(db, client_id, employee.agency_id, body.weekly_format)
 
 
 class ClientAccessCreate(BaseModel):
@@ -1385,16 +1290,7 @@ def try_prompt(client_id: str, employee: EmployeeDep):
 @router.get("/clientes/{client_id}/historias")
 def list_stories(client_id: str, employee: EmployeeDep):
     db = get_admin_client()
-    _client_or_error(db, client_id, employee.agency_id)
-    groups = db.table("story_groups").select("*,stories(*)").eq("client_id", client_id).gte(
-        "scheduled_date", date.today().isoformat()
-    ).order("scheduled_date").execute().data or []
-    for group in groups:
-        group["stories"] = [
-            story for story in group.get("stories") or []
-            if story.get("estado") not in {"cancelada", "generando"}
-        ]
-    return groups
+    return list_week(db, client_id, employee.agency_id)
 
 
 def _valid_hhmm(value: str) -> bool:
@@ -1906,58 +1802,13 @@ def reorder_stories(body: ReorderRequest, employee: EmployeeDep):
 @router.patch("/historias/{story_id}")
 def patch_story(story_id: str, body: StoryPatch, employee: EmployeeDep):
     db = get_admin_client()
-    result = db.table("stories").select(
-        "id,client_id,order,text,image_url,image_original_url,estado,font_choice"
-    ).eq("id", story_id).maybe_single().execute()
-    # postgrest-py's maybe_single() returns None outright (not a response with
-    # data=None) when zero rows match — never chain `.data` directly onto it.
-    story = result.data if result else None
-    if not story:
-        raise HTTPException(status_code=404, detail="Historia no encontrada")
-    client = _client_or_error(db, story["client_id"], employee.agency_id)
-    if story.get("estado") in _LOCKED_STATES:
-        raise HTTPException(status_code=409, detail="La historia ya fue publicada o cancelada y no se puede editar")
-    if not story.get("image_original_url"):
-        raise HTTPException(status_code=422, detail="La historia no tiene imagen original")
-    response = requests.get(story["image_original_url"], timeout=30)
-    response.raise_for_status()
-    imagen_editada = content.editar_historia(
-        build_content_config(client), response.content, body.texto_nuevo, story["order"],
-        font_choice=story.get("font_choice"),
-    )
-    updated = db.table("stories").update({
-        "text": body.texto_nuevo, "image_url": imagen_editada.url,
-    }).eq("id", story_id).execute().data
-    _remember_correction(db, client, story.get("text"), body.texto_nuevo)
-    return updated[0] if isinstance(updated, list) and updated else {
-        **story, "text": body.texto_nuevo, "image_url": imagen_editada.url,
-    }
+    return update_story_text(db, story_id, employee.agency_id, body.texto_nuevo)
 
 
 # ── Aprendizaje (fase 4): the AI learns from the team's corrections ──────────
-_MAX_LEARNINGS = 8
-
-
-def _normalized(text) -> str:
-    return " ".join(str(text or "").split()).casefold()
-
-
-def _learned(client: dict) -> list[dict]:
-    return [item for item in (client.get("learned_edits") or []) if isinstance(item, dict)]
-
-
-def _remember_correction(db, client: dict, before, after) -> None:
-    """When a person changes a story's text, keep {antes, despues} (newest first, last 8)
-    so the engine writes that way next time. Best-effort: never breaks the save."""
-    if not str(before or "").strip() or _normalized(before) == _normalized(after):
-        return
-    item = {"id": secrets.token_hex(4), "antes": str(before).strip()[:300], "despues": str(after).strip()[:300],
-            "fecha": datetime.now(timezone.utc).isoformat()}
-    kept = [old for old in _learned(client) if _normalized(old.get("antes")) != _normalized(before)]
-    try:
-        db.table("clients").update({"learned_edits": [item] + kept[:_MAX_LEARNINGS - 1]}).eq("id", client["id"]).execute()
-    except Exception:
-        logger.warning("Could not remember the correction for client %s", client.get("id"), exc_info=True)
+_MAX_LEARNINGS = MAX_LEARNINGS
+_learned = learned
+_remember_correction = remember_correction
 
 
 @router.get("/clientes/{client_id}/aprendizajes")
