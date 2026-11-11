@@ -85,6 +85,17 @@ class Settings(BaseSettings):
     client_session_days: int = 30        # cuánto dura la sesión del cliente en /app
     client_link_days: int = 7            # cuánto dura un link de acceso sin canjear
 
+    # ── CM con IA (CLAUDE.md, sección 16) ──────────────────────────────────────
+    # Apagado por defecto: también hace falta agencies.cm_enabled. Sin los dos, 404.
+    cm_enabled: bool = False
+    cm_max_calls_per_message: int = 6        # llamadas a Claude por mensaje de la persona
+    cm_max_tools_per_call: int = 5           # las herramientas extra reciben is_error
+    cm_max_user_turns: int = 40              # mensajes de la persona por conversación
+    cm_max_user_turns_per_client_day: int = 60
+    cm_max_text_chars: int = 2000
+    cm_busy_seconds: int = 90                # reclamo busy_until: cubre UNA llamada (60 s) + herramientas; se renueva antes de cada una
+    cm_max_run_seconds: int = 150            # tiempo total de un mensaje: no arranca otra llamada si no entra
+
     # ── Rate limiting ──────────────────────────────────────────────────────────
     rate_limit_per_minute: int = 60
 

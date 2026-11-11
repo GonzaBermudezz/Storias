@@ -28,7 +28,7 @@ from app.engine.formatos import FORMATOS
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
 from app.engine.voces import VOCES
-from app.services import brand, client_access, content_jobs, drive, history, photos, uploads, web_text
+from app.services import brand, client_access, cm_agent, content_jobs, drive, history, photos, uploads, web_text
 from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config, setup_gaps
 from app.services.encryption import decrypt, encrypt
 from app.services.stories import LOCKED_STATES, MAX_LEARNINGS, learned, list_week, remember_correction, update_story_text
@@ -234,9 +234,14 @@ def _require_multi(employee) -> None:
 
 @router.get("/me")
 def get_me(employee: EmployeeDep):
-    return {"id": employee.id, "name": employee.name, "email": employee.email,
-            "role": employee.role, "agency_id": employee.agency_id,
-            "agency_mode": employee.agency_mode}
+    me = {"id": employee.id, "name": employee.name, "email": employee.email,
+          "role": employee.role, "agency_id": employee.agency_id,
+          "agency_mode": employee.agency_mode}
+    # CM con IA: needs the env flag AND agencies.cm_enabled. With the env flag off the
+    # key is left out (nothing is read from the database) and the UI treats it as off.
+    if get_settings().cm_enabled:
+        me["cm_enabled"] = cm_agent.agency_cm_enabled(get_admin_client(), employee.agency_id)
+    return me
 
 
 @router.post("/clientes/alta-masiva")

@@ -29,7 +29,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.observability import init_sentry
-from app.routers import auth, aprobar, cliente, demo, portal
+from app.routers import auth, aprobar, cliente, demo, portal, portal_cm
 
 s = get_settings()
 
@@ -105,6 +105,7 @@ app.include_router(auth.router)
 # app.include_router(aprobar.router)
 app.include_router(demo.router)
 app.include_router(portal.router)
+app.include_router(portal_cm.router)
 app.include_router(cliente.router)
 
 # Same-origin assets let the portal API receive the HTTP-only session cookie.

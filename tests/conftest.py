@@ -1,4 +1,11 @@
+import os
+
 import pytest
+
+# The developer's .env must not change test behavior: with CM_ENABLED=true there,
+# /portal/me would query the real Supabase. Env vars win over .env in pydantic-settings,
+# and this runs before any Settings() is built. CM tests turn it on explicitly.
+os.environ["CM_ENABLED"] = "false"
 
 
 @pytest.fixture(autouse=True)
