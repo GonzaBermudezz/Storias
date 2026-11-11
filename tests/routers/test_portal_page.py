@@ -434,3 +434,29 @@ def test_portal_frontend_has_client_style_panel_with_tone_examples_cta_and_optio
     assert '.client-logo-row{' in page
     assert 'class="client-logo-row"' in page
     assert page.count('class="logo-row"') == 1
+
+
+def test_client_workspace_is_split_into_sections_reachable_from_the_menu():
+    """Phase 1 layout: Semana / Marca / Historial / Ajustes, each in the sidebar."""
+    import re
+
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+
+    for tab in ("semana", "marca", "historial", "ajustes"):
+        assert f'id="tab-{tab}" data-tab="{tab}"' in page
+        assert f'data-client-tab="{tab}"' in page
+    # The brand lives in Marca, the weekly brief in Semana, connections in Ajustes.
+    marca = page.split('id="tab-marca"', 1)[1].split('id="tab-historial"', 1)[0]
+    assert 'id="content-panel"' in marca and 'id="style-panel"' in marca and 'id="client-voice"' in marca
+    semana = page.split('id="tab-semana"', 1)[1].split('id="tab-marca"', 1)[0]
+    assert 'id="client-focus"' in semana and 'id="client-format"' in semana and 'id="stories"' in semana
+    ajustes = page.split('id="tab-ajustes"', 1)[1].split("</section>", 1)[0]
+    assert 'id="client-drive-folder"' in ajustes and 'id="client-pm"' in ajustes and 'id="client-access-email"' in ajustes
+    assert 'id="settings-dialog"' not in page
+    assert "function openSettings() {\n    setClientTab('ajustes');\n  }" in source
+    assert "storias.clientTab" in source
+    # Every element the script looks up still exists after moving the blocks.
+    ids = set(re.findall(r'id="([^"]+)"', page))
+    assert set(re.findall(r"\$\('([a-zA-Z0-9_-]+)'\)", source)) <= ids
+    assert len(re.findall(r'id="([^"]+)"', page)) == len(ids)

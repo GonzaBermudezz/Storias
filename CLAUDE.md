@@ -215,3 +215,13 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - Alta de un cliente directo (a mano, por ahora): una fila en `agencies` con `mode = 'direct'`, el dueño en `employees` con `role = 'admin'` (entra con Google) y su único cliente en `clients`. Los INSERT de ejemplo están en `migrations/20261022_a83_agency_mode.sql`.
 - El panel `/app` de a81 sigue disponible para clientes de una agencia multi que solo revisan y aprueban.
 
+## 11. Diseño de la consola, fase 1
+
+- La ficha de un cliente se divide en cuatro secciones, a las que se entra desde el menú lateral (`data-client-tab`):
+  - **Semana**: qué destacar (enfoque y formato), el plan, las historias y el calendario.
+  - **Marca**: voz, temas, estilo de voz, tipografía, ejemplos de tono, CTA y logo.
+  - **Historial**: lo publicado y los cambios de la marca.
+  - **Ajustes**: Drive, Instagram y contacto; en modo multi también el PM y el acceso del cliente.
+- El modal "Ajustes del cliente" ya no existe: `openSettings()` abre la sección Ajustes. Los ids de los campos no cambiaron.
+- En modo multi, las secciones aparecen debajo de "Clientes", con el nombre del cliente elegido. En modo directo son el menú principal. La última sección abierta se recuerda en el navegador (`storias.clientTab`).
+

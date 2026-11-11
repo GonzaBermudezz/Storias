@@ -146,6 +146,35 @@
     .team-field .btn{flex-shrink:0;padding:7px 10px;font-size:11.5px}
     .access-extra{display:flex;flex-direction:column;gap:8px;margin-top:8px}
     html.direct-mode .multi-only{display:none!important}
+    /* Phase 1 layout: client sections in the menu */
+    .client-nav{display:flex;flex-direction:column;gap:2px;margin:2px 0 4px}
+    .client-nav-name{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);padding:10px 11px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    html:not(.direct-mode) .client-nav .nav-sub{padding-left:22px}
+    html.direct-mode .client-nav-name{padding-top:4px}
+    html.sidebar-collapsed .client-nav-name{display:none}
+    html.sidebar-collapsed .client-nav .nav-sub{padding-left:11px}
+    .client-tab{animation:tab-in .16s ease-out}
+    @keyframes tab-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    .tab-intro{margin:2px 1px 20px;max-width:640px}
+    .tab-intro h2{font-size:24px;font-weight:750;letter-spacing:-.02em;margin-bottom:6px}
+    .tab-intro p:last-child{font-size:14px;color:var(--muted);line-height:1.5}
+    .tab-actions{display:flex;gap:8px;margin:-6px 0 16px}
+    .tab-empty{background:var(--surface);border:1px dashed var(--border);border-radius:14px;padding:28px 20px;text-align:center;color:var(--muted);font-size:14px}
+    .panel-head.static{cursor:default}
+    .week-brief{margin-bottom:20px}
+    .week-brief .panel-head{padding-bottom:6px}
+    .week-brief .panel-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 24px}
+    .week-brief .panel-body > .hint{grid-column:1/-1;font-size:13px;color:var(--muted);margin-bottom:2px}
+    .week-brief .team-field{margin-top:8px;padding-top:10px}
+    .week-brief .team-field select{flex:1;min-width:0}
+    .week-brief .team-field:last-child .info[data-tooltip]::after{left:auto;right:-6px;transform:translate(0,4px)}
+    .week-brief .team-field:last-child .info[data-tooltip]:hover::after,.week-brief .team-field:last-child .info[data-tooltip]:focus-visible::after{transform:translate(0,0)}
+    @media(max-width:760px){.week-brief .panel-body{grid-template-columns:1fr}}
+    .settings-panel .team-field > label{min-width:150px}
+    @media(max-width:640px){.settings-panel .team-field{flex-wrap:wrap}.settings-panel .team-field > label{min-width:100%}}
+    #tab-marca .panel + .panel,#tab-ajustes .panel + .panel{margin-top:16px}
+    .settings-panel .panel-body{padding-top:4px}
+    .settings-panel .team-field:first-child{border-top:0;margin-top:4px}
     html.direct-mode .sidebar{min-height:100vh}
     html.direct-mode .me-card{margin-top:auto}
     .access-link-row{display:flex;gap:8px;align-items:center}
@@ -714,9 +743,15 @@
     </div>
     <nav class="main-nav">
       <span class="nav-item multi-only" id="nav-home" role="button" tabindex="0" title="Inicio"><span class="icon" data-icon="house" data-size="16"></span><span class="nav-label">Inicio</span></span>
-      <span class="nav-item active" id="nav-clients" role="button" tabindex="0" title="Clientes"><span class="icon" data-icon="users" data-size="16"></span><span class="nav-label" id="nav-clients-label">Clientes</span></span>
+      <span class="nav-item active multi-only" id="nav-clients" role="button" tabindex="0" title="Clientes"><span class="icon" data-icon="users" data-size="16"></span><span class="nav-label" id="nav-clients-label">Clientes</span></span>
+      <div class="client-nav hidden" id="client-nav" role="group" aria-label="Secciones del cliente">
+        <span class="client-nav-name" id="client-nav-name"></span>
+        <span class="nav-item nav-sub" data-client-tab="semana" role="button" tabindex="0" title="Semana"><span class="icon" data-icon="calendar" data-size="16"></span><span class="nav-label">Semana</span></span>
+        <span class="nav-item nav-sub" data-client-tab="marca" role="button" tabindex="0" title="Marca"><span class="icon" data-icon="sparkles" data-size="16"></span><span class="nav-label">Marca</span></span>
+        <span class="nav-item nav-sub" data-client-tab="historial" role="button" tabindex="0" title="Historial"><span class="icon" data-icon="clock" data-size="16"></span><span class="nav-label">Historial</span></span>
+        <span class="nav-item nav-sub" data-client-tab="ajustes" role="button" tabindex="0" title="Ajustes"><span class="icon" data-icon="settings" data-size="16"></span><span class="nav-label">Ajustes</span></span>
+      </div>
       <span class="nav-item" id="nav-enfoques" role="button" tabindex="0" title="Enfoques"><span class="icon" data-icon="target" data-size="16"></span><span class="nav-label">Enfoques</span></span>
-      <span class="nav-item disabled hidden" title="Próximamente"><span class="icon" data-icon="settings" data-size="16"></span>Ajustes</span>
     </nav>
     <div class="nav-divider multi-only"></div>
     <div class="section-label-row multi-only"><span class="section-label" id="client-count">Clientes</span><button id="add-clients-bulk" class="btn-add hidden" title="Alta masiva de clientes" aria-label="Alta masiva de clientes">+ Clientes</button></div>
@@ -809,6 +844,7 @@
         </div>
       </section>
       <section id="client-view" class="hidden">
+        <div class="client-tab" id="tab-semana" data-tab="semana">
         <div class="client-hero">
           <div>
             <p class="eyebrow">Espacio de contenido</p>
@@ -819,8 +855,60 @@
           </div>
           <button id="open-ritmo-hero" class="btn primary">Planificar semana</button>
         </div>
+        <div class="panel week-brief" id="week-brief">
+          <div class="panel-head static"><div><p class="eyebrow">Esta semana</p><h2>Qué destacar</h2></div></div>
+          <div class="panel-body">
+            <p class="hint">Contale a la IA qué querés empujar en la próxima generación. Si lo dejás vacío, elige un tema de la marca por vos.</p>
+            <div class="team-field">
+              <label for="client-focus">Enfoque semanal</label>
+              <select id="client-focus"><option value="">Sin enfoque</option></select>
+              <span class="info" tabindex="0" aria-label="Se usa en la próxima generación semanal y después se limpia solo. Los enfoques se crean y editan en la pestaña Enfoques del menú." data-tooltip="Se usa en la próxima generación semanal y después se limpia solo. Los enfoques se crean y editan en la pestaña Enfoques del menú.">i</span>
+            </div>
+            <div class="team-field">
+              <label for="client-format">Formato de la semana</label>
+              <select id="client-format"><option value="">Automático</option></select>
+              <span class="info" tabindex="0" aria-label="Cambia cómo se cuentan las 4 historias de la próxima generación: producto nuevo, venta, promo, tip… Después de generar vuelve a Automático." data-tooltip="Cambia cómo se cuentan las 4 historias de la próxima generación: producto nuevo, venta, promo, tip… Después de generar vuelve a Automático.">i</span>
+            </div>
+          </div>
+        </div>
+        <div id="plan-panel" class="plan-panel hidden">
+          <div class="plan-head" id="plan-panel-toggle"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
+          <div id="plan-days" class="plan-days"></div>
+        </div>
+        <div class="workspace">
+          <div class="stories-panel">
+            <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Para revisar y aprobar</span><p class="section-hint">Aprobá una historia con un clic sobre su tarjeta (te pedimos confirmar antes de aprobar). Podés editar el texto o la tipografía cuando lo necesites.</p></div><div class="review-actions"><span id="week-badge" class="week-badge hidden"></span><button type="button" class="btn" id="approve-all-client" hidden>Aprobar todo</button><button type="button" class="btn" id="review-next" hidden>Siguiente con pendientes</button></div></div>
+            <div id="stories" aria-live="polite"><div class="loading-state" role="status" aria-label="Cargando historias"><span class="spinner"></span><p>Cargando historias...</p></div></div>
+          </div>
+          <div class="side-col">
+            <aside class="activity">
+              <h3><span data-icon="calendar" data-size="16"></span>Calendario</h3>
+              <p class="hint">Hacé clic en un día para sumar una historia a mano. Los puntitos marcan lo ya planificado.</p>
+              <div class="cal-nav"><button id="cal-prev" class="icon-btn" aria-label="Mes anterior">‹</button><span id="cal-month-label"></span><button id="cal-next" class="icon-btn" aria-label="Mes siguiente">›</button></div>
+              <div class="cal-weekday-head"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+              <div id="calendar-grid" class="calendar-grid"></div>
+              <input type="file" id="manual-upload-input" accept="image/*" hidden>
+            </aside>
+            <aside class="activity">
+              <h3>Actividad de IA</h3>
+              <div id="activity-list" class="activity-list"></div>
+              <div id="activity-summary"></div>
+            </aside>
+            <aside class="activity">
+              <h3>Acciones rápidas</h3>
+              <div class="quick-actions">
+                <button id="qa-history" class="btn"><span data-icon="clock" data-size="15"></span>Ver historial</button>
+                <button id="qa-focus" class="btn"><span data-icon="pencil" data-size="15"></span>Editar voz y temas</button>
+                <button id="qa-settings" class="btn"><span data-icon="settings" data-size="15"></span>Ajustes del cliente</button>
+              </div>
+            </aside>
+          </div>
+        </div>
+        </div>
+        <div class="client-tab hidden" id="tab-marca" data-tab="marca">
+          <div class="tab-intro"><p class="eyebrow">Marca</p><h2>Cómo escribe la IA por vos</h2><p>Esto es lo que la IA usa para escribir como tu marca: la voz, los temas, ejemplos reales y el estilo. Cambialo cuando quieras; se usa desde la próxima historia.</p></div>
         <div class="panel" id="content-panel">
-          <div class="panel-head" id="content-panel-toggle"><div><p class="eyebrow">Voz y temas</p><h2>Sobre este cliente</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
+          <div class="panel-head" id="content-panel-toggle"><div><p class="eyebrow">Voz y temas</p><h2>Cómo habla la marca</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
           <div class="panel-body">
             <div class="editor-grid">
               <div class="field" id="description-field">
@@ -846,35 +934,11 @@
               </div>
             </div>
             <div class="team-field">
-              <label for="client-focus">Enfoque semanal</label>
-              <select id="client-focus"><option value="">Sin enfoque</option></select>
-              <span class="info" tabindex="0" aria-label="Se usa en la próxima generación semanal y después se limpia solo. Los enfoques se crean y editan en la pestaña Enfoques del menú." data-tooltip="Se usa en la próxima generación semanal y después se limpia solo. Los enfoques se crean y editan en la pestaña Enfoques del menú.">i</span>
-            </div>
-            <div class="team-field">
-              <label for="client-format">Formato de la semana</label>
-              <select id="client-format"><option value="">Automático</option></select>
-              <span class="info" tabindex="0" aria-label="Cambia cómo se cuentan las 4 historias de la próxima generación: producto nuevo, venta, promo, tip… Después de generar vuelve a Automático." data-tooltip="Cambia cómo se cuentan las 4 historias de la próxima generación: producto nuevo, venta, promo, tip… Después de generar vuelve a Automático.">i</span>
-            </div>
-            <div class="team-field">
               <label for="client-voice">Estilo de voz</label>
               <select id="client-voice"><option value="">Estándar</option></select>
               <span class="info" tabindex="0" aria-label="Cambia cómo suenan las historias del cliente. Estándar es el tono de siempre: simple y cotidiano, sin palabras técnicas." data-tooltip="Cambia cómo suenan las historias del cliente. Estándar es el tono de siempre: simple y cotidiano, sin palabras técnicas.">i</span>
             </div>
-            <div class="team-field multi-only"><label for="client-pm">PM asignado</label><select id="client-pm"><option value="">Sin PM</option></select></div>
             <div class="team-field"><label for="client-font">Tipografía</label><select id="client-font"><option value="">Predeterminada</option></select></div>
-            <div class="team-field access-field multi-only">
-              <label for="client-access-email">Acceso del cliente</label>
-              <input type="email" id="client-access-email" placeholder="email@cliente.com" autocomplete="off">
-              <button type="button" class="btn" id="client-access-create">Generar link</button>
-              <span class="info" tabindex="0" aria-label="El cliente entra a su panel con este link, ve su semana y aprueba las historias. Cada link sirve una sola vez." data-tooltip="El cliente entra a su panel con este link, ve su semana y aprueba las historias. Cada link sirve una sola vez.">i</span>
-            </div>
-            <div class="access-extra multi-only">
-              <div class="access-link hidden" id="client-access-link-row">
-                <div class="access-link-row"><input type="text" id="client-access-link" readonly aria-label="Link de acceso del cliente"><button type="button" class="btn" id="client-access-copy">Copiar</button></div>
-                <p class="access-hint">Vale 7 días. Mandáselo al cliente por WhatsApp.</p>
-              </div>
-              <ul class="access-list" id="client-access-list" aria-label="Accesos del cliente"></ul>
-            </div>
           </div>
         </div>
         <div class="panel collapsed" id="style-panel">
@@ -906,61 +970,20 @@
             </div>
           </div>
         </div>
-        <div id="plan-panel" class="plan-panel hidden">
-          <div class="plan-head" id="plan-panel-toggle"><div><p class="eyebrow">Ritmo de publicación</p><h2>Plan de la próxima semana <span id="plan-range" class="week-badge"></span></h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
-          <div id="plan-days" class="plan-days"></div>
         </div>
-        <div class="workspace">
-          <div class="stories-panel">
-            <div class="section-title-row"><div><p class="eyebrow">Revisión</p><span class="section-title">Para revisar y aprobar</span><p class="section-hint">Aprobá una historia con un clic sobre su tarjeta (te pedimos confirmar antes de aprobar). Podés editar el texto o la tipografía cuando lo necesites.</p></div><div class="review-actions"><span id="week-badge" class="week-badge hidden"></span><button type="button" class="btn" id="approve-all-client" hidden>Aprobar todo</button><button type="button" class="btn" id="review-next" hidden>Siguiente con pendientes</button></div></div>
-            <div id="stories" aria-live="polite"><div class="loading-state" role="status" aria-label="Cargando historias"><span class="spinner"></span><p>Cargando historias...</p></div></div>
-            <div class="panel hidden" id="historico-panel">
+        <div class="client-tab hidden" id="tab-historial" data-tab="historial">
+          <div class="tab-intro"><p class="eyebrow">Historial</p><h2>Lo que ya se publicó</h2><p>Las historias que ya salieron, agrupadas por día. También podés ver quién cambió la marca y cuándo.</p></div>
+          <div class="tab-actions"><button type="button" class="btn" id="history-open-changes"><span data-icon="clock" data-size="15"></span>Ver cambios de la marca</button></div>
+          <div class="panel hidden" id="historico-panel">
               <div class="panel-head" id="historico-panel-toggle"><div><p class="eyebrow">Historial</p><h2>Historias subidas</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
               <div class="panel-body"><div id="historico-list" class="historico-list"></div></div>
             </div>
-          </div>
-          <div class="side-col">
-            <aside class="activity">
-              <h3><span data-icon="calendar" data-size="16"></span>Calendario</h3>
-              <p class="hint">Hacé clic en un día para sumar una historia a mano. Los puntitos marcan lo ya planificado.</p>
-              <div class="cal-nav"><button id="cal-prev" class="icon-btn" aria-label="Mes anterior">‹</button><span id="cal-month-label"></span><button id="cal-next" class="icon-btn" aria-label="Mes siguiente">›</button></div>
-              <div class="cal-weekday-head"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
-              <div id="calendar-grid" class="calendar-grid"></div>
-              <input type="file" id="manual-upload-input" accept="image/*" hidden>
-            </aside>
-            <aside class="activity">
-              <h3>Actividad de IA</h3>
-              <div id="activity-list" class="activity-list"></div>
-              <div id="activity-summary"></div>
-            </aside>
-            <aside class="activity">
-              <h3>Acciones rápidas</h3>
-              <div class="quick-actions">
-                <button id="qa-history" class="btn"><span data-icon="clock" data-size="15"></span>Ver historial</button>
-                <button id="qa-focus" class="btn"><span data-icon="pencil" data-size="15"></span>Editar voz y temas</button>
-                <button id="qa-settings" class="btn"><span data-icon="settings" data-size="15"></span>Ajustes del cliente</button>
-              </div>
-            </aside>
-          </div>
+          <div id="historico-empty" class="tab-empty hidden">Todavía no hay historias publicadas. Cuando salgan, las vas a ver acá.</div>
         </div>
-      </section>
-    </main>
-  </div>
-  <dialog id="story-dialog" class="story-edit">
-    <div class="modal-head"><strong>Editar historia</strong><button id="close-story" class="icon-btn" aria-label="Cerrar">×</button></div>
-    <div class="story-edit-body">
-      <div class="story-edit-preview"><img id="story-edit-img" alt="Vista previa" class="hidden"><span class="story-edit-empty" id="story-edit-empty">Sin imagen</span></div>
-      <div class="story-edit-panel">
-        <textarea id="story-text"></textarea>
-        <div class="team-field"><label for="story-font">Tipografía de esta historia</label><select id="story-font"><option value="">Predeterminada del cliente</option></select></div>
-        <button id="generate-ai-text" class="btn hidden">Generar con IA</button>
-      </div>
-    </div>
-    <div class="modal-foot"><button id="cancel-story-edit" class="btn">Cancelar</button><button id="save-story" class="btn primary">Guardar historia</button></div>
-  </dialog>
-  <dialog id="history-dialog" class="wide"><div class="modal-head"><strong>Historial de cambios</strong><button id="close-history" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body" id="history-list"></div><div class="modal-foot"><button id="close-history-2" class="btn">Cerrar</button></div></dialog>
-  <dialog id="settings-dialog"><div class="modal-head"><strong id="settings-title">Ajustes del cliente</strong><button id="close-settings" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body">
-    <p class="hint">Los datos de contacto y la carpeta de Drive se guardan solos al salir de cada campo.</p>
+        <div class="client-tab hidden" id="tab-ajustes" data-tab="ajustes">
+          <div class="tab-intro"><p class="eyebrow">Ajustes</p><h2>Conexiones y contacto</h2><p>De dónde salen las fotos, a qué cuenta se publica y cómo contactar al cliente. Se guarda solo al salir de cada campo.</p></div>
+          <div class="panel settings-panel" id="settings-panel"><div class="panel-body">
+
     <div class="team-field">
       <label for="client-avatar-input">Avatar del portal</label>
       <span class="avatar avatar-sm" id="client-avatar-preview"></span>
@@ -991,7 +1014,43 @@
       <input type="email" id="client-email" placeholder="contacto@cliente.com">
       <a id="client-email-open" class="btn hidden"><span data-icon="mail" data-size="15"></span>Enviar mail</a>
     </div>
-  </div><div class="modal-foot"><button id="close-settings-2" class="btn">Cerrar</button></div></dialog>
+          </div></div>
+          <div class="panel settings-panel multi-only" id="team-panel">
+            <div class="panel-head static"><div><p class="eyebrow">Equipo</p><h2>PM y acceso del cliente</h2></div></div>
+            <div class="panel-body">
+            <div class="team-field multi-only"><label for="client-pm">PM asignado</label><select id="client-pm"><option value="">Sin PM</option></select></div>
+            <div class="team-field access-field multi-only">
+              <label for="client-access-email">Acceso del cliente</label>
+              <input type="email" id="client-access-email" placeholder="email@cliente.com" autocomplete="off">
+              <button type="button" class="btn" id="client-access-create">Generar link</button>
+              <span class="info" tabindex="0" aria-label="El cliente entra a su panel con este link, ve su semana y aprueba las historias. Cada link sirve una sola vez." data-tooltip="El cliente entra a su panel con este link, ve su semana y aprueba las historias. Cada link sirve una sola vez.">i</span>
+            </div>
+            <div class="access-extra multi-only">
+              <div class="access-link hidden" id="client-access-link-row">
+                <div class="access-link-row"><input type="text" id="client-access-link" readonly aria-label="Link de acceso del cliente"><button type="button" class="btn" id="client-access-copy">Copiar</button></div>
+                <p class="access-hint">Vale 7 días. Mandáselo al cliente por WhatsApp.</p>
+              </div>
+              <ul class="access-list" id="client-access-list" aria-label="Accesos del cliente"></ul>
+            </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <dialog id="story-dialog" class="story-edit">
+    <div class="modal-head"><strong>Editar historia</strong><button id="close-story" class="icon-btn" aria-label="Cerrar">×</button></div>
+    <div class="story-edit-body">
+      <div class="story-edit-preview"><img id="story-edit-img" alt="Vista previa" class="hidden"><span class="story-edit-empty" id="story-edit-empty">Sin imagen</span></div>
+      <div class="story-edit-panel">
+        <textarea id="story-text"></textarea>
+        <div class="team-field"><label for="story-font">Tipografía de esta historia</label><select id="story-font"><option value="">Predeterminada del cliente</option></select></div>
+        <button id="generate-ai-text" class="btn hidden">Generar con IA</button>
+      </div>
+    </div>
+    <div class="modal-foot"><button id="cancel-story-edit" class="btn">Cancelar</button><button id="save-story" class="btn primary">Guardar historia</button></div>
+  </dialog>
+  <dialog id="history-dialog" class="wide"><div class="modal-head"><strong>Historial de cambios</strong><button id="close-history" class="icon-btn" aria-label="Cerrar">×</button></div><div class="modal-body" id="history-list"></div><div class="modal-foot"><button id="close-history-2" class="btn">Cerrar</button></div></dialog>
   <dialog id="tone-dialog" class="wide">
     <div class="modal-head"><strong id="tone-dialog-title">Nuevo ejemplo de tono</strong><button id="close-tone" class="icon-btn" aria-label="Cerrar">×</button></div>
     <div class="modal-body">

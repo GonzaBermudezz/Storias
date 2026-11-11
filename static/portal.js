@@ -146,9 +146,32 @@
     $('generate-weekly').disabled = disabled || ritmoSaving || weeklyGenerating || !state.client?.drive_folder_id;
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
+  // Phase 1 layout: a client's work is split into sections reachable from the menu.
+  const CLIENT_TABS = ['semana', 'marca', 'historial', 'ajustes'];
+  function storedClientTab() {
+    try { const saved = localStorage.getItem('storias.clientTab'); return CLIENT_TABS.includes(saved) ? saved : 'semana'; } catch (_) { return 'semana'; }
+  }
+  function markClientNav(tab) {
+    document.querySelectorAll('[data-client-tab]').forEach((el) => {
+      const on = el.dataset.clientTab === tab;
+      el.classList.toggle('active', on);
+      if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
+    });
+  }
+  function setClientTab(tab) {
+    if (!CLIENT_TABS.includes(tab)) tab = 'semana';
+    state.clientTab = tab;
+    try { localStorage.setItem('storias.clientTab', tab); } catch (_) {}
+    document.querySelectorAll('.client-tab').forEach((el) => el.classList.toggle('hidden', el.dataset.tab !== tab));
+    if (tab === 'marca') { $('content-panel').classList.remove('collapsed'); setStylePanelCollapsed(false); }
+    if (!$('home-view').classList.contains('hidden') || !$('enfoques-view').classList.contains('hidden')) showClients();
+    markClientNav(tab);
+    window.scrollTo({top: 0});
+  }
   function clearSelection() {
     state.selectionVersion += 1; state.selectedClientId = null; state.client = null; state.groups = []; state.editingStory = null;
-    $('client-view').classList.add('hidden'); $('empty').classList.remove('hidden'); $('empty').textContent = 'Seleccioná un cliente para gestionar su contenido.';
+    $('client-view').classList.add('hidden'); $('empty').classList.remove('hidden'); $('empty').textContent = isDirectMode() ? 'Todavía no está cargado tu negocio. Escribinos y lo damos de alta.' : 'Seleccioná un cliente para gestionar su contenido.';
+    $('client-nav').classList.add('hidden');
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
     $('enfoques-view').classList.add('hidden'); $('nav-enfoques').classList.remove('active');
@@ -612,6 +635,7 @@
   function showHome() {
     $('nav-home').classList.add('active'); $('nav-clients').classList.remove('active'); $('nav-enfoques').classList.remove('active');
     $('home-view').classList.remove('hidden'); $('enfoques-view').classList.add('hidden'); $('empty').classList.add('hidden'); $('client-view').classList.add('hidden');
+    markClientNav(null);
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     renderClients();
     renderHomePending();
@@ -623,6 +647,7 @@
     $('home-view').classList.add('hidden'); $('enfoques-view').classList.add('hidden');
     renderClients();
     if (state.client) {
+      markClientNav(state.clientTab);
       $('client-view').classList.remove('hidden'); $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
       if (driveUrl(state.client.drive_folder_id)) $('drive-link').classList.remove('hidden');
     } else {
@@ -632,6 +657,7 @@
   function showEnfoques() {
     $('nav-enfoques').classList.add('active'); $('nav-home').classList.remove('active'); $('nav-clients').classList.remove('active');
     $('enfoques-view').classList.remove('hidden'); $('home-view').classList.add('hidden'); $('empty').classList.add('hidden'); $('client-view').classList.add('hidden');
+    markClientNav(null);
     $('header-client').classList.add('hidden'); $('header-default').classList.remove('hidden'); $('drive-link').classList.add('hidden');
     renderFocusPresetsList();
     renderClients();
@@ -969,6 +995,9 @@
     $('client-view').classList.add('is-switching');
     if ($('story-dialog').open) $('story-dialog').close();
     clearMessage(); $('empty').classList.add('hidden'); $('client-view').classList.remove('hidden');
+    $('client-nav').classList.remove('hidden'); $('client-nav-name').textContent = '';
+    document.querySelectorAll('.client-tab').forEach((el) => el.classList.toggle('hidden', el.dataset.tab !== state.clientTab));
+    markClientNav(state.clientTab);
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
     $('enfoques-view').classList.add('hidden'); $('nav-enfoques').classList.remove('active');
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
@@ -982,6 +1011,7 @@
       ]);
       if (selectionVersion !== state.selectionVersion || clientId !== state.selectedClientId) return;
       state.client = client; state.groups = groups;
+      $('client-nav-name').textContent = isDirectMode() ? 'Tu marca' : (client.name || '');
       renderClients(); renderClient();
       // Drive's folder listing is an external Google API call with its own
       // latency (and occasional slowness) — fetched separately so it never
@@ -1094,6 +1124,8 @@
     box.classList.remove('hidden');
   }
   function goToSetup(key) {
+    if (key === 'drive') { setClientTab('ajustes'); $('client-drive-folder').focus(); return; }
+    setClientTab('marca');
     if (key === 'descripcion' || key === 'temas') $('content-panel').classList.remove('collapsed');
     if (key === 'descripcion') { enterFieldEdit('description', 'business-description'); $('business-description').scrollIntoView({block: 'center', behavior: 'smooth'}); return; }
     if (key === 'temas') { enterFieldEdit('topics', 'client-topics'); $('client-topics').scrollIntoView({block: 'center', behavior: 'smooth'}); return; }
@@ -1272,6 +1304,7 @@
   function renderHistorico(byDate) {
     const panel = $('historico-panel');
     const dates = [...byDate.keys()].sort().reverse();
+    $('historico-empty').classList.toggle('hidden', dates.length > 0);
     if (!dates.length) { panel.classList.add('hidden'); return; }
     panel.classList.remove('hidden');
     $('historico-list').innerHTML = dates.map((iso) => {
@@ -2429,8 +2462,7 @@
     } catch (error) { $('history-list').textContent = error.message; }
   }
   function openSettings() {
-    $('settings-title').textContent = state.client ? `Ajustes de ${state.client.name}` : 'Ajustes del cliente';
-    $('settings-dialog').showModal();
+    setClientTab('ajustes');
   }
   function findStory(storyId) { for (const group of state.groups) { const story=(group.stories||[]).find((item)=>item.id===storyId); if(story) return {group,story}; } return null; }
   function openStory(story, group) {
@@ -2756,8 +2788,11 @@
   $('close-history').addEventListener('click',()=>$('history-dialog').close());
   $('close-history-2').addEventListener('click',()=>$('history-dialog').close());
   $('qa-settings').addEventListener('click',openSettings);
-  $('close-settings').addEventListener('click',()=>$('settings-dialog').close());
-  $('close-settings-2').addEventListener('click',()=>$('settings-dialog').close());
+  $('history-open-changes').addEventListener('click',openHistory);
+  document.querySelectorAll('[data-client-tab]').forEach((el) => {
+    el.addEventListener('click', () => { setClientTab(el.dataset.clientTab); setMobileMenu(false); });
+    el.addEventListener('keydown', (event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); el.click(); });
+  });
   $('cal-prev').addEventListener('click',()=>{calMonthOffset--; renderCalendarMonth();});
   $('cal-next').addEventListener('click',()=>{calMonthOffset++; renderCalendarMonth();});
   $('calendar-grid').addEventListener('click',(event)=>{
@@ -2785,7 +2820,7 @@
     const chip = event.target.closest('[data-day]'); if (!chip) return;
     toggleRitmoDay(Number(chip.dataset.day));
   });
-  $('qa-focus').addEventListener('click',()=>{$('content-panel').classList.remove('collapsed'); setFieldMode('description',true); $('business-description').scrollIntoView({behavior:'smooth',block:'center'}); $('business-description').focus();});
+  $('qa-focus').addEventListener('click',()=>{setClientTab('marca'); $('content-panel').classList.remove('collapsed'); setFieldMode('description',true); $('business-description').scrollIntoView({behavior:'smooth',block:'center'}); $('business-description').focus();});
   $('stories').addEventListener('click',(event)=>{
     const emptyCta=event.target.closest('[data-empty-cta]');
     if (emptyCta) { openRitmoDialog(); return; }
@@ -2907,5 +2942,6 @@
   setSidebarCollapsed(document.documentElement.classList.contains('sidebar-collapsed'));
   hydrateIcons();
   try { setClientScope(localStorage.getItem('storias.clientScope') === 'mine' ? 'mine' : 'all', false); } catch (_) {}
+  state.clientTab = storedClientTab();
   loadMeAndOptions().finally(loadClients);
 })();
