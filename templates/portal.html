@@ -161,6 +161,17 @@
     .tab-actions{display:flex;gap:8px;margin:-6px 0 16px}
     .tab-empty{background:var(--surface);border:1px dashed var(--border);border-radius:14px;padding:28px 20px;text-align:center;color:var(--muted);font-size:14px}
     .panel-head.static{cursor:default}
+    /* Fase 4: Aprendizaje */
+    .learn-panel{margin-top:16px}
+    .learn-panel .panel-body > .hint{font-size:13px;color:var(--muted);margin-bottom:12px}
+    .learn-list{list-style:none;display:flex;flex-direction:column;gap:8px}
+    .learn-item{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+    .learn-change{display:flex;flex-direction:column;gap:3px;min-width:0;font-size:13px;line-height:1.4}
+    .learn-change .before{color:var(--muted);text-decoration:line-through;text-decoration-color:rgba(108,108,132,.5)}
+    .learn-change .after{color:var(--fg);font-weight:600}
+    .learn-change .when{font-size:11px;color:var(--muted)}
+    .learn-item .btn{flex-shrink:0;padding:6px 10px;font-size:12px}
+    .learn-empty{font-size:13px;color:var(--muted);border:1px dashed var(--border);border-radius:12px;padding:16px;text-align:center}
     /* Fase 3: Fotos */
     .photos-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
     .photos-toolbar-right{display:flex;gap:8px;align-items:center}
@@ -1023,6 +1034,13 @@
                 <button type="button" class="btn hidden" id="logo-remove">Quitar logo</button>
               </div>
             </div>
+          </div>
+        </div>
+        <div class="panel learn-panel" id="learn-panel">
+          <div class="panel-head static"><div><p class="eyebrow">Aprendizaje</p><h2>Lo que la IA aprendió de tus cambios</h2></div><button type="button" class="btn hidden" id="learn-clear">Olvidar todo</button></div>
+          <div class="panel-body">
+            <p class="hint">Cada vez que corregís el texto de una historia, la IA guarda el cambio y escribe así en las próximas. Se guardan los últimos 8; si alguno no te sirve, olvidalo.</p>
+            <ul id="learn-list" class="learn-list" aria-live="polite"></ul>
           </div>
         </div>
         </div>

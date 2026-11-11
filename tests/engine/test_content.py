@@ -953,3 +953,37 @@ def test_reescribir_historia_sin_opciones_nuevas_levanta(monkeypatch):
     _claude_que_responde(monkeypatch, "Original ||| original")
     with pytest.raises(content.ClaudeGenerationError):
         content.reescribir_historia(config_cuan(), "Original", "corto")
+
+
+# ---------------------------------------------------------------------------
+# Fase 4: la IA aprende de las correcciones del equipo
+# ---------------------------------------------------------------------------
+_APRENDIZAJES = [{"id": "x1", "antes": "Tu cocina soñada te espera.", "despues": "Tu cocina, hecha a medida."},
+                 {"id": "x2", "antes": "Consultá   ya", "despues": "Escribí COCINA y te asesoramos"}]
+
+
+def test_sin_aprendizajes_no_hay_bloque():
+    assert content._bloque_aprendizajes(config_cuan()) == ""
+    assert "Así corrigió" not in _armar_prompt(config_cuan())
+
+
+def test_los_aprendizajes_entran_en_los_tres_prompts():
+    config = config_cuan(aprendizajes=_APRENDIZAJES)
+    bloque = content._bloque_aprendizajes(config)
+
+    assert bloque.startswith("Así corrigió el equipo de CUAN textos que había escrito la IA.")
+    assert '- Antes: "Tu cocina soñada te espera." → Después: "Tu cocina, hecha a medida."\n' in bloque
+    assert '- Antes: "Consultá ya" → Después: "Escribí COCINA y te asesoramos"\n' in bloque
+    for prompt in (_armar_prompt(config), _armar_prompt_historia_unica(config),
+                   content._armar_prompt_variantes(config, "Hola", "corto")):
+        assert bloque in prompt
+        assert prompt.index(bloque) < prompt.index("REGLAS DE TONO")
+
+
+def test_aprendizajes_limita_a_8_recorta_y_descarta_incompletos():
+    largos = [{"antes": f"antes {i} " + "x" * 200, "despues": f"despues {i}"} for i in range(10)]
+    config = config_cuan(aprendizajes=[{"antes": "", "despues": "solo despues"}, *largos])
+    bloque = content._bloque_aprendizajes(config)
+    assert bloque.count("- Antes:") == 8
+    assert "solo despues" not in bloque and "antes 8" not in bloque
+    assert all(len(line) < 200 for line in bloque.splitlines())

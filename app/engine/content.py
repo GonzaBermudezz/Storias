@@ -149,7 +149,7 @@ def _armar_prompt(config: ClientContentConfig) -> str:
     return (
         f"{config.business_description}\n\n"
         f"{consigna_tema}\n\n"
-        f"{_bloque_ejemplos(config)}"
+        f"{_bloque_ejemplos(config)}{_bloque_aprendizajes(config)}"
         "REGLAS DE TONO (muy importante):\n"
         f"{_bloque_voz(config)}"
         "- Cada historia es UNA sola idea, corta, con gancho\n"
@@ -190,6 +190,31 @@ def _formatear_ejemplos(nombre_negocio: str, tone_examples: list[list[str]]) -> 
         "referencia de estilo):"
     )
     return intro + "\n\n" + "\n\n".join(bloques)
+
+
+_MAX_APRENDIZAJES = 8
+_MAX_TEXTO_APRENDIZAJE = 140
+
+
+def _bloque_aprendizajes(config: ClientContentConfig) -> str:
+    """Fase 4: cómo corrigió el equipo textos anteriores de la IA, para que escriba así
+    de entrada. Vacío (prompt idéntico al de antes) si todavía no hay correcciones."""
+    def recortar(texto) -> str:
+        texto = " ".join(str(texto or "").split())
+        return texto if len(texto) <= _MAX_TEXTO_APRENDIZAJE else texto[:_MAX_TEXTO_APRENDIZAJE].rsplit(" ", 1)[0] + "…"
+
+    items = [(recortar(a.get("antes")), recortar(a.get("despues")))
+             for a in (config.aprendizajes or []) if isinstance(a, dict)]
+    items = [(antes, despues) for antes, despues in items if antes and despues][:_MAX_APRENDIZAJES]
+    if not items:
+        return ""
+    lineas = "".join(f'- Antes: "{antes}" → Después: "{despues}"\n' for antes, despues in items)
+    return (
+        f"Así corrigió el equipo de {config.nombre_negocio} textos que había escrito la IA. "
+        "Aprendé de esos cambios (qué sacan, qué agregan, cómo lo dicen) y escribí "
+        "directamente como en \"Después\", sin copiarlos:\n"
+        f"{lineas}\n"
+    )
 
 
 def _bloque_ejemplos(config: ClientContentConfig) -> str:
@@ -319,7 +344,7 @@ def _armar_prompt_historia_unica(config: ClientContentConfig, formato: str | Non
     return (
         f"{config.business_description}\n\n"
         f"{mirada}"
-        f"{_bloque_ejemplos(config)}"
+        f"{_bloque_ejemplos(config)}{_bloque_aprendizajes(config)}"
         f"{consigna}"
         f"{bloque_formato}"
         "REGLAS DE TONO (muy importante):\n"
@@ -683,7 +708,7 @@ def _armar_prompt_variantes(config: ClientContentConfig, texto: str, accion: str
         raise ValueError(f"Acción desconocida: {accion}")
     return (
         f"{config.business_description}\n\n"
-        f"{_bloque_ejemplos(config)}"
+        f"{_bloque_ejemplos(config)}{_bloque_aprendizajes(config)}"
         f"Esta es una historia de Instagram de {config.nombre_negocio}:\n"
         f"\"{texto.strip()}\"\n\n"
         f"{consigna}\n\n"

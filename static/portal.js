@@ -1102,6 +1102,7 @@
     renderDriveFolderState();
     renderSetupNotice();
     renderStyleSection();
+    renderLearnings();
     setStylePanelCollapsed(false); // Marca es su propia sección: siempre a la vista
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     const url = driveUrl(state.client.drive_folder_id);
@@ -2626,6 +2627,35 @@
     }
     renderPhotos();
   }
+  // Fase 4 — Aprendizaje: corrections the AI keeps in mind (stored on the client row).
+  function renderLearnings() {
+    const items = Array.isArray(state.client?.learned_edits) ? state.client.learned_edits : [];
+    $('learn-clear').classList.toggle('hidden', !items.length);
+    $('learn-list').innerHTML = items.length ? items.map((item) => {
+      const when = item.fecha ? new Date(item.fecha).toLocaleDateString('es-AR', {day: 'numeric', month: 'short'}) : '';
+      return `<li class="learn-item"><div class="learn-change"><span class="before">${escapeHtml(item.antes)}</span><span class="after">${escapeHtml(item.despues)}</span>${when ? `<span class="when">${escapeHtml(when)}</span>` : ''}</div><button type="button" class="btn" data-learn-forget="${escapeHtml(item.id)}">Olvidar</button></li>`;
+    }).join('') : '<li class="learn-empty">Todavía no hay correcciones. Cuando cambies el texto de una historia, aparece acá y la IA lo aprende.</li>';
+  }
+  async function refreshLearnings() {
+    const clientId = state.client?.id; if (!clientId) return;
+    try {
+      const result = await api(`/portal/clientes/${encodeURIComponent(clientId)}/aprendizajes`);
+      if (clientId !== state.client?.id) return;
+      state.client.learned_edits = result.aprendizajes; renderLearnings();
+    } catch (_) { /* non-fatal: the list refreshes on the next client load */ }
+  }
+  async function forgetLearning(itemId) {
+    const clientId = state.client?.id; if (!clientId) return;
+    const all = !itemId;
+    if (all && !await confirmDialog('¿Olvidar todo lo que la IA aprendió de tus correcciones?', {okLabel: 'Olvidar todo', danger: true})) return;
+    try {
+      const path = `/portal/clientes/${encodeURIComponent(clientId)}/aprendizajes${all ? '' : '/' + encodeURIComponent(itemId)}`;
+      const result = await api(path, {method: 'DELETE'});
+      if (clientId !== state.client?.id) return;
+      state.client.learned_edits = result.aprendizajes; renderLearnings();
+      showMessage(all ? 'Listo, la IA olvidó tus correcciones.' : 'Listo, la IA ya no tiene en cuenta ese cambio.');
+    } catch (error) { if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true); }
+  }
   async function saveStoryFont() {
     const select=$('story-font'), story=state.editingStory, clientId=state.client?.id, selectionVersion=state.selectionVersion, fontChoice=select.value || null;
     if (!story || storyIsLocked(story) || !clientId || fontChoice === (story.font_choice || null)) return;
@@ -2692,7 +2722,10 @@
     try {
       const updated=await api(`/portal/historias/${encodeURIComponent(story.id)}`, {method:'PATCH', body:JSON.stringify({texto_nuevo:textoNuevo})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id || story !== state.editingStory) return;
-      Object.assign(story,updated); $('story-dialog').close(); renderStories(); renderPlan(); showMessage('Historia actualizada.');
+      const changedText = (story.text || '').trim() && (story.text || '').trim() !== textoNuevo;
+      Object.assign(story,updated); $('story-dialog').close(); renderStories(); renderPlan();
+      showMessage(changedText ? 'Historia actualizada. La IA tiene en cuenta tu corrección para las próximas.' : 'Historia actualizada.');
+      if (changedText) refreshLearnings();
     } catch(error) { if (selectionVersion === state.selectionVersion && !['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message,true); }
     finally { if (selectionVersion === state.selectionVersion) button.disabled=false; }
   }
@@ -2935,6 +2968,11 @@
   $('close-history-2').addEventListener('click',()=>$('history-dialog').close());
   $('qa-settings').addEventListener('click',openSettings);
   $('history-open-changes').addEventListener('click',openHistory);
+  $('learn-clear').addEventListener('click', () => forgetLearning(null));
+  $('learn-list').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-learn-forget]');
+    if (button) forgetLearning(button.dataset.learnForget);
+  });
   $('photos-refresh').addEventListener('click', () => loadPhotos(true));
   $('photo-folder').addEventListener('change', () => { if (state.photos) { state.photos.folder = $('photo-folder').value; renderPhotos(); } });
   $('photo-filters').addEventListener('click', (event) => {

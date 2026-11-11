@@ -35,6 +35,7 @@ Extienden el `supabase_schema.sql` que ya armó Matías.
 | `prob_link` | float, default 0 | Ídem |
 | `weekly_format` | text, nullable | Formato de la próxima generación (clave de app/engine/formatos.py). null = arco por defecto. Se consume en la generación y vuelve a null |
 | `voice_style` | text, nullable | Estilo de voz del cliente (clave de app/engine/voces.py). null = Estándar, el tono de siempre. No se consume |
+| `learned_edits` | jsonb, default `[]` | Fase 4: correcciones del equipo `[{id, antes, despues, fecha}]`, la más nueva primero, como máximo 8. El motor las recibe como `aprendizajes` |
 
 **`client_images`** (nueva) — tracking de no-repetición:
 | Campo | Tipo |
@@ -103,6 +104,7 @@ class ClientContentConfig(BaseModel):
     prob_link: float = 0.0              # probabilidad (0-1) de agregar el CTA en la historia 4, sorteada por el motor
     weekly_format: str | None = None
     voice_style: str | None = None      # clave de voces.VOCES; None = tono de siempre
+    aprendizajes: list[dict] = []       # fase 4: [{antes, despues}] correcciones del equipo, la más nueva primero
     tema_elegido: str | None = None     # tema de la semana elegido por el portal (solo si no hay weekly_focus); el motor lo prefiere al random
 
 class ImagenCandidata(BaseModel):
@@ -248,4 +250,11 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - `GET /portal/clientes/{id}/fotos` devuelve `{carpeta, fotos: [{id, nombre, carpeta, analizada, producto, escena, persona, veces_usada, ultima_vez, estado}], semanas_sin_repetir}`. Si Drive falla, responde 422.
 - `GET /portal/clientes/{id}/fotos/{file_id}/miniatura` sirve un JPEG chico a través del server, porque el navegador no puede pedirle fotos privadas a Drive. Primero usa la miniatura del propio Drive y, si no hay, baja la original y la achica (`drive.thumbnail`). **Solo sirve archivos que están en la carpeta de ese cliente**: la cuenta de servicio puede leer las carpetas de todos, así que el server valida contra el listado de la carpeta (cacheado 10 min). Las miniaturas quedan en memoria (hasta 400).
 - `PATCH /portal/clientes/{id}/fotos/{file_id}` con `{producto}` corrige el producto (`image_tags.subject`). Vacío = sin producto. Si la IA todavía no analizó la foto, responde 409. Esa corrección es la que usa la selección de fotos del hilo semanal.
+
+## 14. Aprendizaje, fase 4
+
+- Cuando alguien cambia el texto de una historia (`PATCH /portal/historias/{id}`), el portal guarda el cambio en `clients.learned_edits`. Si no había texto antes o el cambio es solo de espacios o mayúsculas, no guarda nada. Si ese mismo texto ya se había corregido antes, la corrección nueva reemplaza a la vieja. Es best-effort: si falla, la historia se guarda igual.
+- `build_content_config` pasa esas correcciones al motor como `ClientContentConfig.aprendizajes`. El motor arma un bloque "Así corrigió el equipo de {negocio}…" (`_bloque_aprendizajes`, hasta 8, cada texto recortado a 140 caracteres) después de los ejemplos de tono, en los tres prompts: el hilo, la historia suelta y Editar con IA. Si no hay correcciones, los prompts quedan idénticos a los de antes.
+- En Marca, el panel "Lo que la IA aprendió de tus cambios" muestra cada corrección y deja olvidarla. Endpoints: `GET /portal/clientes/{id}/aprendizajes`, `DELETE .../aprendizajes/{item_id}` (404 si no existe) y `DELETE .../aprendizajes` para olvidar todo.
+- Migración: `migrations/20261023_f4_learned_edits.sql`. Hay que aplicarla antes de desplegar, porque `_CLIENT_DETAIL` pide la columna.
 

@@ -3187,3 +3187,95 @@ def test_portal_frontend_has_photos_section():
         assert f'id="{element_id}"' in page
     assert "/fotos/${encodeURIComponent(photo.id)}/miniatura" in source and 'loading="lazy"' in source
     assert "'fotos'" in source.split("const CLIENT_TABS", 1)[1].split("\n", 1)[0]
+
+
+# ---------------------------------------------------------------------------
+# Fase 4: Aprendizaje
+# ---------------------------------------------------------------------------
+def _edit_story_db(old_text, learned=None, extra=None):
+    story = {"id": "s1", "client_id": "c1", "order": 1, "text": old_text, "image_original_url": "https://original"}
+    client_row = {"id": "c1", "agency_id": "agency-1", "name": "CUAN", "business_description": "desc",
+                  "tone_examples": [], "learned_edits": learned or []}
+    return DB([story, client_row, [{"id": "s1"}], *(extra or [[{"id": "c1"}]])])
+
+
+def _patch_story_mocks(monkeypatch, db):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.requests.get", lambda url, timeout: SimpleNamespace(content=b"img", raise_for_status=lambda: None))
+    monkeypatch.setattr("app.routers.portal.content.editar_historia", lambda *a, **k: SimpleNamespace(url="https://new", public_id="p"))
+
+
+def test_editing_a_story_remembers_the_correction_newest_first(monkeypatch, client):
+    learned = [{"id": f"o{i}", "antes": f"viejo {i}", "despues": f"nuevo {i}"} for i in range(8)]
+    db = _edit_story_db("La IA dijo esto", learned)
+    _patch_story_mocks(monkeypatch, db)
+
+    response = client.patch("/portal/historias/s1", json={"texto_nuevo": "Yo lo digo así"})
+
+    assert response.status_code == 200
+    table, payload, filters = db.updates[-1]
+    assert table == "clients" and filters == [("id", "c1")]
+    kept = payload["learned_edits"]
+    assert len(kept) == 8
+    assert (kept[0]["antes"], kept[0]["despues"]) == ("La IA dijo esto", "Yo lo digo así") and kept[0]["id"] and kept[0]["fecha"]
+    assert [item["id"] for item in kept[1:]] == [f"o{i}" for i in range(7)]
+
+
+def test_editing_the_same_text_again_replaces_its_previous_learning(monkeypatch, client):
+    db = _edit_story_db("La IA dijo esto", [{"id": "o1", "antes": "la ia  dijo esto", "despues": "otra cosa"}])
+    _patch_story_mocks(monkeypatch, db)
+    client.patch("/portal/historias/s1", json={"texto_nuevo": "Yo lo digo así"})
+    kept = db.updates[-1][1]["learned_edits"]
+    assert [item["despues"] for item in kept] == ["Yo lo digo así"]
+
+
+@pytest.mark.parametrize("old_text, new_text", [(None, "Primer texto"), ("", "Primer texto"), ("Igual  texto", "igual texto")])
+def test_no_learning_without_a_real_change(monkeypatch, client, old_text, new_text):
+    db = _edit_story_db(old_text)
+    _patch_story_mocks(monkeypatch, db)
+    assert client.patch("/portal/historias/s1", json={"texto_nuevo": new_text}).status_code == 200
+    assert [table for table, *_ in db.updates] == ["stories"]
+
+
+def test_a_failed_learning_never_breaks_the_save(monkeypatch, client):
+    db = _edit_story_db("Antes", extra=[])  # the learning update finds no response and raises
+    _patch_story_mocks(monkeypatch, db)
+    response = client.patch("/portal/historias/s1", json={"texto_nuevo": "Después"})
+    assert response.status_code == 200
+
+
+def test_list_and_forget_learnings(monkeypatch, client):
+    learned = [{"id": "a", "antes": "1", "despues": "2"}, {"id": "b", "antes": "3", "despues": "4"}]
+    row = {"id": "c1", "agency_id": "agency-1", "learned_edits": learned}
+    db = DB([dict(row), dict(row), [{"id": "c1"}], dict(row), dict(row), [{"id": "c1"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    assert client.get("/portal/clientes/c1/aprendizajes").json() == {"aprendizajes": learned}
+    forgot_one = client.delete("/portal/clientes/c1/aprendizajes/a")
+    missing = client.delete("/portal/clientes/c1/aprendizajes/zzz")
+    forgot_all = client.delete("/portal/clientes/c1/aprendizajes")
+
+    assert forgot_one.json() == {"aprendizajes": [learned[1]]}
+    assert missing.status_code == 404
+    assert forgot_all.json() == {"aprendizajes": []}
+    assert db.updates == [("clients", {"learned_edits": [learned[1]]}, [("id", "c1")]),
+                          ("clients", {"learned_edits": []}, [("id", "c1")])]
+
+
+def test_learnings_of_another_agency_are_forbidden(monkeypatch, client):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([{"id": "c1", "agency_id": "other"}]))
+    assert client.delete("/portal/clientes/c1/aprendizajes").status_code == 403
+
+
+def test_client_detail_includes_learned_edits():
+    assert "learned_edits" in portal._CLIENT_DETAIL.split(",")
+
+
+def test_portal_frontend_has_learnings_panel():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+    marca = page.split('id="tab-marca"', 1)[1].split('id="tab-fotos"', 1)[0]
+    assert 'id="learn-panel"' in marca and "Lo que la IA aprendió de tus cambios" in marca
+    assert 'id="learn-list"' in marca and 'id="learn-clear"' in marca
+    assert "/aprendizajes" in source and "renderStyleSection();\n    renderLearnings();" in source
+    assert "${escapeHtml(item.antes)}" in source and "${escapeHtml(item.despues)}" in source

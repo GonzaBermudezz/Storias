@@ -45,7 +45,7 @@ _CLIENT_DETAIL = (
     "avatar_url,avatar_public_id,instagram_profile_url,whatsapp_contact,"
     "contact_email,calendly_link,prob_link,generation_error,"
     "generation_error_at,publish_days,"
-    "publish_together,font_choice,drive_connected_email,weekly_format,voice_style"
+    "publish_together,font_choice,drive_connected_email,weekly_format,voice_style,learned_edits"
 )
 
 # The sidebar gets identity + status; setup fields are read to derive gaps and
@@ -1907,9 +1907,61 @@ def patch_story(story_id: str, body: StoryPatch, employee: EmployeeDep):
     updated = db.table("stories").update({
         "text": body.texto_nuevo, "image_url": imagen_editada.url,
     }).eq("id", story_id).execute().data
+    _remember_correction(db, client, story.get("text"), body.texto_nuevo)
     return updated[0] if isinstance(updated, list) and updated else {
         **story, "text": body.texto_nuevo, "image_url": imagen_editada.url,
     }
+
+
+# ── Aprendizaje (fase 4): the AI learns from the team's corrections ──────────
+_MAX_LEARNINGS = 8
+
+
+def _normalized(text) -> str:
+    return " ".join(str(text or "").split()).casefold()
+
+
+def _learned(client: dict) -> list[dict]:
+    return [item for item in (client.get("learned_edits") or []) if isinstance(item, dict)]
+
+
+def _remember_correction(db, client: dict, before, after) -> None:
+    """When a person changes a story's text, keep {antes, despues} (newest first, last 8)
+    so the engine writes that way next time. Best-effort: never breaks the save."""
+    if not str(before or "").strip() or _normalized(before) == _normalized(after):
+        return
+    item = {"id": secrets.token_hex(4), "antes": str(before).strip()[:300], "despues": str(after).strip()[:300],
+            "fecha": datetime.now(timezone.utc).isoformat()}
+    kept = [old for old in _learned(client) if _normalized(old.get("antes")) != _normalized(before)]
+    try:
+        db.table("clients").update({"learned_edits": [item] + kept[:_MAX_LEARNINGS - 1]}).eq("id", client["id"]).execute()
+    except Exception:
+        logger.warning("Could not remember the correction for client %s", client.get("id"), exc_info=True)
+
+
+@router.get("/clientes/{client_id}/aprendizajes")
+def list_learnings(client_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    return {"aprendizajes": _learned(_client_or_error(db, client_id, employee.agency_id))}
+
+
+@router.delete("/clientes/{client_id}/aprendizajes/{item_id}")
+def forget_learning(client_id: str, item_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    learned = _learned(_client_or_error(db, client_id, employee.agency_id))
+    kept = [item for item in learned if item.get("id") != item_id]
+    if len(kept) == len(learned):
+        raise HTTPException(status_code=404, detail="No encontrado")
+    db.table("clients").update({"learned_edits": kept}).eq("id", client_id).execute()
+    return {"aprendizajes": kept}
+
+
+@router.delete("/clientes/{client_id}/aprendizajes")
+def forget_all_learnings(client_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    db.table("clients").update({"learned_edits": []}).eq("id", client_id).execute()
+    return {"aprendizajes": []}
 
 
 @router.post("/historias/{story_id}/generar-texto")

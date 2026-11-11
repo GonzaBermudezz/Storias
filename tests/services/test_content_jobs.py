@@ -1326,3 +1326,9 @@ def test_priorizar_sin_tema_devuelve_lo_mismo(tema):
 def test_priorizar_sin_coincidencias_mantiene_el_orden():
     ranked = [("a", "x.jpg"), ("b", "y.jpg")]
     assert jobs.priorizar_por_tema(ranked, "Garmin") == ranked
+
+
+def test_build_content_config_copies_learned_edits():
+    row = client(learned_edits=[{"id": "a", "antes": "x", "despues": "y"}, "basura"])
+    assert jobs.build_content_config(row).aprendizajes == [{"id": "a", "antes": "x", "despues": "y"}]
+    assert jobs.build_content_config(client()).aprendizajes == []

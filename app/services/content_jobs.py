@@ -46,6 +46,7 @@ def build_content_config(row: dict) -> ClientContentConfig:
         font_choice=row.get("font_choice"),
         weekly_format=row.get("weekly_format"),
         voice_style=row.get("voice_style"),
+        aprendizajes=[item for item in (row.get("learned_edits") or []) if isinstance(item, dict)],
     )
 
 
