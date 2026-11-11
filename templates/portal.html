@@ -161,6 +161,40 @@
     .tab-actions{display:flex;gap:8px;margin:-6px 0 16px}
     .tab-empty{background:var(--surface);border:1px dashed var(--border);border-radius:14px;padding:28px 20px;text-align:center;color:var(--muted);font-size:14px}
     .panel-head.static{cursor:default}
+    /* Fase 3: Fotos */
+    .photos-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+    .photos-toolbar-right{display:flex;gap:8px;align-items:center}
+    .photos-toolbar-right select{font-size:12.5px;padding:7px 9px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--fg);max-width:220px}
+    .photo-filters{display:flex;gap:6px;flex-wrap:wrap}
+    .photo-filter{border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:99px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+    .photo-filter.active{background:var(--accent-soft);border-color:transparent;color:var(--accent-strong)}
+    .photo-filter .n{font-weight:700;margin-left:4px}
+    .photos-summary{font-size:13px;color:var(--muted);margin-bottom:14px}
+    .photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+    @media(max-width:520px){.photos-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.photo-body{padding:8px 9px 10px}.photo-product{flex-wrap:wrap}}
+    .photo-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow)}
+    .photo-thumb{aspect-ratio:4/5;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;overflow:hidden;position:relative}
+    .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+    .photo-thumb.broken img{display:none}
+    .photo-thumb.broken::after{content:"Sin vista previa"}
+    .photo-state{position:absolute;top:8px;left:8px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;background:rgba(255,255,255,.92);color:var(--fg)}
+    .photo-state.is-nueva{color:#15803D}
+    .photo-state.is-reciente{color:#B45309}
+    .photo-state.is-disponible{color:var(--accent-strong)}
+    .photo-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
+    .photo-name{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .photo-name .folder{color:var(--fg);font-weight:600}
+    .photo-tags{display:flex;gap:4px;flex-wrap:wrap}
+    .photo-tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--bg);color:var(--muted)}
+    .photo-product{font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:6px}
+    .photo-product strong{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .photo-product .none{color:var(--muted);font-weight:500}
+    .photo-edit-btn{background:none;border:0;color:var(--accent-strong);font-size:12px;font-weight:650;cursor:pointer;padding:2px 0;flex-shrink:0}
+    .photo-edit{display:flex;gap:6px}
+    .photo-edit input{flex:1;min-width:0;font-size:12.5px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
+    .photo-edit .btn{padding:6px 10px;font-size:12px}
+    .photo-muted,.photo-usage{font-size:12px;color:var(--muted)}
+    .photo-usage{margin-top:auto}
     .week-brief{margin-bottom:20px}
     .week-brief .panel-head{padding-bottom:6px}
     .week-brief .panel-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 24px}
@@ -768,6 +802,7 @@
         <span class="client-nav-name" id="client-nav-name"></span>
         <span class="nav-item nav-sub" data-client-tab="semana" role="button" tabindex="0" title="Semana"><span class="icon" data-icon="calendar" data-size="16"></span><span class="nav-label">Semana</span></span>
         <span class="nav-item nav-sub" data-client-tab="marca" role="button" tabindex="0" title="Marca"><span class="icon" data-icon="sparkles" data-size="16"></span><span class="nav-label">Marca</span></span>
+        <span class="nav-item nav-sub" data-client-tab="fotos" role="button" tabindex="0" title="Fotos"><span class="icon" data-icon="image" data-size="16"></span><span class="nav-label">Fotos</span></span>
         <span class="nav-item nav-sub" data-client-tab="historial" role="button" tabindex="0" title="Historial"><span class="icon" data-icon="clock" data-size="16"></span><span class="nav-label">Historial</span></span>
         <span class="nav-item nav-sub" data-client-tab="ajustes" role="button" tabindex="0" title="Ajustes"><span class="icon" data-icon="settings" data-size="16"></span><span class="nav-label">Ajustes</span></span>
       </div>
@@ -990,6 +1025,18 @@
             </div>
           </div>
         </div>
+        </div>
+        <div class="client-tab hidden" id="tab-fotos" data-tab="fotos">
+          <div class="tab-intro"><p class="eyebrow">Fotos</p><h2>Lo que la IA ve en tus fotos</h2><p>Son las fotos de tu carpeta de Drive. La IA reconoce qué producto aparece en cada una y las va rotando para no repetir. Acá ves cuáles ya usó y podés corregir el producto si se equivocó.</p></div>
+          <div class="photos-toolbar">
+            <div class="photo-filters" id="photo-filters" role="group" aria-label="Filtrar fotos"></div>
+            <div class="photos-toolbar-right">
+              <select id="photo-folder" aria-label="Carpeta"><option value="">Todas las carpetas</option></select>
+              <button type="button" class="btn" id="photos-refresh"><span data-icon="rotate-cw" data-size="14"></span>Actualizar</button>
+            </div>
+          </div>
+          <p id="photos-summary" class="photos-summary"></p>
+          <div id="photos-grid" class="photos-grid" aria-live="polite"></div>
         </div>
         <div class="client-tab hidden" id="tab-historial" data-tab="historial">
           <div class="tab-intro"><p class="eyebrow">Historial</p><h2>Lo que ya se publicó</h2><p>Las historias que ya salieron, agrupadas por día. También podés ver quién cambió la marca y cuándo.</p></div>

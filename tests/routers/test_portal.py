@@ -3069,3 +3069,121 @@ def test_portal_frontend_has_edit_with_ai_panel():
     assert 'id="ai-instruction"' in editor and 'id="ai-variants"' in editor
     assert "/variantes" in source and "resetAiEdit();\n    $('story-dialog').showModal();" in source
     assert "${escapeHtml(text)}" in source and "Volver al texto anterior" in source
+
+
+# ---------------------------------------------------------------------------
+# Fase 3: Fotos
+# ---------------------------------------------------------------------------
+_PHOTO_CLIENT = {"id": "c1", "agency_id": "agency-1", "name": "GBA", "drive_folder_id": "folder-1",
+                 "drive_refresh_token_encrypted": None}
+
+
+@pytest.fixture
+def fresh_photo_caches():
+    portal._photo_ids.clear(); portal._thumb_cache.clear()
+    yield
+    portal._photo_ids.clear(); portal._thumb_cache.clear()
+
+
+def test_list_client_photos_joins_tags_and_usage(monkeypatch, client, fresh_photo_caches):
+    from datetime import datetime, timezone
+    recent = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    old = (datetime.now(timezone.utc) - timedelta(weeks=5)).isoformat()
+    db = DB([dict(_PHOTO_CLIENT), [
+        {"drive_file_id": "a", "last_used_at": recent, "times_used": 2},
+        {"drive_file_id": "b", "last_used_at": old, "times_used": 1},
+    ]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata",
+                        lambda folder, token=None: [("a", "Garmin/fenix.jpg"), ("b", "local.jpg"), ("c", "DJI/osmo.jpg")])
+    monkeypatch.setattr("app.routers.portal.content_jobs._load_tags", lambda db, client_id: {
+        "a": {"persona": False, "escena": "producto", "producto": "Garmin Fenix"},
+        "b": {"persona": True, "escena": "exterior", "producto": ""}})
+
+    response = client.get("/portal/clientes/c1/fotos")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["carpeta"] is True and body["semanas_sin_repetir"] == 3
+    a, b, c = body["fotos"]
+    assert a == {"id": "a", "nombre": "fenix.jpg", "carpeta": "Garmin", "analizada": True, "producto": "Garmin Fenix",
+                 "escena": "Producto", "persona": False, "veces_usada": 2, "ultima_vez": recent, "estado": "reciente"}
+    assert (b["carpeta"], b["producto"], b["persona"], b["estado"]) == (None, None, True, "disponible")
+    assert (c["analizada"], c["escena"], c["estado"], c["veces_usada"]) == (False, None, "nueva", 0)
+    assert portal._photo_ids["c1"][1] == frozenset({"a", "b", "c"})
+
+
+def test_list_client_photos_without_folder(monkeypatch, client, fresh_photo_caches):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([{**_PHOTO_CLIENT, "drive_folder_id": None}]))
+    assert client.get("/portal/clientes/c1/fotos").json()["carpeta"] is False
+
+
+def test_list_client_photos_drive_failure_is_422(monkeypatch, client, fresh_photo_caches):
+    def boom(*a, **k):
+        raise RuntimeError("drive down")
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([dict(_PHOTO_CLIENT)]))
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", boom)
+    response = client.get("/portal/clientes/c1/fotos")
+    assert response.status_code == 422 and "Drive" in response.json()["detail"]
+
+
+def test_list_client_photos_other_agency_is_403(monkeypatch, client, fresh_photo_caches):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([{**_PHOTO_CLIENT, "agency_id": "other"}]))
+    assert client.get("/portal/clientes/c1/fotos").status_code == 403
+
+
+def test_thumbnail_is_served_only_for_files_in_the_client_folder(monkeypatch, client, fresh_photo_caches):
+    served = []
+    monkeypatch.setattr("app.routers.portal.get_admin_client",
+                        lambda: DB([dict(_PHOTO_CLIENT), dict(_PHOTO_CLIENT), dict(_PHOTO_CLIENT)]))
+    monkeypatch.setattr("app.routers.portal.drive.list_image_metadata", lambda folder, token=None: [("mine", "a.jpg")])
+    monkeypatch.setattr("app.routers.portal.drive.thumbnail", lambda file_id, token=None: served.append(file_id) or b"JPEG")
+
+    foreign = client.get("/portal/clientes/c1/fotos/someone-else/miniatura")
+    mine = client.get("/portal/clientes/c1/fotos/mine/miniatura")
+    again = client.get("/portal/clientes/c1/fotos/mine/miniatura")
+
+    assert foreign.status_code == 404
+    assert mine.status_code == 200 and mine.content == b"JPEG" and mine.headers["content-type"] == "image/jpeg"
+    assert again.status_code == 200
+    assert served == ["mine"]  # the second request is served from the cache
+
+
+def test_thumbnail_other_agency_is_403(monkeypatch, client, fresh_photo_caches):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([{**_PHOTO_CLIENT, "agency_id": "other"}]))
+    assert client.get("/portal/clientes/c1/fotos/x/miniatura").status_code == 403
+
+
+def test_patch_photo_product_updates_the_client_tag(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"drive_file_id": "a"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/fotos/a", json={"producto": "  Garmin Fenix 8 "})
+    assert response.status_code == 200
+    assert response.json() == {"id": "a", "producto": "Garmin Fenix 8"}
+    assert db.updates == [("image_tags", {"subject": "Garmin Fenix 8"}, [("client_id", "c1"), ("drive_file_id", "a")])]
+
+
+def test_patch_photo_product_empty_means_no_product(monkeypatch, client):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"drive_file_id": "a"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    assert client.patch("/portal/clientes/c1/fotos/a", json={"producto": ""}).json() == {"id": "a", "producto": None}
+
+
+def test_patch_photo_not_analyzed_yet_is_409(monkeypatch, client):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([{"id": "c1", "agency_id": "agency-1"}, []]))
+    assert client.patch("/portal/clientes/c1/fotos/a", json={"producto": "X"}).status_code == 409
+
+
+def test_patch_photo_rejects_long_product(monkeypatch, client):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([]))
+    assert client.patch("/portal/clientes/c1/fotos/a", json={"producto": "x" * 61}).status_code == 422
+
+
+def test_portal_frontend_has_photos_section():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+    assert 'data-client-tab="fotos"' in page and 'id="tab-fotos" data-tab="fotos"' in page
+    for element_id in ("photo-filters", "photo-folder", "photos-refresh", "photos-grid"):
+        assert f'id="{element_id}"' in page
+    assert "/fotos/${encodeURIComponent(photo.id)}/miniatura" in source and 'loading="lazy"' in source
+    assert "'fotos'" in source.split("const CLIENT_TABS", 1)[1].split("\n", 1)[0]

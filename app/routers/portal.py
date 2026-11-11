@@ -6,12 +6,15 @@ import io
 import logging
 import re
 import secrets
+import threading
+import time
+from collections import OrderedDict
 from urllib.parse import urlparse
 
 import requests
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from PIL import Image
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -715,6 +718,125 @@ def get_drive_info(client_id: str, employee: EmployeeDep):
 
 
 _DRIVE_OAUTH_SCOPE = "openid email https://www.googleapis.com/auth/drive.readonly"
+
+
+# ── Fotos (fase 3): the client's Drive pool, what the AI saw and what was used ──
+_PHOTO_IDS_TTL = 600            # seconds a folder listing is trusted for thumbnails
+_THUMB_CACHE_MAX = 400
+_photo_ids: dict[str, tuple[float, frozenset]] = {}
+_thumb_cache: "OrderedDict[tuple[str, str], bytes]" = OrderedDict()
+_thumb_lock = threading.Lock()
+_SCENE_LABELS = {"producto": "Producto", "ambiente": "Ambiente", "detalle": "Detalle",
+                 "exterior": "Exterior", "grafico": "Gráfico", "otro": "Otra"}
+
+
+def _remember_photo_ids(client_id: str, ids) -> None:
+    _photo_ids[client_id] = (time.monotonic(), frozenset(ids))
+
+
+def _photo_belongs_to_client(client: dict, file_id: str, refresh_token: str | None) -> bool:
+    """The shared service account can read EVERY client's folder, so a thumbnail
+    is only served for a file that is in THIS client's folder listing."""
+    cached = _photo_ids.get(client["id"])
+    if cached and time.monotonic() - cached[0] < _PHOTO_IDS_TTL and file_id in cached[1]:
+        return True
+    ids = [item[0] for item in drive.list_image_metadata(client["drive_folder_id"], refresh_token)]
+    _remember_photo_ids(client["id"], ids)
+    return file_id in ids
+
+
+def _photo_state(last_used, now: datetime) -> str:
+    if last_used is None:
+        return "nueva"
+    used = content_jobs._parse_fecha(last_used)
+    if used is None or used <= now - timedelta(weeks=content_jobs.NO_REPEAT_WEEKS):
+        return "disponible"
+    return "reciente"
+
+
+@router.get("/clientes/{client_id}/fotos")
+def list_client_photos(client_id: str, employee: EmployeeDep):
+    """Every image in the client's Drive folder (one level of subfolders), with the
+    AI's tags (product, scene, person) and how often each one was used."""
+    db = get_admin_client()
+    client = _client_or_error(db, client_id, employee.agency_id, _CLIENT_DETAIL_WITH_DRIVE_SECRET)
+    refresh_token = _pop_drive_refresh_token(client)
+    if not client.get("drive_folder_id"):
+        return {"carpeta": False, "fotos": [], "semanas_sin_repetir": content_jobs.NO_REPEAT_WEEKS}
+    try:
+        available = drive.list_image_metadata(client["drive_folder_id"], refresh_token)
+    except Exception as exc:
+        logger.warning("Could not list Drive photos for client %s", client_id, exc_info=True)
+        raise HTTPException(status_code=422, detail="No se pudo leer la carpeta de Drive. Revisá la conexión en Ajustes.") from exc
+    _remember_photo_ids(client_id, [file_id for file_id, _ in available])
+    tags = content_jobs._load_tags(db, client_id)
+    history = {row["drive_file_id"]: row for row in _select_all(lambda: db.table("client_images").select(
+        "drive_file_id,last_used_at,times_used").eq("client_id", client_id).order("drive_file_id"))}
+    now = datetime.now(timezone.utc)
+    photos = []
+    for file_id, name in available:
+        folder, _, file_name = name.rpartition("/")
+        tag = tags.get(file_id)
+        used = history.get(file_id) or {}
+        photos.append({
+            "id": file_id, "nombre": file_name, "carpeta": folder or None,
+            "analizada": tag is not None,
+            "producto": (tag or {}).get("producto") or None,
+            "escena": _SCENE_LABELS.get((tag or {}).get("escena")) if tag else None,
+            "persona": bool(tag and tag.get("persona")),
+            "veces_usada": int(used.get("times_used") or 0) if used else 0,
+            "ultima_vez": used.get("last_used_at"),
+            "estado": _photo_state(used.get("last_used_at") if used else None, now) if file_id in history else "nueva",
+        })
+    return {"carpeta": True, "fotos": photos, "semanas_sin_repetir": content_jobs.NO_REPEAT_WEEKS}
+
+
+@router.get("/clientes/{client_id}/fotos/{file_id}/miniatura")
+def client_photo_thumbnail(client_id: str, file_id: str, employee: EmployeeDep):
+    db = get_admin_client()
+    client = _client_or_error(db, client_id, employee.agency_id, _CLIENT_DETAIL_WITH_DRIVE_SECRET)
+    refresh_token = _pop_drive_refresh_token(client)
+    if not client.get("drive_folder_id"):
+        raise HTTPException(status_code=404, detail="Foto no encontrada")
+    key = (client_id, file_id)
+    with _thumb_lock:
+        data = _thumb_cache.get(key)
+        if data is not None:
+            _thumb_cache.move_to_end(key)
+    if data is None:
+        try:
+            if not _photo_belongs_to_client(client, file_id, refresh_token):
+                raise HTTPException(status_code=404, detail="Foto no encontrada")
+            data = drive.thumbnail(file_id, refresh_token)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning("Could not build the thumbnail of %s", file_id, exc_info=True)
+            raise HTTPException(status_code=422, detail="No se pudo leer la foto de Drive") from exc
+        with _thumb_lock:
+            _thumb_cache[key] = data
+            while len(_thumb_cache) > _THUMB_CACHE_MAX:
+                _thumb_cache.popitem(last=False)
+    return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
+class PhotoProductPatch(BaseModel):
+    producto: str | None = Field(default=None, max_length=60)
+
+
+@router.patch("/clientes/{client_id}/fotos/{file_id}")
+def patch_client_photo(client_id: str, file_id: str, body: PhotoProductPatch, employee: EmployeeDep):
+    """Correct what the AI recognized in a photo (the product). The weekly thread
+    uses it to pick photos that match the focus or the topic. Empty = no product."""
+    db = get_admin_client()
+    _client_or_error(db, client_id, employee.agency_id)
+    producto = (body.producto or "").strip()
+    updated = db.table("image_tags").update({"subject": producto}).eq("client_id", client_id).eq(
+        "drive_file_id", file_id
+    ).execute().data
+    if not updated:
+        raise HTTPException(status_code=409, detail="La IA todavía no analizó esta foto. Se analiza sola en la próxima generación.")
+    return {"id": file_id, "producto": producto or None}
 
 
 @router.get("/clientes/{client_id}/drive/conectar")

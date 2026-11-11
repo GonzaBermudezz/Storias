@@ -241,3 +241,11 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - En el editor de la historia aparece el panel "Editar con IA", con cuatro botones (Más corto, Más vendedor, Más cercano, Otra idea) y un pedido libre. Elegir una opción solo llena el editor: "Guardar historia" la compone sobre la imagen con el flujo de siempre. También se puede volver al texto anterior.
 - En Marca, "Estilo de las historias" queda siempre desplegado.
 
+## 13. Fotos, fase 3
+
+- La sección "Fotos" del menú muestra las fotos de la carpeta de Drive del cliente (un nivel de subcarpetas), con lo que reconoció la IA (`image_tags`: producto, escena y persona) y su uso (`client_images`).
+- Cada foto tiene un estado: `nueva` (nunca se usó), `disponible` (ya pasaron las `NO_REPEAT_WEEKS` semanas) o `reciente` (se usó hace poco y la IA no la repite).
+- `GET /portal/clientes/{id}/fotos` devuelve `{carpeta, fotos: [{id, nombre, carpeta, analizada, producto, escena, persona, veces_usada, ultima_vez, estado}], semanas_sin_repetir}`. Si Drive falla, responde 422.
+- `GET /portal/clientes/{id}/fotos/{file_id}/miniatura` sirve un JPEG chico a través del server, porque el navegador no puede pedirle fotos privadas a Drive. Primero usa la miniatura del propio Drive y, si no hay, baja la original y la achica (`drive.thumbnail`). **Solo sirve archivos que están en la carpeta de ese cliente**: la cuenta de servicio puede leer las carpetas de todos, así que el server valida contra el listado de la carpeta (cacheado 10 min). Las miniaturas quedan en memoria (hasta 400).
+- `PATCH /portal/clientes/{id}/fotos/{file_id}` con `{producto}` corrige el producto (`image_tags.subject`). Vacío = sin producto. Si la IA todavía no analizó la foto, responde 409. Esa corrección es la que usa la selección de fotos del hilo semanal.
+

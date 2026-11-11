@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 from functools import lru_cache
 
 import google_auth_httplib2
@@ -23,7 +24,7 @@ import httplib2
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from googleapiclient.discovery import build
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app.config import get_settings
 
@@ -75,11 +76,14 @@ def _drive_client(refresh_token: str | None = None):
     # documented as thread-safe, only the underlying credentials are shared
     # (and only in the service-account case; OAuth credentials are built
     # fresh per call since there's one per CLIENT, not one for the whole process).
+    return build("drive", "v3", http=_authorized_http(refresh_token), cache_discovery=False)
+
+
+def _authorized_http(refresh_token: str | None = None):
     credentials = _oauth_credentials(refresh_token) if refresh_token else _service_account_credentials()
-    http = google_auth_httplib2.AuthorizedHttp(
+    return google_auth_httplib2.AuthorizedHttp(
         credentials, http=httplib2.Http(timeout=_REQUEST_TIMEOUT_SECONDS)
     )
-    return build("drive", "v3", http=http, cache_discovery=False)
 
 
 _FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -174,3 +178,30 @@ def first_image(drive_folder_id: str, refresh_token: str | None = None) -> tuple
             continue
         return item["id"], item["name"], data
     return None
+
+
+def _as_jpeg(data: bytes, size: int) -> bytes:
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+    img.thumbnail((size, size))
+    buffer = io.BytesIO()
+    img.convert("RGB").save(buffer, format="JPEG", quality=82, optimize=True)
+    return buffer.getvalue()
+
+
+def thumbnail(file_id: str, refresh_token: str | None = None, size: int = 360) -> bytes:
+    """Small JPEG of one Drive image for the portal's Fotos section (fase 3).
+
+    Drive's own thumbnail is tried first (a few KB, no full download). Its link
+    needs the same credentials, so the browser can't load it directly. If there
+    is none (or it fails), the original is downloaded and shrunk with Pillow."""
+    http = _authorized_http(refresh_token)
+    files = build("drive", "v3", http=http, cache_discovery=False).files()
+    try:
+        link = files.get(fileId=file_id, fields="thumbnailLink", supportsAllDrives=True).execute().get("thumbnailLink")
+        if link:
+            response, content = http.request(re.sub(r"=s\d+$", f"=s{size}", link))
+            if getattr(response, "status", 0) == 200 and _is_readable_image(content):
+                return _as_jpeg(content, size)
+    except Exception:
+        logger.warning("Drive thumbnail failed for %s; downloading the original", file_id, exc_info=True)
+    return _as_jpeg(files.get_media(fileId=file_id, supportsAllDrives=True).execute(), size)

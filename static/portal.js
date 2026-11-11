@@ -147,7 +147,7 @@
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
   // Phase 1 layout: a client's work is split into sections reachable from the menu.
-  const CLIENT_TABS = ['semana', 'marca', 'historial', 'ajustes'];
+  const CLIENT_TABS = ['semana', 'marca', 'fotos', 'historial', 'ajustes'];
   function storedClientTab() {
     try { const saved = localStorage.getItem('storias.clientTab'); return CLIENT_TABS.includes(saved) ? saved : 'semana'; } catch (_) { return 'semana'; }
   }
@@ -169,6 +169,7 @@
   function showClientTabContent(tab) {
     document.querySelectorAll('.client-tab').forEach((el) => el.classList.toggle('hidden', el.dataset.tab !== tab));
     if (tab === 'marca') { $('content-panel').classList.remove('collapsed'); setStylePanelCollapsed(false); }
+    if (tab === 'fotos' && state.client) loadPhotos();
     markClientNav(tab);
   }
   function clearSelection() {
@@ -1014,6 +1015,8 @@
       if (selectionVersion !== state.selectionVersion || clientId !== state.selectedClientId) return;
       state.client = client; state.groups = groups;
       $('client-nav-name').textContent = isDirectMode() ? 'Tu marca' : (client.name || '');
+      state.photos = null;
+      if (state.clientTab === 'fotos') loadPhotos();
       renderClients(); renderClient();
       // Drive's folder listing is an external Google API call with its own
       // latency (and occasional slowness) — fetched separately so it never
@@ -2533,6 +2536,96 @@
     if (chosen) chosen.classList.add('chosen');
     showMessage('Listo. Revisalo y tocá "Guardar historia" para aplicarlo a la imagen.');
   }
+  // Fase 3 — Fotos: the Drive pool with what the AI recognized and how it was used.
+  const PHOTO_STATES = {nueva: 'Sin usar', disponible: 'Lista para volver', reciente: 'Usada hace poco'};
+  const PHOTO_FILTERS = [['all', 'Todas'], ['nueva', 'Sin usar'], ['disponible', 'Listas para volver'], ['reciente', 'Usadas hace poco'], ['sin-analizar', 'Sin analizar']];
+  let photosRequestId = 0;
+  async function loadPhotos(force = false) {
+    const clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    if (!force && state.photos && state.photos.clientId === clientId) { renderPhotos(); return; }
+    const requestId = ++photosRequestId;
+    state.photos = {clientId, items: [], loading: true, filter: state.photos?.filter || 'all', folder: ''};
+    $('photos-summary').textContent = '';
+    $('photos-grid').innerHTML = loadingMarkup('Leyendo tu carpeta de Drive...');
+    try {
+      const result = await api(`/portal/clientes/${encodeURIComponent(clientId)}/fotos`);
+      if (requestId !== photosRequestId || selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      Object.assign(state.photos, {items: result.fotos || [], hasFolder: result.carpeta, weeks: result.semanas_sin_repetir, loading: false});
+      const folders = [...new Set(state.photos.items.map((photo) => photo.carpeta).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+      $('photo-folder').innerHTML = '<option value="">Todas las carpetas</option>' + folders.map((folder) => `<option value="${escapeHtml(folder)}">${escapeHtml(folder)}</option>`).join('');
+      $('photo-folder').classList.toggle('hidden', !folders.length);
+      renderPhotos();
+    } catch (error) {
+      if (requestId !== photosRequestId) return;
+      state.photos = null;
+      $('photos-grid').innerHTML = `<div class="tab-empty">${escapeHtml(error.message)} <button type="button" class="link-btn" data-photos-retry>Reintentar</button></div>`;
+    }
+  }
+  function photoMatches(photo, filter) {
+    if (filter === 'all') return true;
+    if (filter === 'sin-analizar') return !photo.analizada;
+    return photo.estado === filter;
+  }
+  function photoUsage(photo) {
+    if (!photo.veces_usada) return 'Nunca usada';
+    const last = photo.ultima_vez ? ` · última ${new Date(photo.ultima_vez).toLocaleDateString('es-AR', {day: 'numeric', month: 'short'})}` : '';
+    return `Usada ${photo.veces_usada} ${photo.veces_usada === 1 ? 'vez' : 'veces'}${last}`;
+  }
+  function photoCard(photo) {
+    const clientId = state.photos.clientId;
+    const src = `/portal/clientes/${encodeURIComponent(clientId)}/fotos/${encodeURIComponent(photo.id)}/miniatura`;
+    const tags = [photo.escena, photo.persona ? 'Con persona' : null].filter(Boolean).map((tag) => `<span class="photo-tag">${escapeHtml(tag)}</span>`).join('');
+    const product = photo.analizada
+      ? `<div class="photo-product" data-photo-product="${escapeHtml(photo.id)}"><span>Producto: ${photo.producto ? `<strong>${escapeHtml(photo.producto)}</strong>` : '<span class="none">ninguno</span>'}</span><button type="button" class="photo-edit-btn" data-photo-edit="${escapeHtml(photo.id)}">Corregir</button></div>`
+      : '<p class="photo-muted">La IA la analiza en la próxima generación.</p>';
+    return `<article class="photo-card"><div class="photo-thumb"><img src="${escapeHtml(src)}" alt="" loading="lazy"><span class="photo-state is-${escapeHtml(photo.estado)}">${escapeHtml(PHOTO_STATES[photo.estado] || '')}</span></div>`
+      + `<div class="photo-body"><p class="photo-name" title="${escapeHtml((photo.carpeta ? photo.carpeta + '/' : '') + photo.nombre)}">${photo.carpeta ? `<span class="folder">${escapeHtml(photo.carpeta)}</span> / ` : ''}${escapeHtml(photo.nombre)}</p>`
+      + `${tags ? `<div class="photo-tags">${tags}</div>` : ''}${product}<p class="photo-usage">${escapeHtml(photoUsage(photo))}</p></div></article>`;
+  }
+  function renderPhotos() {
+    const photos = state.photos;
+    if (!photos || photos.loading) return;
+    if (!photos.hasFolder) {
+      $('photo-filters').innerHTML = ''; $('photos-summary').textContent = '';
+      $('photos-grid').innerHTML = '<div class="tab-empty">Todavía no hay una carpeta de Drive cargada. <button type="button" class="link-btn" data-photos-settings>Cargala en Ajustes</button></div>';
+      return;
+    }
+    const inFolder = photos.items.filter((photo) => !photos.folder || photo.carpeta === photos.folder);
+    $('photo-filters').innerHTML = PHOTO_FILTERS.map(([key, label]) => {
+      const count = inFolder.filter((photo) => photoMatches(photo, key)).length;
+      return `<button type="button" class="photo-filter${photos.filter === key ? ' active' : ''}" data-photo-filter="${key}" aria-pressed="${photos.filter === key}">${escapeHtml(label)}<span class="n">${count}</span></button>`;
+    }).join('');
+    const recent = photos.items.filter((photo) => photo.estado === 'reciente').length;
+    $('photos-summary').textContent = photos.items.length
+      ? `${photos.items.length} fotos en Drive · ${recent} usadas en las últimas ${photos.weeks || 3} semanas (la IA no las repite hasta que pase ese tiempo).`
+      : '';
+    const shown = inFolder.filter((photo) => photoMatches(photo, photos.filter));
+    $('photos-grid').innerHTML = shown.length
+      ? shown.map(photoCard).join('')
+      : `<div class="tab-empty">${photos.items.length ? 'No hay fotos con ese filtro.' : 'La carpeta de Drive está vacía. Subí fotos y tocá Actualizar.'}</div>`;
+  }
+  function editPhotoProduct(fileId) {
+    const photo = state.photos?.items.find((item) => item.id === fileId);
+    const box = document.querySelector(`[data-photo-product="${CSS.escape(fileId)}"]`);
+    if (!photo || !box) return;
+    box.outerHTML = `<form class="photo-edit" data-photo-form="${escapeHtml(fileId)}"><input type="text" maxlength="60" value="${escapeHtml(photo.producto || '')}" placeholder="Ej.: Garmin Forerunner" aria-label="Producto de la foto"><button type="submit" class="btn primary">Guardar</button></form>`;
+    const input = document.querySelector(`[data-photo-form="${CSS.escape(fileId)}"] input`);
+    if (input) { input.focus(); input.select(); }
+  }
+  async function savePhotoProduct(fileId, value) {
+    const clientId = state.photos?.clientId, photo = state.photos?.items.find((item) => item.id === fileId);
+    if (!clientId || !photo) return;
+    try {
+      const saved = await api(`/portal/clientes/${encodeURIComponent(clientId)}/fotos/${encodeURIComponent(fileId)}`, {method: 'PATCH', body: JSON.stringify({producto: value.trim() || null})});
+      if (state.photos?.clientId !== clientId) return;
+      photo.producto = saved.producto;
+      showMessage(saved.producto ? 'Producto corregido. La IA lo usa para elegir fotos.' : 'Listo, la foto quedó sin producto.');
+    } catch (error) {
+      if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    }
+    renderPhotos();
+  }
   async function saveStoryFont() {
     const select=$('story-font'), story=state.editingStory, clientId=state.client?.id, selectionVersion=state.selectionVersion, fontChoice=select.value || null;
     if (!story || storyIsLocked(story) || !clientId || fontChoice === (story.font_choice || null)) return;
@@ -2842,6 +2935,28 @@
   $('close-history-2').addEventListener('click',()=>$('history-dialog').close());
   $('qa-settings').addEventListener('click',openSettings);
   $('history-open-changes').addEventListener('click',openHistory);
+  $('photos-refresh').addEventListener('click', () => loadPhotos(true));
+  $('photo-folder').addEventListener('change', () => { if (state.photos) { state.photos.folder = $('photo-folder').value; renderPhotos(); } });
+  $('photo-filters').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-photo-filter]');
+    if (button && state.photos) { state.photos.filter = button.dataset.photoFilter; renderPhotos(); }
+  });
+  $('photos-grid').addEventListener('click', (event) => {
+    if (event.target.closest('[data-photos-retry]')) { loadPhotos(true); return; }
+    if (event.target.closest('[data-photos-settings]')) { setClientTab('ajustes'); return; }
+    const edit = event.target.closest('[data-photo-edit]');
+    if (edit) editPhotoProduct(edit.dataset.photoEdit);
+  });
+  $('photos-grid').addEventListener('submit', (event) => {
+    const form = event.target.closest('[data-photo-form]');
+    if (!form) return;
+    event.preventDefault();
+    savePhotoProduct(form.dataset.photoForm, form.querySelector('input').value);
+  });
+  // A thumbnail that can't be read shows a neutral placeholder instead of a broken image.
+  $('photos-grid').addEventListener('error', (event) => {
+    if (event.target.tagName === 'IMG') event.target.closest('.photo-thumb')?.classList.add('broken');
+  }, true);
   document.querySelectorAll('[data-ai-action]').forEach((el) => el.addEventListener('click', () => requestAiVariants(el.dataset.aiAction)));
   $('ai-ask-form').addEventListener('submit', (event) => {
     event.preventDefault();

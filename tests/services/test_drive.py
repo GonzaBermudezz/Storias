@@ -223,3 +223,42 @@ def test_subcarpetas_tienen_un_tope(monkeypatch):
     _use_tree(monkeypatch, tree)
 
     assert drive.count_images("root") == drive._MAX_SUBFOLDERS
+
+
+# ---------------------------------------------------------------------------
+# Fase 3: miniaturas para la sección Fotos
+# ---------------------------------------------------------------------------
+def _big_jpeg():
+    buf = io.BytesIO()
+    Image.new("RGB", (1200, 1600), (10, 120, 200)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def _thumb_setup(monkeypatch, link, link_status=200, link_bytes=None):
+    files = Mock()
+    files.get.return_value.execute.return_value = {"thumbnailLink": link} if link else {}
+    files.get_media.return_value.execute.return_value = _big_jpeg()
+    http = Mock()
+    http.request.return_value = (SimpleNamespace(status=link_status), link_bytes if link_bytes is not None else _big_jpeg())
+    monkeypatch.setattr(drive, "_authorized_http", lambda token=None: http)
+    monkeypatch.setattr(drive, "build", lambda *a, **k: SimpleNamespace(files=lambda: files))
+    return files, http
+
+
+def test_thumbnail_uses_drive_thumbnail_link_resized(monkeypatch):
+    files, http = _thumb_setup(monkeypatch, "https://lh3.googleusercontent.com/abc=s220")
+
+    data = drive.thumbnail("f1", size=360)
+
+    assert http.request.call_args.args[0] == "https://lh3.googleusercontent.com/abc=s360"
+    files.get_media.assert_not_called()
+    img = Image.open(io.BytesIO(data))
+    assert img.format == "JPEG" and max(img.size) == 360
+
+
+@pytest.mark.parametrize("link, status, payload", [(None, 200, None), ("https://x=s220", 403, None), ("https://x=s220", 200, b"no")])
+def test_thumbnail_falls_back_to_the_original(monkeypatch, link, status, payload):
+    files, _ = _thumb_setup(monkeypatch, link, status, payload)
+    data = drive.thumbnail("f1", size=200)
+    files.get_media.assert_called_once()
+    assert max(Image.open(io.BytesIO(data)).size) == 200
