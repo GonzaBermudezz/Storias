@@ -3370,3 +3370,62 @@ def test_portal_frontend_has_the_brand_onboarding_panel():
     assert "/marca/proponer" in source and 'data-setup-go="ia"' in source
     assert "renderLearnings();\n    renderBrandAi();" in source
     assert "${escapeHtml(line)}" in source  # AI text is escaped before it hits innerHTML
+
+
+def test_client_detail_includes_website_url():
+    assert "website_url" in portal._CLIENT_DETAIL.split(",")
+
+
+@pytest.mark.parametrize("raw,saved", [
+    ("gba.com.ar", "https://gba.com.ar"),
+    ("  http://gba.com.ar/inicio ", "http://gba.com.ar/inicio"),
+    ("   ", None),
+    ("", None),
+])
+def test_patch_contact_normalizes_website_url(monkeypatch, client, raw, saved):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}, [{"id": "c1", "website_url": saved}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = client.patch("/portal/clientes/c1/contacto", json={"website_url": raw})
+    assert response.status_code == 200
+    assert db.updates == [("clients", {"website_url": saved}, [("id", "c1")])]
+
+
+@pytest.mark.parametrize("raw", [
+    "ftp://gba.com.ar", "javascript:alert(1)", "https://user:pw@gba.com.ar", "https://",
+    "https://gba .com", "https://" + "a" * 300 + ".com", "https://gba.com:99999",
+])
+def test_patch_contact_rejects_bad_website_url(monkeypatch, client, raw):
+    db = DB([{"id": "c1", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    assert client.patch("/portal/clientes/c1/contacto", json={"website_url": raw}).status_code == 422
+    assert db.updates == []
+
+
+def test_brand_proposal_falls_back_to_the_stored_website(monkeypatch, client):
+    db, seen = _brand_mocks(monkeypatch)
+    db.responses[0] = {**_BRAND_ROW, "website_url": "https://gba.com.ar"}
+    response = client.post("/portal/clientes/c1/marca/proponer", json={"notas": ""})
+    assert response.status_code == 200
+    assert seen["url"] == "https://gba.com.ar"
+
+
+def test_brand_proposal_prefers_the_sent_web_over_the_stored_one(monkeypatch, client):
+    db, seen = _brand_mocks(monkeypatch)
+    db.responses[0] = {**_BRAND_ROW, "website_url": "https://gba.com.ar"}
+    client.post("/portal/clientes/c1/marca/proponer", json={"web": "otra.com"})
+    assert seen["url"] == "otra.com" and db.updates == []
+
+
+def test_portal_frontend_has_the_website_field():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+    assert 'id="client-website"' in page
+    assert "saveClientContact('website_url','client-website')" in source
+    assert "$('brand-ai-web').value = state.client.website_url" in source
+
+
+def test_portal_frontend_syncs_the_saved_website_into_the_brand_panel():
+    js = (Path(__file__).resolve().parents[2] / "static" / "portal.js").read_text(encoding="utf-8")
+    body = js.split("async function saveClientContact", 1)[1].split("async function saveClientDriveFolder", 1)[0]
+    assert "input.value = state.client[field] || '';" in body
+    assert "field === 'website_url'" in body and "$('brand-ai-web')" in body

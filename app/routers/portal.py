@@ -45,7 +45,7 @@ _CLIENT_DETAIL = (
     "avatar_url,avatar_public_id,instagram_profile_url,whatsapp_contact,"
     "contact_email,calendly_link,prob_link,generation_error,"
     "generation_error_at,publish_days,"
-    "publish_together,font_choice,drive_connected_email,weekly_format,voice_style,learned_edits"
+    "publish_together,font_choice,drive_connected_email,weekly_format,voice_style,learned_edits,website_url"
 )
 
 # The sidebar gets identity + status; setup fields are read to derive gaps and
@@ -980,6 +980,27 @@ class ClientContactPatch(BaseModel):
     instagram_profile_url: str | None = None
     whatsapp_contact: str | None = None
     contact_email: str | None = None
+    website_url: str | None = None
+
+    @field_validator("website_url")
+    @classmethod
+    def valid_website(cls, value):
+        """Syntactic check only (http/https, host, no credentials); DNS is checked when the site is read."""
+        if value is None:
+            return None
+        value = web_text._normalize(value)
+        if not value:
+            return None
+        msg = "La web tiene que ser una dirección http(s) válida, sin usuario ni contraseña."
+        try:
+            parsed = urlparse(value)
+            _ = parsed.port
+        except ValueError as exc:
+            raise ValueError(msg) from exc
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username is not None
+                or parsed.password is not None or any(ch.isspace() for ch in value) or len(value) > 300):
+            raise ValueError(msg)
+        return value
 
 
 class ClientDriveFolderPatch(BaseModel):
@@ -2052,8 +2073,8 @@ def propose_brand(client_id: str, body: BrandProposalRequest, employee: Employee
     and topics) from the business website and/or the person's own words. Nothing is
     saved: the person reviews it and saves with the usual PATCH /clientes/{id}."""
     db = get_admin_client()
-    client = _client_or_error(db, client_id, employee.agency_id, "id,agency_id,name")
-    web = (body.web or "").strip()
+    client = _client_or_error(db, client_id, employee.agency_id, "id,agency_id,name,website_url")
+    web = (body.web or "").strip() or (client.get("website_url") or "").strip()
     notas = (body.notas or "").strip()
     if not web and not notas:
         raise HTTPException(status_code=422, detail="Pasá la web del negocio o contá algo sobre él.")

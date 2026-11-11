@@ -36,6 +36,7 @@ Extienden el `supabase_schema.sql` que ya armó Matías.
 | `weekly_format` | text, nullable | Formato de la próxima generación (clave de app/engine/formatos.py). null = arco por defecto. Se consume en la generación y vuelve a null |
 | `voice_style` | text, nullable | Estilo de voz del cliente (clave de app/engine/voces.py). null = Estándar, el tono de siempre. No se consume |
 | `learned_edits` | jsonb, default `[]` | Fase 4: correcciones del equipo `[{id, antes, despues, fecha}]`, la más nueva primero, como máximo 8. El motor las recibe como `aprendizajes` |
+| `website_url` | text, nullable | Web del negocio. Se edita en Ajustes (solo sintaxis http/https, sin credenciales) y es el respaldo de `POST /portal/clientes/{id}/marca/proponer` cuando no se manda `web` |
 
 **`client_images`** (nueva) — tracking de no-repetición:
 | Campo | Tipo |
@@ -280,3 +281,4 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - El portal baja la web (`app/services/web_text.py`) y le pasa al motor solo el texto. Solo acepta http/https, rechaza hosts que resuelven a IPs privadas, loopback, link-local o reservadas (también en cada redirección, hasta 3), corta a los 8 segundos y a 1,5 MB, y solo lee HTML o texto. Si la web no se puede leer pero hay notas, sigue con las notas y devuelve el motivo en `aviso`; si no hay notas, responde 422.
 - El motor (`content.proponer_marca`) devuelve una `PropuestaMarca` ya recortada a los límites que valida `ClientPatch`: descripción de hasta 500 caracteres, hasta 3 ejemplos de 4 historias de hasta 140 y hasta 8 temas.
 - En Marca, el panel "Armá la marca con IA" está abierto si falta la descripción, los ejemplos o los temas, y plegado si no. El aviso "Falta completar" de Semana tiene un botón que lleva ahí. En el borrador, la descripción y los temas reemplazan lo actual y los ejemplos se suman a los que ya había (hasta 6); cada parte se puede destildar antes de guardar.
+- Si el pedido no trae `web`, el portal usa `clients.website_url` (Ajustes). El panel "Armá la marca con IA" precarga ese valor; proponer con otra web no lo guarda: guardarlo es explícito, en Ajustes.

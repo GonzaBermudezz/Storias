@@ -1096,6 +1096,8 @@
     $('client-instagram').value = state.client.instagram_profile_url || '';
     $('client-whatsapp').value = state.client.whatsapp_contact || '';
     $('client-email').value = state.client.contact_email || '';
+    $('client-website').value = state.client.website_url || '';
+    $('brand-ai-web').value = state.client.website_url || '';
     resetClientAccess();
     updateContactLinks();
     renderDriveConnectStatus();
@@ -1583,7 +1585,13 @@
     try {
       const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}/contacto`, {method:'PATCH', body:JSON.stringify({[field]: value})});
       if (selectionVersion !== state.selectionVersion || clientId !== state.client?.id) return;
+      const previous = state.client[field] || '';
       state.client[field] = updated[field] ?? value;
+      input.value = state.client[field] || '';
+      if (field === 'website_url') {
+        const brandWeb = $('brand-ai-web');
+        if (!brandWeb.value.trim() || brandWeb.value.trim() === previous) brandWeb.value = state.client[field] || '';
+      }
       updateContactLinks();
       showMessage('Contacto actualizado.');
     } catch(error) {
@@ -2723,7 +2731,7 @@
       if (clientId !== state.client?.id) return;
       state.client = {...state.client, ...updated};
       brandDraft = null;
-      $('brand-ai-web').value = ''; $('brand-ai-notes').value = '';
+      $('brand-ai-web').value = state.client?.website_url || ''; $('brand-ai-notes').value = '';
       renderClient();
       refreshSetupState();
       showMessage('Listo, la marca quedó guardada. La IA la usa desde la próxima historia.');
@@ -3002,6 +3010,7 @@
   $('client-instagram').addEventListener('change',()=>saveClientContact('instagram_profile_url','client-instagram'));
   $('client-whatsapp').addEventListener('change',()=>saveClientContact('whatsapp_contact','client-whatsapp'));
   $('client-email').addEventListener('change',()=>saveClientContact('contact_email','client-email'));
+  $('client-website').addEventListener('change',()=>saveClientContact('website_url','client-website'));
   $('client-drive-folder').addEventListener('change',saveClientDriveFolder);
   $('drive-missing-settings').addEventListener('click',openSettings);
   $('setup-notice').addEventListener('click', (event) => {
