@@ -123,6 +123,11 @@ class HiloGenerado(BaseModel):
     drive_file_ids_usados: list[str]    # el portal marca estos como last_used_at = ahora en client_images
     cta_agregado: bool = False          # si el motor efectivamente sorteó y dibujó el CTA (el portal NO debe re-sortear esto)
 
+class PropuestaMarca(BaseModel):
+    business_description: str           # hasta 500 caracteres
+    tone_examples: list[list[str]]      # hasta 3 hilos de 4 historias (cada una hasta 140 caracteres)
+    topics: list[str]                   # hasta 8 temas cortos
+
 class ResultadoPublicacion(BaseModel):
     ok: bool
     ig_media_id: str | None = None
@@ -164,6 +169,17 @@ def reescribir_historia(config: ClientContentConfig, texto_actual: str, accion: 
     "cercano", "otra") o "libre", que usa `instruccion`. Solo texto: no manda
     imagen, no sube ni guarda nada. Mantiene la voz del cliente y no inventa datos.
     Levanta ValueError si la acción no existe y ClaudeGenerationError si falla.
+    """
+
+def proponer_marca(nombre_negocio: str, texto_web: str | None = None,
+                   notas: str | None = None) -> PropuestaMarca:
+    """
+    Onboarding con IA (fase 5): un borrador de la marca (descripción, ejemplos de
+    tono y temas) a partir del texto de la web del negocio y/o lo que cuenta la
+    persona. Solo texto: no baja la web (el portal se la pasa ya leída), no sube
+    ni guarda nada. No inventa precios, fechas ni cifras.
+    Levanta ValueError si no viene ni texto_web ni notas y ClaudeGenerationError
+    si Claude falla o no devuelve una propuesta usable.
     """
 
 def publicar_historia(image_url: str, instagram_account_id: str, meta_access_token: str,
@@ -258,3 +274,9 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - En Marca, el panel "Lo que la IA aprendió de tus cambios" muestra cada corrección y deja olvidarla. Endpoints: `GET /portal/clientes/{id}/aprendizajes`, `DELETE .../aprendizajes/{item_id}` (404 si no existe) y `DELETE .../aprendizajes` para olvidar todo.
 - Migración: `migrations/20261023_f4_learned_edits.sql`. Hay que aplicarla antes de desplegar, porque `_CLIENT_DETAIL` pide la columna.
 
+## 15. Onboarding con IA, fase 5
+
+- `POST /portal/clientes/{id}/marca/proponer` recibe `{web?, notas?}` (web hasta 300 caracteres, notas hasta 1500; al menos uno) y devuelve `{business_description, tone_examples, topics, aviso}`. No escribe en la base: la persona revisa el borrador y lo guarda con el `PATCH /portal/clientes/{id}` de siempre, así que queda en `prompt_history`.
+- El portal baja la web (`app/services/web_text.py`) y le pasa al motor solo el texto. Solo acepta http/https, rechaza hosts que resuelven a IPs privadas, loopback, link-local o reservadas (también en cada redirección, hasta 3), corta a los 8 segundos y a 1,5 MB, y solo lee HTML o texto. Si la web no se puede leer pero hay notas, sigue con las notas y devuelve el motivo en `aviso`; si no hay notas, responde 422.
+- El motor (`content.proponer_marca`) devuelve una `PropuestaMarca` ya recortada a los límites que valida `ClientPatch`: descripción de hasta 500 caracteres, hasta 3 ejemplos de 4 historias de hasta 140 y hasta 8 temas.
+- En Marca, el panel "Armá la marca con IA" está abierto si falta la descripción, los ejemplos o los temas, y plegado si no. El aviso "Falta completar" de Semana tiene un botón que lleva ahí. En el borrador, la descripción y los temas reemplazan lo actual y los ejemplos se suman a los que ya había (hasta 6); cada parte se puede destildar antes de guardar.

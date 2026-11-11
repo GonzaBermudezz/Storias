@@ -162,6 +162,20 @@
     .tab-empty{background:var(--surface);border:1px dashed var(--border);border-radius:14px;padding:28px 20px;text-align:center;color:var(--muted);font-size:14px}
     .panel-head.static{cursor:default}
     /* Fase 4: Aprendizaje */
+    .brand-ai{margin-bottom:16px;border-color:color-mix(in srgb,var(--accent) 35%,var(--border))}
+    .brand-ai-form{display:flex;flex-direction:column;gap:8px}
+    .brand-ai-form .team-field{margin:0}
+    .brand-ai-label{font-size:12px;font-weight:650;color:var(--fg)}
+    .brand-ai-status{margin:0}
+    .brand-ai-draft{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:14px}
+    .brand-ai-part{display:flex;flex-direction:column;gap:6px}
+    .brand-ai-check{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:var(--fg);cursor:pointer}
+    .brand-ai-note{font-size:12px;color:var(--muted)}
+    .brand-ai-warning{font-size:12px;color:var(--warn);background:var(--warn-soft);border-radius:9px;padding:8px 10px}
+    .brand-ai-tone{display:flex;flex-direction:column;gap:8px;padding-left:20px;margin:0}
+    .brand-ai-tone li{font-size:13px;line-height:1.45;color:var(--fg)}
+    .brand-ai-tone li span{display:block}
+    .brand-ai-part.is-off textarea,.brand-ai-part.is-off .brand-ai-tone{opacity:.45}
     .learn-panel{margin-top:16px}
     .learn-panel .panel-body > .hint{font-size:13px;color:var(--muted);margin-bottom:12px}
     .learn-list{list-style:none;display:flex;flex-direction:column;gap:8px}
@@ -212,8 +226,9 @@
     .week-brief .panel-body > .hint{grid-column:1/-1;font-size:13px;color:var(--muted);margin-bottom:2px}
     .week-brief .team-field{margin-top:8px;padding-top:10px}
     .week-brief .team-field select{flex:1;min-width:0}
-    .week-brief .team-field:last-child .info[data-tooltip]::after{left:auto;right:-6px;transform:translate(0,4px)}
-    .week-brief .team-field:last-child .info[data-tooltip]:hover::after,.week-brief .team-field:last-child .info[data-tooltip]:focus-visible::after{transform:translate(0,0)}
+    /* The i sits at the right end of the row: open the tooltip leftwards so it never overflows the page. */
+    .team-field .info[data-tooltip]::after{left:auto;right:-6px;transform:translate(0,4px)}
+    .team-field .info[data-tooltip]:hover::after,.team-field .info[data-tooltip]:focus-visible::after{transform:translate(0,0)}
     @media(max-width:760px){.week-brief .panel-body{grid-template-columns:1fr}}
     .settings-panel .team-field > label{min-width:150px}
     @media(max-width:640px){.settings-panel .team-field{flex-wrap:wrap}.settings-panel .team-field > label{min-width:100%}}
@@ -973,6 +988,37 @@
         </div>
         <div class="client-tab hidden" id="tab-marca" data-tab="marca">
           <div class="tab-intro"><p class="eyebrow">Marca</p><h2>Cómo escribe la IA por vos</h2><p>Esto es lo que la IA usa para escribir como tu marca: la voz, los temas, ejemplos reales y el estilo. Cambialo cuando quieras; se usa desde la próxima historia.</p></div>
+        <div class="panel brand-ai" id="brand-ai">
+          <div class="panel-head" id="brand-ai-toggle" role="button" tabindex="0" aria-expanded="true" aria-controls="brand-ai-body"><div><p class="eyebrow">Tu CM con IA</p><h2>Armá la marca con IA</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
+          <div class="panel-body" id="brand-ai-body">
+            <p class="hint">Pasale la web del negocio o contale en tus palabras qué vende, a quién y cómo habla. La IA arma un borrador de la voz, los temas y ejemplos de tono. No se guarda nada hasta que lo revises.</p>
+            <form id="brand-ai-form" class="brand-ai-form">
+              <div class="team-field"><label for="brand-ai-web">Web del negocio</label><input type="text" id="brand-ai-web" maxlength="300" placeholder="https://tunegocio.com" autocomplete="url" inputmode="url"></div>
+              <label class="brand-ai-label" for="brand-ai-notes">Contale en tus palabras</label>
+              <textarea id="brand-ai-notes" maxlength="1500" placeholder="Ej.: Importamos Garmin, DJI y Kindle. Le hablamos a gente que corre y a creadores de contenido, simple y cercano."></textarea>
+              <div class="actions"><button type="submit" class="btn primary" id="brand-ai-submit">Armar con IA</button><span class="hint brand-ai-status" id="brand-ai-status" aria-live="polite"></span></div>
+            </form>
+            <div id="brand-ai-draft" class="brand-ai-draft hidden">
+              <p class="brand-ai-warning hidden" id="brand-ai-warning"></p>
+              <div class="brand-ai-part">
+                <label class="brand-ai-check"><input type="checkbox" id="brand-ai-use-desc" checked> Voz de marca</label>
+                <span class="brand-ai-note" id="brand-ai-desc-note"></span>
+                <textarea id="brand-ai-desc" maxlength="500" aria-label="Voz de marca propuesta"></textarea>
+              </div>
+              <div class="brand-ai-part">
+                <label class="brand-ai-check"><input type="checkbox" id="brand-ai-use-topics" checked> Temas</label>
+                <span class="brand-ai-note" id="brand-ai-topics-note"></span>
+                <textarea id="brand-ai-topics" aria-label="Temas propuestos, uno por línea"></textarea>
+              </div>
+              <div class="brand-ai-part">
+                <label class="brand-ai-check"><input type="checkbox" id="brand-ai-use-tone" checked> Ejemplos de tono</label>
+                <span class="brand-ai-note" id="brand-ai-tone-note"></span>
+                <ol id="brand-ai-tone" class="brand-ai-tone"></ol>
+              </div>
+              <div class="actions"><button type="button" class="btn primary" id="brand-ai-save">Guardar en la marca</button><button type="button" class="btn" id="brand-ai-discard">Descartar</button></div>
+            </div>
+          </div>
+        </div>
         <div class="panel" id="content-panel">
           <div class="panel-head" id="content-panel-toggle"><div><p class="eyebrow">Voz y temas</p><h2>Cómo habla la marca</h2></div><span class="chev" data-icon="chevron-down" data-size="16"></span></div>
           <div class="panel-body">

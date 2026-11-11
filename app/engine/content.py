@@ -56,6 +56,7 @@ from .schemas import (
     HiloGenerado,
     ImagenCandidata,
     ImagenEditada,
+    PropuestaMarca,
     ResultadoPublicacion,
 )
 
@@ -63,6 +64,18 @@ from .schemas import (
 # main.py original no es un modelo valido; se corrige aca como constante
 # unica y facil de cambiar.
 CLAUDE_MODEL = "claude-sonnet-5"
+# These calls write short copy with small max_tokens. claude-sonnet-5 thinks
+# by default when the param is omitted, and thinking tokens count against
+# max_tokens, so leaving it on can return a reply with no text at all.
+CLAUDE_THINKING = {"type": "disabled"}
+
+
+def texto_de_respuesta(response) -> str:
+    """Join the text blocks of a Claude response, skipping thinking blocks."""
+    return "".join(
+        block.text for block in response.content
+        if getattr(block, "type", "text") == "text"
+    )
 
 # Tokens maximos para la respuesta de Claude (mismo valor que el original).
 CLAUDE_MAX_TOKENS = 400
@@ -249,7 +262,7 @@ def _procesar_respuesta_claude(response) -> list[str]:
     Si Claude devuelve menos de 4 historias validas se levanta
     ``ClaudeGenerationError``: el engine no rellena con texto inventado.
     """
-    raw = response.content[0].text.strip()
+    raw = texto_de_respuesta(response).strip()
     historias = [_limpiar_emojis(h.strip()) for h in raw.split("|||")]
     historias = [h for h in historias if h][:4]
     if len(historias) < 4:
@@ -277,6 +290,7 @@ def _llamar_claude(config: ClientContentConfig, image_bytes: bytes) -> list[str]
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
+            thinking=CLAUDE_THINKING,
             max_tokens=CLAUDE_MAX_TOKENS,
             messages=[{
                 "role": "user",
@@ -387,6 +401,7 @@ def generar_texto_para_imagen(config: ClientContentConfig, image_bytes: bytes,
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
+            thinking=CLAUDE_THINKING,
             max_tokens=60,
             messages=[{
                 "role": "user",
@@ -406,7 +421,7 @@ def generar_texto_para_imagen(config: ClientContentConfig, image_bytes: bytes,
     except Exception as e:
         raise ClaudeGenerationError(f"Error llamando a Claude: {e}") from e
 
-    texto = response.content[0].text.strip()
+    texto = texto_de_respuesta(response).strip()
     # Si Claude ignoró "una sola" y devolvió varias opciones (con ||| o en
     # líneas separadas), nos quedamos solo con la primera.
     texto = re.split(r"\|\|\||\n", texto)[0].strip()
@@ -743,10 +758,11 @@ def reescribir_historia(config: ClientContentConfig, texto_actual: str, accion: 
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
+            thinking=CLAUDE_THINKING,
             max_tokens=220,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = response.content[0].text
+        raw = texto_de_respuesta(response)
     except Exception as e:
         raise ClaudeGenerationError(f"Error llamando a Claude: {e}") from e
     partes = raw.split("|||") if "|||" in raw else raw.splitlines()
@@ -759,3 +775,121 @@ def reescribir_historia(config: ClientContentConfig, texto_actual: str, accion: 
     if not variantes:
         raise ClaudeGenerationError("La IA no devolvió opciones nuevas. Probá de nuevo.")
     return variantes[:_MAX_VARIANTES]
+
+
+# -----------------------------------------
+# ONBOARDING CON IA (fase 5): borrador de la marca
+# -----------------------------------------
+# Same limits the portal validates in ClientPatch, so the draft always saves.
+_MAX_ENTRADA_WEB = 8_000
+_MAX_ENTRADA_NOTAS = 1_500
+_MAX_DESCRIPCION = 500
+_MAX_EJEMPLOS_PROPUESTOS = 3
+_MAX_LINEA_EJEMPLO = 140
+_MAX_TEMAS = 8
+_MAX_TEMA = 80
+
+
+def _armar_prompt_marca(nombre_negocio: str, texto_web: str, notas: str) -> str:
+    fuentes = ""
+    if texto_web:
+        fuentes += f"TEXTO DE SU PÁGINA WEB:\n\"\"\"\n{texto_web}\n\"\"\"\n\n"
+    if notas:
+        fuentes += f"LO QUE CUENTA EL DUEÑO:\n\"\"\"\n{notas}\n\"\"\"\n\n"
+    return (
+        f"Sos el community manager de {nombre_negocio}, un negocio que publica historias de Instagram.\n"
+        "Con esta información armá la base de su marca. Escribí en español rioplatense, "
+        "simple y cotidiano.\n\n"
+        f"{fuentes}"
+        "Devolvé SOLO un JSON con esta forma, sin texto antes ni después:\n"
+        "{\n"
+        '  "business_description": "Quién es el negocio, qué vende, a quién le habla y cómo habla. '
+        'Escrita en segunda persona, como instrucción para quien escribe sus historias. Máximo 450 caracteres.",\n'
+        '  "tone_examples": [["historia 1", "historia 2", "historia 3", "historia 4"]],\n'
+        '  "topics": ["tema corto"]\n'
+        "}\n\n"
+        "REGLAS:\n"
+        "- tone_examples: 3 hilos de 4 historias cada uno. Cada hilo cuenta una idea: "
+        "gancho, problema, solución y una invitación a escribir. Máximo 12 palabras por historia.\n"
+        "- topics: entre 6 y 8 temas concretos de lo que vende o sabe el negocio, de 2 a 6 palabras cada uno.\n"
+        "- Usá solo lo que dice la información. No inventes precios, fechas, cifras, "
+        "promociones, sucursales ni productos que no aparezcan.\n"
+        "- Ninguna historia puede prometer algo que el texto no diga que el negocio ofrece: "
+        "nada de combos, kits, packs, descuentos, servicios ni beneficios nuevos. "
+        "Para la solución usá productos, marcas o beneficios que figuren tal cual.\n"
+        "- El público: describilo solo si la información lo dice o se deduce sin dudas de lo que vende. "
+        "Si no, hablá de quien busca esos productos, sin inventar perfiles (creadores, deportistas, etc.).\n"
+        "- Sin hashtags. Sin emojis."
+    )
+
+
+def _recortar(texto: str, maximo: int) -> str:
+    texto = " ".join(_limpiar_emojis(str(texto)).split())
+    if len(texto) <= maximo:
+        return texto
+    return texto[:maximo].rsplit(" ", 1)[0].rstrip(" ,;:")
+
+
+def _extraer_json(raw: str) -> dict:
+    inicio, fin = raw.find("{"), raw.rfind("}")
+    if inicio == -1 or fin <= inicio:
+        raise ClaudeGenerationError("La IA no devolvió una propuesta. Probá de nuevo.")
+    try:
+        data = json.loads(raw[inicio:fin + 1])
+    except ValueError as e:
+        raise ClaudeGenerationError("La IA devolvió una propuesta ilegible. Probá de nuevo.") from e
+    if not isinstance(data, dict):
+        raise ClaudeGenerationError("La IA no devolvió una propuesta. Probá de nuevo.")
+    return data
+
+
+def proponer_marca(nombre_negocio: str, texto_web: str | None = None,
+                   notas: str | None = None) -> PropuestaMarca:
+    """Onboarding con IA (fase 5): un borrador de la marca a partir del texto de la
+    web y/o lo que cuenta la persona. Solo texto: no baja nada ni guarda nada.
+    Levanta ValueError si no hay entrada y ClaudeGenerationError si Claude falla o
+    no devuelve una propuesta usable."""
+    web = " ".join((texto_web or "").split())[:_MAX_ENTRADA_WEB]
+    notas_limpias = (notas or "").strip()[:_MAX_ENTRADA_NOTAS]
+    if not web and not notas_limpias:
+        raise ValueError("Pasá la web del negocio o contá algo sobre él.")
+    prompt = _armar_prompt_marca(nombre_negocio, web, notas_limpias)
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ClaudeGenerationError("ANTHROPIC_API_KEY no está configurada en el entorno.")
+    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            thinking=CLAUDE_THINKING,
+            max_tokens=1_200,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = texto_de_respuesta(response)
+    except Exception as e:
+        raise ClaudeGenerationError(f"Error llamando a Claude: {e}") from e
+
+    data = _extraer_json(raw)
+    descripcion = _recortar(data.get("business_description") or "", _MAX_DESCRIPCION)
+    if not descripcion:
+        raise ClaudeGenerationError("La IA no pudo armar la descripción. Contá un poco más sobre el negocio.")
+
+    ejemplos: list[list[str]] = []
+    for hilo in data.get("tone_examples") or []:
+        if not isinstance(hilo, list) or len(hilo) != 4:
+            continue
+        lineas = [_recortar(linea, _MAX_LINEA_EJEMPLO) for linea in hilo]
+        if all(lineas):
+            ejemplos.append(lineas)
+        if len(ejemplos) == _MAX_EJEMPLOS_PROPUESTOS:
+            break
+
+    temas: list[str] = []
+    for tema in data.get("topics") or []:
+        limpio = _recortar(tema, _MAX_TEMA) if isinstance(tema, str) else ""
+        if limpio and limpio.casefold() not in {t.casefold() for t in temas}:
+            temas.append(limpio)
+        if len(temas) == _MAX_TEMAS:
+            break
+
+    return PropuestaMarca(business_description=descripcion, tone_examples=ejemplos, topics=temas)

@@ -28,7 +28,7 @@ from app.engine.formatos import FORMATOS
 from app.engine.imaging import _FONT_FILES, FONT_CHOICES
 from app.engine.schemas import ImagenCandidata
 from app.engine.voces import VOCES
-from app.services import client_access, content_jobs, drive, uploads
+from app.services import client_access, content_jobs, drive, uploads, web_text
 from app.services.content_jobs import PUBLISH_DAY_OFFSETS, build_content_config, setup_gaps
 from app.services.encryption import decrypt, encrypt
 
@@ -2039,6 +2039,39 @@ def story_variants(story_id: str, body: StoryVariantsRequest, employee: Employee
     except (ClaudeGenerationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return {"variantes": variantes}
+
+
+class BrandProposalRequest(BaseModel):
+    web: str | None = Field(default=None, max_length=300)
+    notas: str | None = Field(default=None, max_length=1500)
+
+
+@router.post("/clientes/{client_id}/marca/proponer")
+def propose_brand(client_id: str, body: BrandProposalRequest, employee: EmployeeDep):
+    """Onboarding con IA (fase 5): a draft of the brand (description, tone examples
+    and topics) from the business website and/or the person's own words. Nothing is
+    saved: the person reviews it and saves with the usual PATCH /clientes/{id}."""
+    db = get_admin_client()
+    client = _client_or_error(db, client_id, employee.agency_id, "id,agency_id,name")
+    web = (body.web or "").strip()
+    notas = (body.notas or "").strip()
+    if not web and not notas:
+        raise HTTPException(status_code=422, detail="Pasá la web del negocio o contá algo sobre él.")
+    texto_web, aviso = None, None
+    if web:
+        try:
+            texto_web = web_text.fetch_text(web) or None
+        except web_text.WebTextError as exc:
+            if not notas:
+                raise HTTPException(status_code=422, detail=str(exc))
+            aviso = str(exc)
+        if texto_web is None and aviso is None and not notas:
+            raise HTTPException(status_code=422, detail="La web no tiene texto para leer. Contá el negocio en tus palabras.")
+    try:
+        propuesta = content.proponer_marca(client.get("name") or "el negocio", texto_web=texto_web, notas=notas or None)
+    except (ClaudeGenerationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {**propuesta.model_dump(), "aviso": aviso}
 
 
 class StoryFontPatch(BaseModel):

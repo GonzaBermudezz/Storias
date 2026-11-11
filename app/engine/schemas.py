@@ -43,6 +43,12 @@ class HiloGenerado(BaseModel):
     cta_agregado: bool = False          # si el motor efectivamente dibujo el CTA (sorteo por prob_link)
 
 
+class PropuestaMarca(BaseModel):
+    business_description: str           # hasta 500 caracteres
+    tone_examples: list[list[str]]      # hasta 3 hilos de 4 historias (cada una hasta 140 caracteres)
+    topics: list[str]                   # hasta 8 temas cortos
+
+
 class ResultadoPublicacion(BaseModel):
     ok: bool
     ig_media_id: str | None = None

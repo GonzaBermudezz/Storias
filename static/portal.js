@@ -1103,6 +1103,7 @@
     renderSetupNotice();
     renderStyleSection();
     renderLearnings();
+    renderBrandAi();
     setStylePanelCollapsed(false); // Marca es su propia sección: siempre a la vista
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     const url = driveUrl(state.client.drive_folder_id);
@@ -1126,10 +1127,14 @@
     if (advised.length) {
       parts.push(`<p class="setup-line">Recomendado: sumar ${advised.map((key) => SETUP_LABELS[key]).join(' y ')}. <button type="button" class="link-btn" data-setup-go="${advised[0]}">Agregar</button></p>`);
     }
+    if (missing.includes('descripcion') || advised.length) {
+      parts.push('<p class="setup-line"><button type="button" class="link-btn" data-setup-go="ia">Armar la marca con IA</button> a partir de la web o de lo que cuentes.</p>');
+    }
     box.innerHTML = parts.join('');
     box.classList.remove('hidden');
   }
   function goToSetup(key) {
+    if (key === 'ia') { setClientTab('marca'); setBrandAiCollapsed(false); $('brand-ai').scrollIntoView({block: 'start', behavior: 'smooth'}); $('brand-ai-web').focus({preventScroll: true}); return; }
     if (key === 'drive') { setClientTab('ajustes'); $('client-drive-folder').focus(); return; }
     setClientTab('marca');
     if (key === 'descripcion' || key === 'temas') $('content-panel').classList.remove('collapsed');
@@ -2627,6 +2632,110 @@
     }
     renderPhotos();
   }
+  // Fase 5 — Onboarding con IA: a brand draft the person reviews before saving.
+  let brandDraft = null; // {clientId, business_description, topics, tone_examples}
+  function brandNeedsSetup(client) {
+    return !String(client?.business_description || '').trim() || !(client?.topics || []).length || !(client?.tone_examples || []).length;
+  }
+  function setBrandAiCollapsed(collapsed) {
+    $('brand-ai').classList.toggle('collapsed', collapsed);
+    $('brand-ai-toggle').setAttribute('aria-expanded', String(!collapsed));
+  }
+  function renderBrandAi() {
+    if (!state.client) return;
+    if (brandDraft && brandDraft.clientId !== state.client.id) brandDraft = null;
+    setBrandAiCollapsed(!brandDraft && !brandNeedsSetup(state.client));
+    if (!brandDraft) {
+      $('brand-ai-draft').classList.add('hidden');
+      $('brand-ai-status').textContent = '';
+    }
+  }
+  function brandPartToggle(checkboxId) {
+    const box = $(checkboxId);
+    box.closest('.brand-ai-part').classList.toggle('is-off', !box.checked);
+  }
+  function renderBrandDraft() {
+    const client = state.client, draft = brandDraft;
+    if (!client || !draft) return;
+    const hasDesc = Boolean(String(client.business_description || '').trim());
+    const currentTopics = client.topics || [], currentTone = client.tone_examples || [];
+    $('brand-ai-desc').value = draft.business_description;
+    $('brand-ai-desc-note').textContent = hasDesc ? 'Reemplaza la voz actual.' : 'Todavía no hay voz de marca: se guarda esta.';
+    $('brand-ai-topics').value = draft.topics.join('\n');
+    $('brand-ai-topics-note').textContent = draft.topics.length ? (currentTopics.length ? `Reemplaza los ${currentTopics.length} temas actuales. Uno por línea.` : 'Uno por línea.') : 'La IA no propuso temas.';
+    const room = Math.max(0, 6 - currentTone.length);
+    const tone = draft.tone_examples.slice(0, room);
+    $('brand-ai-tone').innerHTML = tone.map((thread) => `<li>${thread.map((line) => `<span>${escapeHtml(line)}</span>`).join('')}</li>`).join('');
+    $('brand-ai-tone-note').textContent = !draft.tone_examples.length ? 'La IA no propuso ejemplos.'
+      : !room ? 'Ya tenés 6 ejemplos, el máximo. Borrá alguno para sumar estos.'
+      : currentTone.length ? `Se suman a los ${currentTone.length} que ya tenés.` : 'La IA los imita para que cada historia suene como la marca.';
+    $('brand-ai-use-desc').checked = !hasDesc || $('brand-ai-use-desc').checked;
+    $('brand-ai-use-topics').disabled = !draft.topics.length;
+    $('brand-ai-use-tone').disabled = !tone.length;
+    if (!draft.topics.length) $('brand-ai-use-topics').checked = false;
+    if (!tone.length) $('brand-ai-use-tone').checked = false;
+    ['brand-ai-use-desc', 'brand-ai-use-topics', 'brand-ai-use-tone'].forEach(brandPartToggle);
+    $('brand-ai-warning').textContent = draft.aviso ? `${draft.aviso} Armé el borrador solo con lo que contaste.` : '';
+    $('brand-ai-warning').classList.toggle('hidden', !draft.aviso);
+    $('brand-ai-draft').classList.remove('hidden');
+  }
+  async function proposeBrand(event) {
+    event.preventDefault();
+    const clientId = state.client?.id; if (!clientId) return;
+    const web = $('brand-ai-web').value.trim(), notas = $('brand-ai-notes').value.trim();
+    if (!web && !notas) { showMessage('Pasá la web del negocio o contá algo sobre él.', true); $('brand-ai-web').focus(); return; }
+    const button = $('brand-ai-submit');
+    button.disabled = true; $('brand-ai-status').textContent = web ? 'Leyendo la web y armando la marca…' : 'Armando la marca…';
+    try {
+      const draft = await api(`/portal/clientes/${encodeURIComponent(clientId)}/marca/proponer`, {method: 'POST', body: JSON.stringify({web: web || null, notas: notas || null})});
+      if (clientId !== state.client?.id) return;
+      brandDraft = {clientId, ...draft};
+      ['brand-ai-use-desc', 'brand-ai-use-topics', 'brand-ai-use-tone'].forEach((id) => { $(id).checked = true; });
+      $('brand-ai-status').textContent = 'Listo. Revisá el borrador y guardá lo que te sirva.';
+      renderBrandDraft();
+      $('brand-ai-draft').scrollIntoView({block: 'nearest', behavior: 'smooth'});
+    } catch (error) {
+      $('brand-ai-status').textContent = '';
+      if (!['Acceso denegado', 'Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    } finally { button.disabled = false; }
+  }
+  async function saveBrandDraft() {
+    const client = state.client, draft = brandDraft;
+    if (!client || !draft || draft.clientId !== client.id) return;
+    const patch = {};
+    if ($('brand-ai-use-desc').checked) {
+      const desc = $('brand-ai-desc').value.trim();
+      if (!desc) { showMessage('La voz de marca no puede quedar vacía.', true); return; }
+      patch.business_description = desc;
+    }
+    if ($('brand-ai-use-topics').checked) {
+      patch.topics = $('brand-ai-topics').value.split(/\r?\n/).map((topic) => topic.trim()).filter(Boolean);
+    }
+    if ($('brand-ai-use-tone').checked) {
+      const current = client.tone_examples || [];
+      patch.tone_examples = [...current, ...draft.tone_examples.slice(0, Math.max(0, 6 - current.length))];
+    }
+    if (!Object.keys(patch).length) { showMessage('Tildá al menos una parte para guardar.', true); return; }
+    const clientId = client.id, button = $('brand-ai-save');
+    button.disabled = true;
+    try {
+      const updated = await api(`/portal/clientes/${encodeURIComponent(clientId)}`, {method: 'PATCH', body: JSON.stringify(patch)});
+      if (clientId !== state.client?.id) return;
+      state.client = {...state.client, ...updated};
+      brandDraft = null;
+      $('brand-ai-web').value = ''; $('brand-ai-notes').value = '';
+      renderClient();
+      refreshSetupState();
+      showMessage('Listo, la marca quedó guardada. La IA la usa desde la próxima historia.');
+    } catch (error) {
+      if (!['Acceso denegado', 'Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    } finally { button.disabled = false; }
+  }
+  function discardBrandDraft() {
+    brandDraft = null;
+    $('brand-ai-draft').classList.add('hidden');
+    $('brand-ai-status').textContent = '';
+  }
   // Fase 4 — Aprendizaje: corrections the AI keeps in mind (stored on the client row).
   function renderLearnings() {
     const items = Array.isArray(state.client?.learned_edits) ? state.client.learned_edits : [];
@@ -2969,6 +3078,12 @@
   $('qa-settings').addEventListener('click',openSettings);
   $('history-open-changes').addEventListener('click',openHistory);
   $('learn-clear').addEventListener('click', () => forgetLearning(null));
+  $('brand-ai-toggle').addEventListener('click', () => setBrandAiCollapsed(!$('brand-ai').classList.contains('collapsed')));
+  $('brand-ai-toggle').addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setBrandAiCollapsed(!$('brand-ai').classList.contains('collapsed')); } });
+  $('brand-ai-form').addEventListener('submit', proposeBrand);
+  $('brand-ai-save').addEventListener('click', saveBrandDraft);
+  $('brand-ai-discard').addEventListener('click', discardBrandDraft);
+  ['brand-ai-use-desc', 'brand-ai-use-topics', 'brand-ai-use-tone'].forEach((id) => $(id).addEventListener('change', () => brandPartToggle(id)));
   $('learn-list').addEventListener('click', (event) => {
     const button = event.target.closest('[data-learn-forget]');
     if (button) forgetLearning(button.dataset.learnForget);

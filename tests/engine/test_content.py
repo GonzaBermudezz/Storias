@@ -9,6 +9,7 @@ gasta credito real.
 from __future__ import annotations
 
 import io
+import json
 from types import SimpleNamespace
 from unittest import mock
 
@@ -987,3 +988,77 @@ def test_aprendizajes_limita_a_8_recorta_y_descarta_incompletos():
     assert bloque.count("- Antes:") == 8
     assert "solo despues" not in bloque and "antes 8" not in bloque
     assert all(len(line) < 200 for line in bloque.splitlines())
+
+
+# ---------------------------------------------------------------------------
+# Fase 5: onboarding con IA — borrador de la marca
+# ---------------------------------------------------------------------------
+_PROPUESTA_OK = json.dumps({
+    "business_description": "Importadora de tecnología. Hablamos simple y cercano 🚀",
+    "tone_examples": [
+        ["¿Corrés con el celu?", "Se corta la música.", "Un Garmin mide todo.", "Escribí RUN."],
+        ["Solo tres", "historias", "acá"],
+        ["Uno", "Dos", "Tres", "Cuatro"], ["A", "B", "C", "D"], ["E", "F", "G", "H"],
+    ],
+    "topics": ["Garmin para running", "garmin para running", "DJI para creadores", "", "x" * 200],
+}, ensure_ascii=False)
+
+
+def test_proponer_marca_limpia_y_recorta_a_los_limites_del_portal(monkeypatch):
+    capturado = {}
+    _claude_que_responde(monkeypatch, f"Acá va:\n```json\n{_PROPUESTA_OK}\n```", capturado)
+
+    propuesta = content.proponer_marca("GBA", texto_web="Somos GBA, importamos Garmin y DJI.", notas="Hablamos de vos")
+
+    assert propuesta.business_description == "Importadora de tecnología. Hablamos simple y cercano"
+    assert propuesta.tone_examples[0] == ["¿Corrés con el celu?", "Se corta la música.", "Un Garmin mide todo.", "Escribí RUN."]
+    assert len(propuesta.tone_examples) == 3 and all(len(hilo) == 4 for hilo in propuesta.tone_examples)
+    assert propuesta.topics[:2] == ["Garmin para running", "DJI para creadores"]
+    assert all(0 < len(tema) <= 80 for tema in propuesta.topics)
+    prompt = capturado["messages"][0]["content"]
+    assert "GBA" in prompt and "importamos Garmin" in prompt and "Hablamos de vos" in prompt
+    assert isinstance(prompt, str)  # solo texto
+
+
+def test_proponer_marca_recorta_la_entrada_y_la_descripcion(monkeypatch):
+    capturado = {}
+    largo = json.dumps({"business_description": "palabra " * 120, "tone_examples": [], "topics": ["Uno"]})
+    _claude_que_responde(monkeypatch, largo, capturado)
+
+    propuesta = content.proponer_marca("GBA", texto_web="w" * 50_000)
+
+    assert len(propuesta.business_description) <= 500 and not propuesta.business_description.endswith(" ")
+    assert "w" * 8_001 not in capturado["messages"][0]["content"]
+
+
+def test_proponer_marca_sin_entrada_levanta_value_error():
+    with pytest.raises(ValueError):
+        content.proponer_marca("GBA", texto_web="  ", notas=None)
+
+
+@pytest.mark.parametrize("respuesta", ["no es json", json.dumps({"business_description": " ", "topics": []}), "[1, 2]"])
+def test_proponer_marca_sin_propuesta_usable_levanta(monkeypatch, respuesta):
+    _claude_que_responde(monkeypatch, respuesta)
+    with pytest.raises(content.ClaudeGenerationError):
+        content.proponer_marca("GBA", notas="Vendemos relojes")
+
+
+def test_texto_de_respuesta_ignora_bloques_de_thinking():
+    response = SimpleNamespace(content=[
+        SimpleNamespace(type="thinking", thinking="pensando..."),
+        SimpleNamespace(type="text", text="Hola"),
+        SimpleNamespace(type="text", text=" mundo"),
+    ])
+    assert content.texto_de_respuesta(response) == "Hola mundo"
+
+
+def test_las_llamadas_a_claude_no_piden_thinking(mock_servicios):
+    content.generar_texto_de_prueba(config_cuan(), imagen_candidata(1))
+    _, kwargs = mock_servicios.messages.create.call_args
+    assert kwargs["thinking"] == {"type": "disabled"}
+
+
+def test_prompt_marca_no_deja_prometer_ofertas_ni_inventar_publico():
+    prompt = content._armar_prompt_marca("GBA", "Vendemos Garmin.", "")
+    assert "combos" in prompt and "servicios" in prompt
+    assert "público" in prompt.lower()

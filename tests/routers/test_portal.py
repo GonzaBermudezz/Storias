@@ -3279,3 +3279,94 @@ def test_portal_frontend_has_learnings_panel():
     assert 'id="learn-list"' in marca and 'id="learn-clear"' in marca
     assert "/aprendizajes" in source and "renderStyleSection();\n    renderLearnings();" in source
     assert "${escapeHtml(item.antes)}" in source and "${escapeHtml(item.despues)}" in source
+
+
+# ---------------------------------------------------------------------------
+# Fase 5: onboarding con IA
+# ---------------------------------------------------------------------------
+from app.engine.exceptions import ClaudeGenerationError  # noqa: E402
+from app.engine.schemas import PropuestaMarca  # noqa: E402
+from app.services.web_text import WebTextError  # noqa: E402
+
+_BRAND_ROW = {"id": "c1", "agency_id": "agency-1", "name": "GBA"}
+_PROPUESTA = PropuestaMarca(business_description="Importadora", tone_examples=[["a", "b", "c", "d"]], topics=["Garmin"])
+
+
+def _brand_mocks(monkeypatch, fetch=None, propose=None):
+    seen = {}
+    db = DB([dict(_BRAND_ROW)])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+
+    def fake_fetch(url):
+        seen["url"] = url
+        if isinstance(fetch, Exception):
+            raise fetch
+        return fetch or "texto de la web"
+
+    def fake_propose(nombre, texto_web=None, notas=None):
+        seen.update(nombre=nombre, texto_web=texto_web, notas=notas)
+        if isinstance(propose, Exception):
+            raise propose
+        return _PROPUESTA
+    monkeypatch.setattr("app.routers.portal.web_text.fetch_text", fake_fetch)
+    monkeypatch.setattr("app.routers.portal.content.proponer_marca", fake_propose)
+    return db, seen
+
+
+def test_brand_proposal_reads_the_site_and_saves_nothing(monkeypatch, client):
+    db, seen = _brand_mocks(monkeypatch)
+    response = client.post("/portal/clientes/c1/marca/proponer", json={"web": " gba.com.ar ", "notas": " Somos GBA "})
+    assert response.status_code == 200
+    assert response.json() == {**_PROPUESTA.model_dump(), "aviso": None}
+    assert seen == {"url": "gba.com.ar", "nombre": "GBA", "texto_web": "texto de la web", "notas": "Somos GBA"}
+    assert db.updates == []
+
+
+def test_brand_proposal_with_notes_only_skips_the_site(monkeypatch, client):
+    _, seen = _brand_mocks(monkeypatch)
+    assert client.post("/portal/clientes/c1/marca/proponer", json={"notas": "Vendemos relojes"}).status_code == 200
+    assert "url" not in seen and seen["texto_web"] is None
+
+
+def test_unreadable_site_falls_back_to_the_notes_with_a_warning(monkeypatch, client):
+    _, seen = _brand_mocks(monkeypatch, fetch=WebTextError("No pude abrir esa web."))
+    response = client.post("/portal/clientes/c1/marca/proponer", json={"web": "gba.com.ar", "notas": "Relojes"})
+    assert response.status_code == 200
+    assert response.json()["aviso"] == "No pude abrir esa web."
+    assert seen["texto_web"] is None and seen["notas"] == "Relojes"
+
+
+def test_unreadable_site_without_notes_is_422(monkeypatch, client):
+    _brand_mocks(monkeypatch, fetch=WebTextError("Esa dirección no es una web pública."))
+    response = client.post("/portal/clientes/c1/marca/proponer", json={"web": "http://10.0.0.1"})
+    assert response.status_code == 422 and response.json()["detail"] == "Esa dirección no es una web pública."
+
+
+@pytest.mark.parametrize("body", [{}, {"web": "  ", "notas": ""}, {"web": "x" * 301}, {"notas": "x" * 1501}])
+def test_brand_proposal_rejects_bad_requests(monkeypatch, client, body):
+    _brand_mocks(monkeypatch)
+    assert client.post("/portal/clientes/c1/marca/proponer", json=body).status_code == 422
+
+
+def test_brand_proposal_ai_failure_is_422(monkeypatch, client):
+    _brand_mocks(monkeypatch, propose=ClaudeGenerationError("La IA no devolvió una propuesta."))
+    response = client.post("/portal/clientes/c1/marca/proponer", json={"notas": "Relojes"})
+    assert response.status_code == 422 and "propuesta" in response.json()["detail"]
+
+
+def test_brand_proposal_of_another_agency_is_forbidden(monkeypatch, client):
+    _brand_mocks(monkeypatch)
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([{"id": "c1", "agency_id": "other"}]))
+    assert client.post("/portal/clientes/c1/marca/proponer", json={"notas": "x"}).status_code == 403
+
+
+def test_portal_frontend_has_the_brand_onboarding_panel():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+    marca = page.split('id="tab-marca"', 1)[1].split('id="content-panel"', 1)[0]
+    assert 'id="brand-ai"' in marca and "Armá la marca con IA" in marca
+    for element in ("brand-ai-web", "brand-ai-notes", "brand-ai-desc", "brand-ai-topics", "brand-ai-tone", "brand-ai-save"):
+        assert f'id="{element}"' in marca
+    assert "/marca/proponer" in source and 'data-setup-go="ia"' in source
+    assert "renderLearnings();\n    renderBrandAi();" in source
+    assert "${escapeHtml(line)}" in source  # AI text is escaped before it hits innerHTML

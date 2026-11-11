@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import anthropic
 from PIL import Image
 
-from app.engine.content import CLAUDE_MODEL
+from app.engine.content import CLAUDE_MODEL, CLAUDE_THINKING, texto_de_respuesta
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,7 @@ def classify_image(image_bytes: bytes) -> dict | None:
         response = client.messages.create(
             model=os.getenv("IMAGE_TAG_MODEL") or CLAUDE_MODEL,
             max_tokens=100,
+            thinking=CLAUDE_THINKING,
             messages=[{
                 "role": "user",
                 "content": [
@@ -85,7 +86,7 @@ def classify_image(image_bytes: bytes) -> dict | None:
                 ],
             }],
         )
-        return parse_tag(response.content[0].text)
+        return parse_tag(texto_de_respuesta(response))
     except Exception:
         logger.warning("No se pudo clasificar una foto de Drive", exc_info=True)
         return None
