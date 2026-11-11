@@ -1828,6 +1828,45 @@ def generate_story_text(story_id: str, employee: EmployeeDep):
     }
 
 
+class StoryVariantsRequest(BaseModel):
+    accion: str
+    instruccion: str | None = Field(default=None, max_length=200)
+    # Current text in the editor (it may not be saved yet); falls back to the stored one.
+    texto: str | None = Field(default=None, max_length=300)
+
+    @field_validator("accion")
+    @classmethod
+    def known_action(cls, value):
+        if value != "libre" and value not in content.ACCIONES_VARIANTE:
+            raise ValueError("Acción no reconocida")
+        return value
+
+
+@router.post("/historias/{story_id}/variantes")
+def story_variants(story_id: str, body: StoryVariantsRequest, employee: EmployeeDep):
+    """Editar con IA (fase 2): up to 3 rewrites of ONE story for the person to pick
+    from. Nothing is saved — choosing one fills the editor and the normal save
+    (PATCH /historias/{id}) composes it onto the image."""
+    db = get_admin_client()
+    result = db.table("stories").select("id,client_id,text,estado").eq("id", story_id).maybe_single().execute()
+    story = result.data if result else None
+    if not story:
+        raise HTTPException(status_code=404, detail="Historia no encontrada")
+    client = _client_or_error(db, story["client_id"], employee.agency_id)
+    if story.get("estado") in _LOCKED_STATES:
+        raise HTTPException(status_code=409, detail="La historia ya fue publicada o cancelada y no se puede editar")
+    texto = (body.texto if body.texto is not None else story.get("text") or "").strip()
+    if not texto:
+        raise HTTPException(status_code=422, detail="La historia todavía no tiene texto. Escribí uno o generalo con IA.")
+    if body.accion == "libre" and not (body.instruccion or "").strip():
+        raise HTTPException(status_code=422, detail="Escribí qué querés que cambie la IA.")
+    try:
+        variantes = content.reescribir_historia(build_content_config(client), texto, body.accion, body.instruccion)
+    except (ClaudeGenerationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"variantes": variantes}
+
+
 class StoryFontPatch(BaseModel):
     font_choice: str | None = None
 

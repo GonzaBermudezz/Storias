@@ -2970,3 +2970,102 @@ def test_portal_frontend_has_direct_mode():
         assert marker in page
     assert "agency_mode === 'direct'" in source and "'Mi negocio'" in source
     assert "isDirectMode() ? Promise.resolve([]) : api('/portal/empleados')" in source
+
+
+# ---------------------------------------------------------------------------
+# Fase 2: Editar con IA — POST /historias/{id}/variantes
+# ---------------------------------------------------------------------------
+def _variants_db(estado="pendiente", text="Tu cocina, a medida.", agency="agency-1"):
+    return DB([{"id": "s1", "client_id": "c1", "text": text, "estado": estado},
+               {"id": "c1", "agency_id": agency, "name": "CUAN", "business_description": "Cocinas"}])
+
+
+def test_story_variants_returns_options_without_saving(monkeypatch, client):
+    db = _variants_db()
+    seen = {}
+
+    def rewrite(config, texto, accion, instruccion=None):
+        seen.update(texto=texto, accion=accion, instruccion=instruccion, negocio=config.nombre_negocio)
+        return ["Una", "Dos", "Tres"]
+
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.content.reescribir_historia", rewrite)
+
+    response = client.post("/portal/historias/s1/variantes", json={"accion": "corto"})
+
+    assert response.status_code == 200
+    assert response.json() == {"variantes": ["Una", "Dos", "Tres"]}
+    assert seen == {"texto": "Tu cocina, a medida.", "accion": "corto", "instruccion": None, "negocio": "CUAN"}
+    assert db.updates == [] and db.inserts == []
+
+
+def test_story_variants_uses_the_unsaved_editor_text_and_free_request(monkeypatch, client):
+    db = _variants_db()
+    seen = {}
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    monkeypatch.setattr("app.routers.portal.content.reescribir_historia",
+                        lambda config, texto, accion, instruccion=None: seen.update(texto=texto, instruccion=instruccion) or ["X"])
+    response = client.post("/portal/historias/s1/variantes",
+                           json={"accion": "libre", "instruccion": "nombrá el envío gratis", "texto": "  Texto editado  "})
+    assert response.status_code == 200
+    assert seen == {"texto": "Texto editado", "instruccion": "nombrá el envío gratis"}
+
+
+@pytest.mark.parametrize("body", [{"accion": "inventada"}, {"accion": "corto", "instruccion": "x" * 201}])
+def test_story_variants_rejects_bad_requests(monkeypatch, client, body):
+    db = DB([])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    assert client.post("/portal/historias/s1/variantes", json=body).status_code == 422
+
+
+def test_story_variants_free_request_needs_an_instruction(monkeypatch, client):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: _variants_db())
+    response = client.post("/portal/historias/s1/variantes", json={"accion": "libre", "instruccion": "  "})
+    assert response.status_code == 422
+
+
+def test_story_variants_needs_text(monkeypatch, client):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: _variants_db(text=None))
+    response = client.post("/portal/historias/s1/variantes", json={"accion": "corto"})
+    assert response.status_code == 422
+    assert "todavía no tiene texto" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("estado", ["publicado", "publicando", "cancelada", "generando"])
+def test_story_variants_locked_story_is_409(monkeypatch, client, estado):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: _variants_db(estado=estado))
+    assert client.post("/portal/historias/s1/variantes", json={"accion": "corto"}).status_code == 409
+
+
+def test_story_variants_other_agency_is_403(monkeypatch, client):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: _variants_db(agency="other"))
+    assert client.post("/portal/historias/s1/variantes", json={"accion": "corto"}).status_code == 403
+
+
+def test_story_variants_missing_story_is_404(monkeypatch, client):
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: DB([None]))
+    assert client.post("/portal/historias/nope/variantes", json={"accion": "corto"}).status_code == 404
+
+
+def test_story_variants_ai_failure_is_422(monkeypatch, client):
+    from app.engine.exceptions import ClaudeGenerationError
+
+    def boom(*a, **k):
+        raise ClaudeGenerationError("La IA no devolvió opciones nuevas. Probá de nuevo.")
+
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: _variants_db())
+    monkeypatch.setattr("app.routers.portal.content.reescribir_historia", boom)
+    response = client.post("/portal/historias/s1/variantes", json={"accion": "otra"})
+    assert response.status_code == 422 and "Probá de nuevo" in response.json()["detail"]
+
+
+def test_portal_frontend_has_edit_with_ai_panel():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+    editor = page.split('<dialog id="story-dialog"', 1)[1].split("</dialog>", 1)[0]
+    assert "Editar con IA" in editor
+    for action in ("corto", "vendedor", "cercano", "otra"):
+        assert f'data-ai-action="{action}"' in editor
+    assert 'id="ai-instruction"' in editor and 'id="ai-variants"' in editor
+    assert "/variantes" in source and "resetAiEdit();\n    $('story-dialog').showModal();" in source
+    assert "${escapeHtml(text)}" in source and "Volver al texto anterior" in source

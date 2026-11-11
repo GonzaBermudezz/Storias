@@ -895,3 +895,61 @@ def test_generar_texto_para_imagen_pasa_formato_y_tema_al_prompt(monkeypatch):
     with pytest.raises(RuntimeError):
         content.generar_texto_para_imagen(config_cuan(), imagen_falsa(), formato="teaser", tema="Garmin")
     assert capturado == {"formato": "teaser", "tema": "Garmin"}
+
+
+# ---------------------------------------------------------------------------
+# Fase 2: Editar con IA — variantes de una historia
+# ---------------------------------------------------------------------------
+def _claude_que_responde(monkeypatch, texto, capturado=None):
+    class Mensajes:
+        def create(self, **kwargs):
+            if capturado is not None:
+                capturado.update(kwargs)
+            return SimpleNamespace(content=[SimpleNamespace(text=texto)])
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setattr(content.anthropic, "Anthropic", lambda api_key: SimpleNamespace(messages=Mensajes()))
+
+
+@pytest.mark.parametrize("accion", sorted(content.ACCIONES_VARIANTE))
+def test_prompt_de_variantes_por_accion(accion):
+    prompt = content._armar_prompt_variantes(config_cuan(), "Tu cocina, a medida.", accion)
+    assert content.ACCIONES_VARIANTE[accion] in prompt
+    assert '"Tu cocina, a medida."' in prompt
+    assert "No inventes precios, fechas, horas, cifras" in prompt
+    assert "- Máximo 12 palabras por opción\n" in prompt
+    assert _REGLAS_TONO_POR_DEFECTO in prompt
+
+
+def test_prompt_de_variantes_usa_el_estilo_de_voz_y_el_pedido_libre():
+    prompt = content._armar_prompt_variantes(config_cuan(voice_style="sobrio"), "Hola", "libre", "  nombrá el envío gratis ")
+    assert "siguiendo este pedido: nombrá el envío gratis" in prompt
+    assert _PROHIBIDO not in prompt and "- Tono sobrio y respetuoso, de vos\n" in prompt
+
+
+@pytest.mark.parametrize("accion, instruccion", [("libre", None), ("libre", "   "), ("inventada", None)])
+def test_prompt_de_variantes_rechaza_accion_invalida(accion, instruccion):
+    with pytest.raises(ValueError):
+        content._armar_prompt_variantes(config_cuan(), "Hola", accion, instruccion)
+
+
+def test_reescribir_historia_limpia_deduplica_y_descarta_el_original(monkeypatch):
+    capturado = {}
+    _claude_que_responde(monkeypatch, '1. "Tu cocina, más corta" ||| Tu cocina, a medida. ||| - Otra idea 🔥 ||| tu cocina, más corta ||| Cuarta', capturado)
+
+    variantes = content.reescribir_historia(config_cuan(), "Tu cocina, a medida.", "corto")
+
+    assert variantes == ["Tu cocina, más corta", "Otra idea", "Cuarta"]
+    assert capturado["messages"][0]["content"].startswith(config_cuan().business_description)
+    assert all(not isinstance(m["content"], list) for m in capturado["messages"])  # solo texto, sin imagen
+
+
+def test_reescribir_historia_acepta_opciones_por_linea(monkeypatch):
+    _claude_que_responde(monkeypatch, "Primera\nSegunda\n")
+    assert content.reescribir_historia(config_cuan(), "Original", "otra") == ["Primera", "Segunda"]
+
+
+def test_reescribir_historia_sin_opciones_nuevas_levanta(monkeypatch):
+    _claude_que_responde(monkeypatch, "Original ||| original")
+    with pytest.raises(content.ClaudeGenerationError):
+        content.reescribir_historia(config_cuan(), "Original", "corto")

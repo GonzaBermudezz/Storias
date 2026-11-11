@@ -354,7 +354,27 @@
     .story-edit-preview{flex:0 0 320px;aspect-ratio:9/16;border-radius:14px;overflow:hidden;background:#161616;max-height:70vh}
     .story-edit-preview img{width:100%;height:100%;object-fit:cover;display:block}
     .story-edit-panel{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
-    .story-edit-panel textarea{flex:1;min-height:320px}
+    .story-edit-panel textarea{flex:1;min-height:150px}
+    .ai-edit{border:1px solid var(--border);border-radius:12px;padding:12px;background:linear-gradient(180deg,var(--accent-soft),var(--surface) 70%)}
+    .ai-edit-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:13px}
+    .ai-edit-icon{color:var(--accent-strong);display:inline-flex}
+    .ai-edit-sub{font-size:12px;color:var(--muted);margin-left:auto}
+    .ai-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+    .ai-chip{border:1px solid var(--border);background:var(--surface);color:var(--fg);border-radius:99px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .12s,color .12s,background .12s}
+    .ai-chip:hover:not(:disabled){border-color:var(--accent);color:var(--accent-strong)}
+    .ai-chip:disabled{opacity:.55;cursor:wait}
+    .ai-ask{display:flex;gap:6px}
+    .ai-ask input{flex:1;min-width:0;font-size:12.5px;padding:7px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--fg)}
+    .ai-ask input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(109,94,245,.15)}
+    .ai-variants{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+    .ai-variants:empty{display:none}
+    .ai-variant{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;width:100%;border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:9px 11px;font-size:13px;line-height:1.4;color:var(--fg);cursor:pointer}
+    .ai-variant:hover{border-color:var(--accent)}
+    .ai-variant .use{font-size:11.5px;font-weight:700;color:var(--accent-strong);flex-shrink:0}
+    .ai-variant.chosen{border-color:var(--accent);background:var(--accent-soft)}
+    .ai-status{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px}
+    .ai-status .spinner{width:14px;height:14px;border-width:2px}
+    .ai-undo{align-self:flex-start;background:none;border:0;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:2px 0}
     @media(max-width:700px){.story-edit-body{flex-direction:column}.story-edit-preview{flex-basis:auto;max-height:320px}}
     .history-row{padding:10px 0;border-bottom:1px solid var(--border);font-size:12px}
     .history-row:last-child{border-bottom:0}
@@ -1043,7 +1063,21 @@
     <div class="story-edit-body">
       <div class="story-edit-preview"><img id="story-edit-img" alt="Vista previa" class="hidden"><span class="story-edit-empty" id="story-edit-empty">Sin imagen</span></div>
       <div class="story-edit-panel">
-        <textarea id="story-text"></textarea>
+        <textarea id="story-text" aria-label="Texto de la historia"></textarea>
+        <div class="ai-edit" id="ai-edit">
+          <div class="ai-edit-head"><span class="ai-edit-icon" data-icon="sparkles" data-size="15"></span><strong>Editar con IA</strong><span class="ai-edit-sub">Te propone opciones; vos elegís.</span></div>
+          <div class="ai-chips" role="group" aria-label="Pedidos rápidos a la IA">
+            <button type="button" class="ai-chip" data-ai-action="corto">Más corto</button>
+            <button type="button" class="ai-chip" data-ai-action="vendedor">Más vendedor</button>
+            <button type="button" class="ai-chip" data-ai-action="cercano">Más cercano</button>
+            <button type="button" class="ai-chip" data-ai-action="otra">Otra idea</button>
+          </div>
+          <form class="ai-ask" id="ai-ask-form">
+            <input type="text" id="ai-instruction" maxlength="200" placeholder="O pedile algo: «nombrá el envío gratis»" aria-label="Pedido para la IA" autocomplete="off">
+            <button type="submit" class="btn" id="ai-ask-btn">Pedir</button>
+          </form>
+          <div id="ai-variants" class="ai-variants" aria-live="polite"></div>
+        </div>
         <div class="team-field"><label for="story-font">Tipografía de esta historia</label><select id="story-font"><option value="">Predeterminada del cliente</option></select></div>
         <button id="generate-ai-text" class="btn hidden">Generar con IA</button>
       </div>

@@ -652,3 +652,85 @@ def publicar_historia(
         raise MetaPublishError(message) from e
 
     return ResultadoPublicacion(ok=True, ig_media_id=post_id)
+
+
+# -----------------------------------------
+# EDITAR CON IA (fase 2): variantes de UNA historia
+# -----------------------------------------
+# Qué le pide cada botón del editor. "libre" usa la instrucción que escribe la persona.
+ACCIONES_VARIANTE: dict[str, str] = {
+    "corto": "Hacela más corta y directa, con menos palabras y la misma idea.",
+    "vendedor": "Hacela más vendedora: que den ganas de escribir o comprar, sin exagerar ni prometer lo que no está.",
+    "cercano": "Hacela más cercana y humana, como le hablarías a un cliente de confianza.",
+    "otra": "Escribí una idea distinta sobre el mismo tema, con otro gancho.",
+}
+_MAX_INSTRUCCION = 200
+_MAX_VARIANTES = 3
+
+
+def _armar_prompt_variantes(config: ClientContentConfig, texto: str, accion: str,
+                            instruccion: str | None = None, cantidad: int = _MAX_VARIANTES) -> str:
+    """Prompt de solo texto (sin imagen) para reescribir UNA historia. Mantiene la voz
+    del cliente (descripción, ejemplos y estilo de voz) y no inventa datos."""
+    if accion == "libre":
+        instruccion = (instruccion or "").strip()
+        if not instruccion:
+            raise ValueError("Falta la instrucción para la IA.")
+        consigna = f"Reescribila siguiendo este pedido: {instruccion[:_MAX_INSTRUCCION]}"
+    elif accion in ACCIONES_VARIANTE:
+        consigna = ACCIONES_VARIANTE[accion]
+    else:
+        raise ValueError(f"Acción desconocida: {accion}")
+    return (
+        f"{config.business_description}\n\n"
+        f"{_bloque_ejemplos(config)}"
+        f"Esta es una historia de Instagram de {config.nombre_negocio}:\n"
+        f"\"{texto.strip()}\"\n\n"
+        f"{consigna}\n\n"
+        "REGLAS DE TONO (muy importante):\n"
+        f"{_bloque_voz(config)}"
+        "- Máximo 12 palabras por opción\n"
+        "- No inventes precios, fechas, horas, cifras ni promociones que no estén en la historia original o en el pedido\n\n"
+        "Sin hashtags. Sin emojis.\n\n"
+        f"Devolvé SOLO {cantidad} opciones distintas separadas por |||, "
+        "sin numeración, sin comillas ni etiquetas."
+    )
+
+
+def _limpiar_variante(texto: str) -> str:
+    texto = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", texto.strip())
+    texto = _limpiar_emojis(texto.strip().strip("\"'«»“”").strip())
+    if len(texto) > _MAX_TEXTO_HISTORIA_UNICA:
+        texto = texto[:_MAX_TEXTO_HISTORIA_UNICA].rsplit(" ", 1)[0] + "…"
+    return texto
+
+
+def reescribir_historia(config: ClientContentConfig, texto_actual: str, accion: str,
+                        instruccion: str | None = None) -> list[str]:
+    """Hasta 3 versiones nuevas de UNA historia, para que la persona elija una.
+    No sube nada ni guarda nada: solo texto. Levanta ValueError si la acción no
+    existe y ClaudeGenerationError si Claude falla o no devuelve opciones útiles."""
+    prompt = _armar_prompt_variantes(config, texto_actual, accion, instruccion)
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ClaudeGenerationError("ANTHROPIC_API_KEY no está configurada en el entorno.")
+    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=220,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text
+    except Exception as e:
+        raise ClaudeGenerationError(f"Error llamando a Claude: {e}") from e
+    partes = raw.split("|||") if "|||" in raw else raw.splitlines()
+    original = texto_actual.strip().casefold()
+    variantes: list[str] = []
+    for parte in partes:
+        limpia = _limpiar_variante(parte)
+        if limpia and limpia.casefold() != original and limpia.casefold() not in {v.casefold() for v in variantes}:
+            variantes.append(limpia)
+    if not variantes:
+        raise ClaudeGenerationError("La IA no devolvió opciones nuevas. Probá de nuevo.")
+    return variantes[:_MAX_VARIANTES]

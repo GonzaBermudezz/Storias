@@ -154,6 +154,16 @@ def generar_texto_de_prueba(config: ClientContentConfig, imagen: ImagenCandidata
     PM vea el efecto de su edición antes de que salga en vivo.
     """
 
+def reescribir_historia(config: ClientContentConfig, texto_actual: str, accion: str,
+                        instruccion: str | None = None) -> list[str]:
+    """
+    Editar con IA (fase 2): hasta 3 versiones nuevas de UNA historia, para que la
+    persona elija. `accion` es una clave de ACCIONES_VARIANTE ("corto", "vendedor",
+    "cercano", "otra") o "libre", que usa `instruccion`. Solo texto: no manda
+    imagen, no sube ni guarda nada. Mantiene la voz del cliente y no inventa datos.
+    Levanta ValueError si la acción no existe y ClaudeGenerationError si falla.
+    """
+
 def publicar_historia(image_url: str, instagram_account_id: str, meta_access_token: str,
                        agregar_cta: bool, calendly_link: str | None) -> ResultadoPublicacion:
     """
@@ -224,4 +234,10 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
   - **Ajustes**: Drive, Instagram y contacto; en modo multi también el PM y el acceso del cliente.
 - El modal "Ajustes del cliente" ya no existe: `openSettings()` abre la sección Ajustes. Los ids de los campos no cambiaron.
 - En modo multi, las secciones aparecen debajo de "Clientes", con el nombre del cliente elegido. En modo directo son el menú principal. La última sección abierta se recuerda en el navegador (`storias.clientTab`).
+
+## 12. Editar con IA, fase 2
+
+- `POST /portal/historias/{id}/variantes` recibe `{accion, instruccion?, texto?}` y devuelve `{variantes: [...]}`. `texto` es lo que está escrito en el editor (puede no estar guardado todavía); si no viene, se usa el texto guardado. No escribe en la base. Responde 409 si la historia ya está publicada o cancelada, 422 si no tiene texto, si la acción no existe o si la IA falla, y 403 si es de otra agencia.
+- En el editor de la historia aparece el panel "Editar con IA", con cuatro botones (Más corto, Más vendedor, Más cercano, Otra idea) y un pedido libre. Elegir una opción solo llena el editor: "Guardar historia" la compone sobre la imagen con el flujo de siempre. También se puede volver al texto anterior.
+- En Marca, "Estilo de las historias" queda siempre desplegado.
 

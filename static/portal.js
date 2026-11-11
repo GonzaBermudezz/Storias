@@ -162,11 +162,14 @@
     if (!CLIENT_TABS.includes(tab)) tab = 'semana';
     state.clientTab = tab;
     try { localStorage.setItem('storias.clientTab', tab); } catch (_) {}
+    showClientTabContent(tab);
+    if (!$('home-view').classList.contains('hidden') || !$('enfoques-view').classList.contains('hidden')) showClients();
+    window.scrollTo({top: 0});
+  }
+  function showClientTabContent(tab) {
     document.querySelectorAll('.client-tab').forEach((el) => el.classList.toggle('hidden', el.dataset.tab !== tab));
     if (tab === 'marca') { $('content-panel').classList.remove('collapsed'); setStylePanelCollapsed(false); }
-    if (!$('home-view').classList.contains('hidden') || !$('enfoques-view').classList.contains('hidden')) showClients();
     markClientNav(tab);
-    window.scrollTo({top: 0});
   }
   function clearSelection() {
     state.selectionVersion += 1; state.selectedClientId = null; state.client = null; state.groups = []; state.editingStory = null;
@@ -996,8 +999,7 @@
     if ($('story-dialog').open) $('story-dialog').close();
     clearMessage(); $('empty').classList.add('hidden'); $('client-view').classList.remove('hidden');
     $('client-nav').classList.remove('hidden'); $('client-nav-name').textContent = '';
-    document.querySelectorAll('.client-tab').forEach((el) => el.classList.toggle('hidden', el.dataset.tab !== state.clientTab));
-    markClientNav(state.clientTab);
+    showClientTabContent(state.clientTab);
     $('home-view').classList.add('hidden'); $('nav-home').classList.remove('active'); $('nav-clients').classList.add('active');
     $('enfoques-view').classList.add('hidden'); $('nav-enfoques').classList.remove('active');
     $('header-default').classList.add('hidden'); $('header-client').classList.remove('hidden');
@@ -1097,7 +1099,7 @@
     renderDriveFolderState();
     renderSetupNotice();
     renderStyleSection();
-    setStylePanelCollapsed(toneExamples().length > 0); // abierto si todavía faltan ejemplos
+    setStylePanelCollapsed(false); // Marca es su propia sección: siempre a la vista
     $('gen-dot').className = `gen-dot${state.client.generation_error ? ' warn' : ''}`;
     const url = driveUrl(state.client.drive_folder_id);
     if (url) { $('drive-link').href = url; $('drive-link').classList.remove('hidden'); }
@@ -2478,7 +2480,58 @@
     // only makes sense once the story actually has text saved.
     $('story-font').value = story.font_choice || '';
     $('story-font').disabled = !story.text;
+    resetAiEdit();
     $('story-dialog').showModal();
+  }
+  // Fase 2 — Editar con IA: the AI proposes up to 3 rewrites; picking one only fills
+  // the editor. Nothing is saved until "Guardar historia", so it can still be tweaked.
+  const AI_BUSY_LABEL = 'La IA está escribiendo opciones…';
+  let aiRequestId = 0;
+  function resetAiEdit() {
+    aiRequestId += 1; state.aiOriginalText = null;
+    $('ai-variants').innerHTML = ''; $('ai-instruction').value = '';
+    setAiBusy(false);
+  }
+  function setAiBusy(busy) {
+    document.querySelectorAll('[data-ai-action]').forEach((el) => { el.disabled = busy; });
+    $('ai-ask-btn').disabled = busy; $('ai-instruction').disabled = busy;
+  }
+  function renderAiVariants(variants) {
+    const undo = state.aiOriginalText !== null ? '<button type="button" class="ai-undo" data-ai-undo>Volver al texto anterior</button>' : '';
+    $('ai-variants').innerHTML = variants.map((text, i) =>
+      `<button type="button" class="ai-variant" data-ai-variant="${i}"><span>${escapeHtml(text)}</span><span class="use">Usar</span></button>`
+    ).join('') + undo;
+    state.aiVariants = variants;
+  }
+  async function requestAiVariants(accion, instruccion = null) {
+    const story = state.editingStory, clientId = state.client?.id, selectionVersion = state.selectionVersion;
+    if (!story || !clientId) return;
+    const texto = $('story-text').value.trim();
+    if (!texto) { showMessage('Escribí un texto primero (o generalo con IA) y después pedile cambios.', true); return; }
+    const requestId = ++aiRequestId;
+    setAiBusy(true);
+    $('ai-variants').innerHTML = `<div class="ai-status"><span class="spinner"></span>${escapeHtml(AI_BUSY_LABEL)}</div>`;
+    try {
+      const result = await api(`/portal/historias/${encodeURIComponent(story.id)}/variantes`, {method:'POST', body:JSON.stringify({accion, instruccion, texto})});
+      if (requestId !== aiRequestId || selectionVersion !== state.selectionVersion || story !== state.editingStory) return;
+      renderAiVariants(result.variantes || []);
+    } catch (error) {
+      if (requestId !== aiRequestId) return;
+      $('ai-variants').innerHTML = '';
+      if (!['Acceso denegado','Sesión vencida'].includes(error.message)) showMessage(error.message, true);
+    } finally {
+      if (requestId === aiRequestId) setAiBusy(false);
+    }
+  }
+  function useAiVariant(index) {
+    const text = (state.aiVariants || [])[index];
+    if (!text) return;
+    if (state.aiOriginalText === null) state.aiOriginalText = $('story-text').value;
+    $('story-text').value = text;
+    renderAiVariants(state.aiVariants);
+    const chosen = $('ai-variants').querySelector(`[data-ai-variant="${index}"]`);
+    if (chosen) chosen.classList.add('chosen');
+    showMessage('Listo. Revisalo y tocá "Guardar historia" para aplicarlo a la imagen.');
   }
   async function saveStoryFont() {
     const select=$('story-font'), story=state.editingStory, clientId=state.client?.id, selectionVersion=state.selectionVersion, fontChoice=select.value || null;
@@ -2789,6 +2842,21 @@
   $('close-history-2').addEventListener('click',()=>$('history-dialog').close());
   $('qa-settings').addEventListener('click',openSettings);
   $('history-open-changes').addEventListener('click',openHistory);
+  document.querySelectorAll('[data-ai-action]').forEach((el) => el.addEventListener('click', () => requestAiVariants(el.dataset.aiAction)));
+  $('ai-ask-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const instruccion = $('ai-instruction').value.trim();
+    if (!instruccion) { showMessage('Escribí qué querés que cambie la IA.', true); return; }
+    requestAiVariants('libre', instruccion);
+  });
+  $('ai-variants').addEventListener('click', (event) => {
+    if (event.target.closest('[data-ai-undo]')) {
+      if (state.aiOriginalText !== null) { $('story-text').value = state.aiOriginalText; state.aiOriginalText = null; renderAiVariants(state.aiVariants || []); }
+      return;
+    }
+    const option = event.target.closest('[data-ai-variant]');
+    if (option) useAiVariant(Number(option.dataset.aiVariant));
+  });
   document.querySelectorAll('[data-client-tab]').forEach((el) => {
     el.addEventListener('click', () => { setClientTab(el.dataset.clientTab); setMobileMenu(false); });
     el.addEventListener('keydown', (event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); el.click(); });
