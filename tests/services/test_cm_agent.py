@@ -178,15 +178,6 @@ def test_non_replayable_rows_are_excluded_from_the_next_call(script):
     assert "roto" not in json.dumps(sent)
 
 
-def test_proposals_are_not_enabled_yet(script):
-    db = make_db()
-    script.queue = [turno("", [("p1", "proponer_descripcion", {"descripcion": "x", "motivo": "y"})], stop="tool_use"), turno("fin")]
-    send(db)
-    block = script.calls[1]["mensajes"][2]["content"][0]
-    assert block["is_error"] is True and "todavía no están habilitadas" in block["content"]
-    assert db.writes("clients") == []
-
-
 def test_unknown_tool_is_an_error(script):
     db = make_db()
     script.queue = [turno("", [("u1", "borrar_todo", {})], stop="tool_use"), turno("fin")]

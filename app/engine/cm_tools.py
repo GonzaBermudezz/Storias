@@ -91,7 +91,7 @@ _V1 = [
         {
             "enfoque": {"type": "string", "description": "Qué destacar esta semana, hasta 200 caracteres."},
             "formato": {"type": "string", "enum": list(FORMATOS) + [""],
-                        "description": "Clave de formato o vacío para el arco por defecto."},
+                        "description": "Clave de formato, o vacío para dejar el formato como está."},
         },
     ),
     _herramienta(

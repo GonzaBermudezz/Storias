@@ -3,7 +3,8 @@
 El motor (app/engine/cm.py) hace UNA llamada a Claude por turno y no ejecuta nada.
 Acá vive todo lo demás: reclamo de la conversación, persistencia de cada mensaje,
 ejecución de las herramientas de lectura atadas al cliente de la conversación y los
-límites. Las herramientas `proponer_*` todavía no escriben nada (llegan en la 4b).
+límites. Las herramientas `proponer_*` NUNCA escriben el dato real: validan y dejan una
+fila `pending` en cm_pending_actions que una persona aprueba o descarta (más abajo).
 """
 from __future__ import annotations
 
@@ -20,7 +21,8 @@ from app.config import get_settings
 from app.engine import cm
 from app.engine.exceptions import ClaudeGenerationError
 from app.engine.schemas import ContextoCM
-from app.services import history, photos, stories, web_text
+from app.engine.formatos import FORMATOS
+from app.services import brand, history, photos, stories, web_text
 from app.services.content_jobs import TIMEZONE, build_content_config
 from app.services.encryption import decrypt
 from app.services.errors import ServiceError
@@ -30,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 _CLOSING_TAG = "</contexto_actual>\n"
 _TITLE_MAX = 80
-_PROPOSALS_DISABLED = "Las propuestas todavía no están habilitadas."
 _PHOTOS_CAP = 60
 _CLIENT_FIELDS = CLIENT_DETAIL + ",active"
 _UNRUN_TOOL = "La herramienta no llegó a ejecutarse."
@@ -214,15 +215,20 @@ _READ_TOOLS = {
 }
 
 
-def _run_tool(db, conv: dict, employee, call) -> tuple[str, bool]:
+def _run_tool(db, conv: dict, employee, call, created: list[dict] | None = None) -> tuple[str, bool]:
     """(content, is_error). Tools never receive a client or agency id from the model."""
-    if call.name.startswith("proponer_"):
-        return _PROPOSALS_DISABLED, True
+    is_proposal = call.name in _PROPOSAL_TOOLS
     handler = _READ_TOOLS.get(call.name)
-    if handler is None:
+    if handler is None and not is_proposal:
         return f"Herramienta desconocida: {call.name}", True
     try:
         client = client_or_error(db, conv["client_id"], employee.agency_id)
+        if is_proposal:
+            action = _propose(db, conv, client, call)
+            if created is not None:
+                created.append(action)
+            return (f"Propuesta creada (id {action['id']}). Queda pendiente hasta que una persona la apruebe; "
+                    "no digas que ya se aplicó."), False
         return dumps(handler(db, conv, client, call.input or {}, employee)), False
     except ToolError as exc:
         return str(exc), True
@@ -231,6 +237,354 @@ def _run_tool(db, conv: dict, employee, call) -> tuple[str, bool]:
     except Exception:
         logger.warning("CM tool %s failed for conversation %s", call.name, conv.get("id"), exc_info=True)
         return "La herramienta falló. Seguí sin esos datos.", True
+
+
+# ── Propuestas (herramientas proponer_*) ──────────────────────────────────────
+
+_DESCRIPTION_MAX = 500
+_TOPICS_MAX = 8
+_TOPIC_MAX = 80
+_TONE_EXAMPLES_MAX = 6      # same as ClientPatch.tone_examples_shape
+_TONE_LINES = 4
+_TONE_LINE_MAX = 140
+_FOCUS_MAX = 200            # same as the client panel's WeekPatch
+_STORY_TEXT_MAX = 300       # same as the editor's text limit (VariantRequest.texto)
+
+
+def _text(value, label: str) -> str:
+    if not isinstance(value, str):
+        raise ToolError(f"{label} tiene que ser un texto.")
+    return value.strip()
+
+
+def _motivo(call_input: dict) -> str | None:
+    value = call_input.get("motivo")
+    return (value.strip()[:300] or None) if isinstance(value, str) else None
+
+
+def _propose_descripcion(db, conv, client, call_input):
+    value = _text(call_input.get("descripcion"), "La descripción")
+    if not value:
+        raise ToolError("La descripción no puede estar vacía.")
+    if len(value) > _DESCRIPTION_MAX:
+        raise ToolError(f"La descripción puede tener hasta {_DESCRIPTION_MAX} caracteres (tiene {len(value)}).")
+    return ({"descripcion": value, "motivo": _motivo(call_input)},
+            {"business_description": client.get("business_description")})
+
+
+def _propose_temas(db, conv, client, call_input):
+    raw = call_input.get("temas")
+    if not isinstance(raw, list):
+        raise ToolError("Los temas tienen que ser una lista de textos.")
+    topics: list[str] = []
+    for item in raw:
+        topic = _text(item, "Cada tema")
+        if not topic:
+            raise ToolError("Ningún tema puede estar vacío.")
+        if len(topic) > _TOPIC_MAX:
+            raise ToolError(f"Cada tema puede tener hasta {_TOPIC_MAX} caracteres.")
+        if topic.casefold() not in {t.casefold() for t in topics}:
+            topics.append(topic)
+    if not topics:
+        raise ToolError("Proponé al menos un tema.")
+    if len(topics) > _TOPICS_MAX:
+        raise ToolError(f"Podés proponer hasta {_TOPICS_MAX} temas (llegaron {len(topics)}).")
+    return {"temas": topics, "motivo": _motivo(call_input)}, {"topics": client.get("topics") or []}
+
+
+def _propose_ejemplo_tono(db, conv, client, call_input):
+    raw = call_input.get("historias")
+    if not isinstance(raw, list) or len(raw) != _TONE_LINES:
+        raise ToolError(f"Un ejemplo de tono tiene que tener exactamente {_TONE_LINES} historias.")
+    lines = [_text(line, "Cada historia") for line in raw]
+    if any(not line for line in lines):
+        raise ToolError("Las historias del ejemplo no pueden estar vacías.")
+    if any(len(line) > _TONE_LINE_MAX for line in lines):
+        raise ToolError(f"Cada historia del ejemplo puede tener hasta {_TONE_LINE_MAX} caracteres.")
+    current = client.get("tone_examples") or []
+    if len(current) + 1 > _TONE_EXAMPLES_MAX:
+        raise ToolError(f"Ya hay {len(current)} ejemplos de tono y el máximo es {_TONE_EXAMPLES_MAX}: no se puede sumar otro.")
+    return {"historias": lines, "motivo": _motivo(call_input)}, {"tone_examples": current}
+
+
+def _propose_enfoque(db, conv, client, call_input):
+    focus = _text(call_input.get("enfoque"), "El enfoque")
+    if len(focus) > _FOCUS_MAX:
+        raise ToolError(f"El enfoque puede tener hasta {_FOCUS_MAX} caracteres.")
+    fmt = call_input.get("formato")
+    if fmt is not None and not isinstance(fmt, str):
+        raise ToolError("El formato tiene que ser una clave de formato o vacío.")
+    if fmt and fmt not in FORMATOS:
+        raise ToolError("Formato desconocido: usá una de las claves de formato o dejalo vacío.")
+    if not focus and not fmt:
+        raise ToolError("No hay nada para proponer: falta el enfoque o el formato.")
+    # An empty format means "leave the current one" (None), so a focus-only proposal never clears it.
+    return ({"enfoque": focus or None, "formato": fmt or None, "motivo": _motivo(call_input)},
+            {"weekly_focus": client.get("weekly_focus"), "weekly_format": client.get("weekly_format")})
+
+
+def _story_id(value) -> str:
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, AttributeError, TypeError):
+        raise ToolError("Historia no encontrada: usá un id que devolvió leer_semana.") from None
+
+
+def _propose_texto_historia(db, conv, client, call_input):
+    story_id = _story_id(call_input.get("historia_id"))
+    text = _text(call_input.get("texto"), "El texto")
+    if not text:
+        raise ToolError("El texto de la historia no puede estar vacío.")
+    if len(text) > _STORY_TEXT_MAX:
+        raise ToolError(f"El texto de la historia puede tener hasta {_STORY_TEXT_MAX} caracteres.")
+    found = db.table("stories").select("id,client_id,text,estado,image_original_url").eq("id", story_id).eq(
+        "client_id", conv["client_id"]).maybe_single().execute()
+    story = found.data if found else None
+    if not story:
+        raise ToolError("Historia no encontrada: usá un id que devolvió leer_semana.")
+    if story.get("estado") in stories.LOCKED_STATES:
+        raise ToolError("Esa historia ya fue publicada o cancelada y no se puede editar.")
+    if not story.get("image_original_url"):
+        raise ToolError("Esa historia no tiene imagen original para volver a componer.")
+    return ({"historia_id": story_id, "texto": text, "motivo": _motivo(call_input)},
+            {"text": story.get("text")})
+
+
+_PROPOSALS = {
+    "proponer_descripcion": ("descripcion", _propose_descripcion),
+    "proponer_temas": ("temas", _propose_temas),
+    "proponer_ejemplo_tono": ("ejemplo_tono", _propose_ejemplo_tono),
+    "proponer_enfoque_semana": ("enfoque_semana", _propose_enfoque),
+    "proponer_texto_historia": ("texto_historia", _propose_texto_historia),
+}
+_PROPOSAL_TOOLS = set(_PROPOSALS)
+
+
+def _propose(db, conv: dict, client: dict, call) -> dict:
+    """Validate and park the proposal. The real field is NOT written here, ever."""
+    kind, validate = _PROPOSALS[call.name]
+    payload, before = validate(db, conv, client, call.input or {})
+    return db.table("cm_pending_actions").insert({
+        "conversation_id": conv["id"], "client_id": conv["client_id"], "tool_use_id": call.id,
+        "kind": kind, "payload": payload, "before": before, "status": "pending",
+    }).execute().data[0]
+
+
+def action_view(row: dict) -> dict:
+    """What the browser sees of an action (no tool_use_id, no internals)."""
+    proposal = {key: value for key, value in (row.get("payload") or {}).items() if key != "motivo"}
+    return {"id": row["id"], "tipo": row["kind"], "estado": row["status"], "propuesta": proposal,
+            "antes": row.get("before"), "motivo": (row.get("payload") or {}).get("motivo"),
+            "error": row.get("error"), "created_at": row.get("created_at"), "decided_at": row.get("decided_at")}
+
+
+def list_actions(db, conversation_id: str) -> list[dict]:
+    _recover_stale_claims(db, conversation_id=conversation_id)
+    rows = db.table("cm_pending_actions").select("*").eq("conversation_id", conversation_id).order("created_at").execute().data or []
+    return [action_view(row) for row in rows]
+
+
+_DECIDED = ["approved", "discarded", "stale", "failed"]
+
+
+def _decided_since_last_user_turn(db, conversation_id: str) -> list[dict]:
+    """Outcomes the person decided after their previous message: the model hasn't seen them."""
+    last = db.table("cm_messages").select("created_at").eq("conversation_id", conversation_id).eq(
+        "role", "user").eq("kind", "mensaje").order("seq", desc=True).limit(1).execute().data or []
+    since = last[0].get("created_at") if last else None
+    if not since:
+        return []
+    rows = db.table("cm_pending_actions").select("id,kind,status,decided_at").eq(
+        "conversation_id", conversation_id).in_("status", _DECIDED).gte("decided_at", since).order(
+        "decided_at").execute().data or []
+    return [{"id": row["id"], "tipo": row["kind"], "estado": row["status"]} for row in rows]
+
+
+# ── Aprobar / descartar ───────────────────────────────────────────────────────
+
+_NOT_FOUND_ACTION = "Propuesta no encontrada"
+_ALREADY_DECIDED = "Esta propuesta ya se decidió."
+_STALE = "El valor cambió desde que se hizo la propuesta: ya no se puede aplicar. Pedile al CM una nueva."
+_APPLY_FAILED = "No se pudo aplicar la propuesta."
+
+
+_APPLYING_TIMEOUT = timedelta(minutes=5)
+_INTERRUPTED = "La aplicación se interrumpió; pedí la propuesta de nuevo."
+
+
+def _recover_stale_claims(db, action_id: str | None = None, conversation_id: str | None = None) -> None:
+    """A claim ('applying', stamped in decided_at) older than the timeout means the worker died:
+    move it to 'failed' atomically (`where status = 'applying' and decided_at < cutoff`)."""
+    now = _now()
+    query = db.table("cm_pending_actions").update({
+        "status": "failed", "error": _INTERRUPTED, "decided_at": _iso(now),
+    }).eq("status", "applying").lt("decided_at", _z(now - _APPLYING_TIMEOUT))
+    if action_id:
+        query = query.eq("id", action_id)
+    if conversation_id:
+        query = query.eq("conversation_id", conversation_id)
+    try:
+        query.execute()
+    except Exception:
+        logger.warning("CM stale-claim recovery failed", exc_info=True)
+
+
+def _load_action(db, action_id: str, agency_id: str) -> tuple[dict, dict, dict]:
+    """(action, conversation, client). Anything outside the agency answers 404."""
+    _recover_stale_claims(db, action_id=action_id)
+    result = db.table("cm_pending_actions").select("*").eq("id", action_id).maybe_single().execute()
+    action = result.data if result else None
+    if not action:
+        raise ServiceError(status_code=404, detail=_NOT_FOUND_ACTION)
+    try:
+        conv, client = load_conversation(db, action["conversation_id"], agency_id)
+    except ServiceError as exc:
+        raise ServiceError(status_code=404, detail=_NOT_FOUND_ACTION) from exc
+    if str(conv["client_id"]) != str(action["client_id"]):
+        raise ServiceError(status_code=404, detail=_NOT_FOUND_ACTION)
+    return action, conv, client
+
+
+def _decide(db, action_id: str, changes: dict, employee, only_from: str) -> dict | None:
+    rows = db.table("cm_pending_actions").update({
+        **changes, "decided_by": employee.id, "decided_at": _iso(_now()),
+    }).eq("id", action_id).eq("status", only_from).execute().data
+    return rows[0] if rows else None
+
+
+def discard_action(db, action_id: str, employee) -> dict:
+    _load_action(db, action_id, employee.agency_id)
+    row = _decide(db, action_id, {"status": "discarded"}, employee, "pending")
+    if row is None:
+        raise ServiceError(status_code=409, detail=_ALREADY_DECIDED)
+    return {"accion": action_view(row)}
+
+
+def _current_value(db, action: dict, agency_id: str) -> tuple[dict, dict]:
+    """(snapshot now, fresh client) in the same shape as `before`."""
+    client = client_or_error(db, action["client_id"], agency_id)
+    kind, payload = action["kind"], action["payload"]
+    if kind == "descripcion":
+        return {"business_description": client.get("business_description")}, client
+    if kind == "temas":
+        return {"topics": client.get("topics") or []}, client
+    if kind == "ejemplo_tono":
+        return {"tone_examples": client.get("tone_examples") or []}, client
+    if kind == "enfoque_semana":
+        return {"weekly_focus": client.get("weekly_focus"), "weekly_format": client.get("weekly_format")}, client
+    found = db.table("stories").select("id,text").eq("id", payload["historia_id"]).eq(
+        "client_id", action["client_id"]).maybe_single().execute()
+    story = found.data if found else None
+    if not story:
+        raise ServiceError(status_code=404, detail="Historia no encontrada")
+    return {"text": story.get("text")}, client
+
+
+def _same_as_before(kind: str, payload: dict, before: dict, current: dict) -> bool:
+    if kind == "enfoque_semana":
+        # Only the fields the proposal actually changes are compared.
+        keys = (["weekly_focus"] if payload.get("enfoque") is not None else []) + (
+            ["weekly_format"] if payload.get("formato") else [])
+        return all(before.get(k) == current.get(k) for k in keys)
+    return before == current
+
+
+_REVALIDATE_INPUT = {
+    "descripcion": lambda p: {"descripcion": p.get("descripcion")},
+    "temas": lambda p: {"temas": p.get("temas")},
+    "ejemplo_tono": lambda p: {"historias": p.get("historias")},
+    "enfoque_semana": lambda p: {"enfoque": p.get("enfoque") or "", "formato": p.get("formato")},
+    "texto_historia": lambda p: {"historia_id": p.get("historia_id"), "texto": p.get("texto")},
+}
+_VALIDATORS = {kind: validate for kind, validate in _PROPOSALS.values()}
+
+
+def _revalidate(db, conv: dict, client: dict, action: dict) -> dict:
+    """Same validators `_propose` uses, run on the stored payload against the FRESH client (and,
+    for a story, a fresh read scoped to the conversation's client) as close to the write as possible."""
+    payload = action.get("payload")
+    if not isinstance(payload, dict) or action["kind"] not in _VALIDATORS:
+        raise ServiceError(status_code=409, detail="La propuesta guardada no es válida: pedí una nueva.")
+    try:
+        checked, _before = _VALIDATORS[action["kind"]](db, conv, client, _REVALIDATE_INPUT[action["kind"]](payload))
+    except ToolError as exc:
+        raise ServiceError(status_code=409, detail=f"La propuesta ya no se puede aplicar: {exc}") from exc
+    return checked
+
+
+def _apply(db, action: dict, conv: dict, client: dict, employee) -> None:
+    """The SAME services the manual edits use: prompt_history through update_client_prompt,
+    the weekly format setter, and the story text editor (recomposes the image, learns the correction).
+
+    Remaining non-atomic window: the re-validation and the write are separate requests and the
+    RPCs take no compare-and-set, so an edit made in between can still be overwritten."""
+    kind = action["kind"]
+    payload = _revalidate(db, conv, client, action)
+    agency_id, client_id = employee.agency_id, conv["client_id"]
+    if kind == "descripcion":
+        brand.apply_prompt_patch(db, client_id, employee.id, agency_id, {"business_description": payload["descripcion"]})
+    elif kind == "temas":
+        brand.apply_prompt_patch(db, client_id, employee.id, agency_id, {"topics": payload["temas"]})
+    elif kind == "ejemplo_tono":
+        examples = list(client.get("tone_examples") or []) + [payload["historias"]]
+        brand.apply_prompt_patch(db, client_id, employee.id, agency_id, {"tone_examples": examples})
+    elif kind == "enfoque_semana":
+        # Focus first (audited RPC, the step most likely to be rejected); the format setter is the cheap one.
+        done_focus = False
+        if payload.get("enfoque") is not None:
+            brand.apply_prompt_patch(db, client_id, employee.id, agency_id, {"weekly_focus": payload["enfoque"]})
+            done_focus = True
+        if payload.get("formato"):
+            try:
+                brand.set_weekly_format(db, client_id, agency_id, payload["formato"])
+            except Exception as exc:
+                if not done_focus:
+                    raise
+                if not isinstance(exc, ServiceError):
+                    logger.warning("CM action %s: format step failed", action.get("id"), exc_info=True)
+                raise ServiceError(status_code=409, detail=(
+                    "Se aplicó el enfoque, pero no el formato. Cambialo a mano o pedí la propuesta de nuevo.")) from exc
+    else:
+        stories.update_story_text(db, payload["historia_id"], agency_id, payload["texto"])
+
+
+def approve_action(db, action_id: str, employee) -> dict:
+    action, conv, client = _load_action(db, action_id, employee.agency_id)
+    _require_active(client)
+    claimed = db.table("cm_pending_actions").update({"status": "applying", "decided_at": _iso(_now())}).eq(
+        "id", action_id).eq("status", "pending").execute().data
+    if not claimed:
+        raise ServiceError(status_code=409, detail=_ALREADY_DECIDED)
+    action = claimed[0]
+
+    # Whatever happens below, the row leaves 'applying': the default outcome is a failure.
+    status, error, raised = "failed", "La aplicación se interrumpió.", None
+    try:
+        before = action.get("before") or {}
+        current, fresh = _current_value(db, action, employee.agency_id)
+        if not _same_as_before(action["kind"], action["payload"], before, current):
+            status, error = "stale", _STALE
+            raised = ServiceError(status_code=409, detail=_STALE)
+        else:
+            _apply(db, action, conv, fresh, employee)
+            status, error = "approved", None
+    except ServiceError as exc:
+        status, error, raised = "failed", str(exc.detail), exc
+    except Exception:
+        logger.warning("CM action %s failed to apply", action_id, exc_info=True)
+        status, error = "failed", _APPLY_FAILED
+        raised = ServiceError(status_code=502, detail=_APPLY_FAILED)
+    finally:
+        try:
+            row = _decide(db, action_id, {"status": status, "error": error}, employee, "applying")
+        except Exception:
+            # Keep the original outcome; a row left 'applying' is recovered as 'failed' after the timeout.
+            logger.warning("CM action %s: final decision could not be saved", action_id, exc_info=True)
+            row = None
+    if raised is not None:
+        raise raised
+    return {"accion": action_view(row or {**action, "status": status}),
+            "resultado": {"tipo": action["kind"], "aplicado": True}}
 
 
 # ── Persistencia ──────────────────────────────────────────────────────────────
@@ -375,7 +729,7 @@ def _run(db, conv: dict, client: dict, employee, texto: str, token: str) -> dict
     contexto = ContextoCM(
         hoy=datetime.now(ZoneInfo(TIMEZONE)).date().isoformat(),
         semana=dumps(_compact_week(stories.list_week(db, client["id"], employee.agency_id))),
-        acciones_decididas=[],
+        acciones_decididas=_decided_since_last_user_turn(db, conv["id"]),
     )
     log = _Log(db, conv, employee)
     user_turn = cm.armar_turno_usuario(contexto, texto, [])
@@ -388,6 +742,7 @@ def _run(db, conv: dict, client: dict, employee, texto: str, token: str) -> dict
 
     nuevos: list[dict] = []
     acciones: list[dict] = []
+    creadas: list[dict] = []
     usadas = 0
     exhausted = False
     for _ in range(settings.cm_max_calls_per_message):
@@ -419,7 +774,7 @@ def _run(db, conv: dict, client: dict, employee, texto: str, token: str) -> dict
             if index >= settings.cm_max_tools_per_call:
                 content, is_error = f"Superaste el límite de {settings.cm_max_tools_per_call} herramientas por llamada.", True
             else:
-                content, is_error = _run_tool(db, conv, employee, call)
+                content, is_error = _run_tool(db, conv, employee, call, creadas)
                 acciones.append({"herramienta": call.name, "error": is_error})
             resultados.append({"tool_use_id": call.id, "content": content, "is_error": is_error})
         log.add("assistant", "respuesta", turno.content_blocks, usage=turno.usage, stop_reason=turno.stop_reason)
@@ -430,7 +785,7 @@ def _run(db, conv: dict, client: dict, employee, texto: str, token: str) -> dict
     else:
         exhausted = True
 
-    return {"mensajes_nuevos": nuevos, "acciones": acciones,
+    return {"mensajes_nuevos": nuevos, "acciones": acciones, "propuestas": [action_view(a) for a in creadas],
             "limite": {"llamadas": settings.cm_max_calls_per_message, "usadas": usadas, "agotado": exhausted}}
 
 

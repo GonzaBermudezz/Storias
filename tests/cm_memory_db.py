@@ -112,6 +112,26 @@ class MemoryQuery:
         return Result(out, count=total if self.want_count else None)
 
 
+class MemoryRpc:
+    """Only update_client_prompt: patch the client and write prompt_history in one go,
+    like the real RPC does in its transaction."""
+
+    def __init__(self, db, name, params):
+        self.db, self.name, self.params = db, name, params
+
+    def execute(self):
+        self.db.log.append((f"rpc:{self.name}", "rpc", self.params))
+        if self.name != "update_client_prompt":
+            raise NotImplementedError(self.name)
+        client = next(r for r in self.db.rows("clients") if r["id"] == self.params["p_client_id"])
+        for field, new in self.params["p_patch"].items():
+            self.db.rows("prompt_history").append({
+                "client_id": client["id"], "changed_by": self.params["p_employee_id"], "field": field,
+                "old_value": client.get(field), "new_value": new})
+            client[field] = new
+        return Result(dict(client))
+
+
 class MemoryDB:
     def __init__(self, tables=None, now="2026-11-11T12:00:00+00:00"):
         self.tables = {name: [dict(r) for r in rows] for name, rows in (tables or {}).items()}
@@ -122,6 +142,7 @@ class MemoryDB:
 
     def now(self): return self._now
     def table(self, name): return MemoryQuery(self, name)
+    def rpc(self, name, params): return MemoryRpc(self, name, params)
     def rows(self, name): return self.tables.setdefault(name, [])
     def writes(self, name=None):
         return [entry for entry in self.log if entry[1] != "select" and (name is None or entry[0] == name)]

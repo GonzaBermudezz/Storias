@@ -47,6 +47,10 @@ def _conversation_id(value: str) -> str:
     return _uuid_or_404(value, "Conversación no encontrada")
 
 
+def _action_id(value: str) -> str:
+    return _uuid_or_404(value, "Propuesta no encontrada")
+
+
 class ConversationCreate(BaseModel):
     titulo: str | None = Field(default=None, max_length=80)
 
@@ -77,7 +81,8 @@ def get_conversation(conversation_id: str, employee: CmEmployeeDep):
     conversation_id = _conversation_id(conversation_id)
     conv, _ = cm_agent.load_conversation(db, conversation_id, employee.agency_id)
     return {"conversacion": cm_agent.conversation_summary(conv),
-            "mensajes": cm_agent.visible_messages(db, conversation_id)}
+            "mensajes": cm_agent.visible_messages(db, conversation_id),
+            "acciones": cm_agent.list_actions(db, conversation_id)}
 
 
 @router.post("/cm/conversaciones/{conversation_id}/mensajes")
@@ -88,3 +93,13 @@ def send_message(conversation_id: str, body: MessageBody, employee: CmEmployeeDe
 @router.patch("/cm/conversaciones/{conversation_id}")
 def patch_conversation(conversation_id: str, body: ConversationPatch, employee: CmEmployeeDep):
     return cm_agent.update_conversation(get_admin_client(), _conversation_id(conversation_id), employee.agency_id, body.titulo, body.cerrada)
+
+
+@router.post("/cm/acciones/{action_id}/aprobar")
+def approve_action(action_id: str, employee: CmEmployeeDep):
+    return cm_agent.approve_action(get_admin_client(), _action_id(action_id), employee)
+
+
+@router.post("/cm/acciones/{action_id}/descartar")
+def discard_action(action_id: str, employee: CmEmployeeDep):
+    return cm_agent.discard_action(get_admin_client(), _action_id(action_id), employee)
