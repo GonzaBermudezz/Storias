@@ -733,10 +733,25 @@
     }
   }
 
+  function isDirectMode() { return state.me?.agency_mode === 'direct'; }
+  function applyAgencyMode(me) {
+    state.me = me;
+    const direct = me?.agency_mode === 'direct';
+    document.documentElement.classList.toggle('direct-mode', direct);
+    if (direct) {
+      $('nav-clients-label').textContent = 'Mi negocio';
+      $('nav-clients').title = 'Mi negocio';
+      $('empty').textContent = 'Todavía no está cargado tu negocio. Escribinos y lo damos de alta.';
+    }
+  }
   async function loadMeAndOptions() {
     try {
-      const [me, fonts, employees, focusPresets, formats, voices] = await Promise.all([
-        api('/portal/me'), api('/portal/tipografias'), api('/portal/empleados'), api('/portal/enfoques'),
+      // a83: a direct agency (one business using Storias on its own) has no PMs or
+      // client list, so /portal/empleados is not even asked for.
+      const me = await api('/portal/me');
+      applyAgencyMode(me);
+      const [fonts, employees, focusPresets, formats, voices] = await Promise.all([
+        api('/portal/tipografias'), isDirectMode() ? Promise.resolve([]) : api('/portal/empleados'), api('/portal/enfoques'),
         api('/portal/formatos').catch(() => []), api('/portal/estilos-voz').catch(() => []),
       ]);
       state.me = me; state.fontChoices = fonts; state.employees = employees; state.focusPresets = focusPresets;
@@ -750,9 +765,9 @@
       $('client-font').innerHTML = '<option value="">Predeterminada</option>' + fontOptions;
       $('story-font').innerHTML = '<option value="">Predeterminada del cliente</option>' + fontOptions;
       $('me-avatar').textContent = initials(me.name || me.email); $('me-name').textContent = me.name || me.email;
-      $('me-role').textContent = me.role === 'admin' ? 'Administrador' : 'Empleado'; $('me-card').classList.remove('hidden');
+      $('me-role').textContent = isDirectMode() ? 'Tu cuenta' : (me.role === 'admin' ? 'Administrador' : 'Empleado'); $('me-card').classList.remove('hidden');
       $('me-menu-name').textContent = me.name || me.email; $('me-menu-email').textContent = me.name ? (me.email || '') : '';
-      $('add-clients-bulk').classList.toggle('hidden', me.role !== 'admin');
+      $('add-clients-bulk').classList.toggle('hidden', me.role !== 'admin' || isDirectMode());
     } catch (error) { /* non-fatal: client loading remains available */ }
   }
 
@@ -1447,7 +1462,7 @@
     $('client-access-link').value = '';
     $('client-access-link-row').classList.add('hidden');
     $('client-access-list').innerHTML = '';
-    loadClientAccess();
+    if (!isDirectMode()) loadClientAccess();
   }
   function renderClientAccess(users) {
     const active = (users || []).filter((user) => user.active);

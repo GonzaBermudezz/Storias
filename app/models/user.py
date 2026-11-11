@@ -10,6 +10,8 @@ class Employee(BaseModel):
     name: str
     agency_id: str
     role: Literal["employee", "admin"]
+    # a83: "direct" = a business using Storias on its own (one client, no PMs).
+    agency_mode: Literal["multi", "direct"] = "multi"
 
 
 class ClientUser(BaseModel):

@@ -50,6 +50,18 @@ def _set_session_cookie(response: Response, token: str, s: Settings,
     )
 
 
+def _agency_mode(db, agency_id: str) -> str:
+    """'direct' or 'multi' (a83). Any failure — including the column not being
+    migrated yet — falls back to 'multi', the console as it always was."""
+    try:
+        result = db.table("agencies").select("mode").eq("id", agency_id).maybe_single().execute()
+    except Exception:
+        logger.warning("Could not read the mode of agency %s; using 'multi'", agency_id, exc_info=True)
+        return "multi"
+    mode = (result.data or {}).get("mode") if result else None
+    return "direct" if mode == "direct" else "multi"
+
+
 # ── Google OAuth (empleados) ───────────────────────────────────────────────────
 
 @router.get("/google")
@@ -131,6 +143,7 @@ async def google_callback(request: Request, code: str, state: str):
         "name": name,
         "agency_id": employee["agency_id"],
         "role": employee["role"],
+        "agency_mode": _agency_mode(db, employee["agency_id"]),
     })
 
     response = RedirectResponse(url="/portal", status_code=302)

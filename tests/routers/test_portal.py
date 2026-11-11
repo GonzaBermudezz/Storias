@@ -128,7 +128,7 @@ def test_me_reports_current_employee(monkeypatch, client):
     response = client.get("/portal/me")
     assert response.status_code == 200
     assert response.json() == {"id": "emp-1", "name": "PM", "email": "pm@example.com",
-                                "role": "employee", "agency_id": "agency-1"}
+                                "role": "employee", "agency_id": "agency-1", "agency_mode": "multi"}
 
 
 
@@ -2882,3 +2882,91 @@ def test_portal_frontend_wires_voice_style_and_day_format_theme():
     assert ".day-format" in source and ".day-theme" in source
     assert "formato, tema" in source
     assert "'client-voice'" in source
+
+
+# ---------------------------------------------------------------------------
+# a83: panel de cliente directo (una agencia con un solo negocio, sin PMs)
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def direct_owner():
+    return Employee(id="own-1", email="dueno@gba.com", name="Dueño", agency_id="agency-gba",
+                    role="admin", agency_mode="direct")
+
+
+@pytest.fixture
+def direct_client(direct_owner):
+    app.dependency_overrides[require_employee] = lambda: direct_owner
+    app.dependency_overrides[require_admin] = lambda: direct_owner
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_me_reports_direct_mode(direct_client):
+    assert direct_client.get("/portal/me").json()["agency_mode"] == "direct"
+
+
+@pytest.mark.parametrize("method, path, body", [
+    ("get", "/portal/empleados", None),
+    ("patch", "/portal/clientes/c1/pm", {"employee_id": None}),
+    ("post", "/portal/asignar-pm", {"client_ids": ["c1"], "employee_id": None}),
+    ("post", "/portal/clientes/c1/acceso", {"email": "ana@gba.com"}),
+    ("get", "/portal/clientes/c1/acceso", None),
+    ("delete", "/portal/clientes/c1/acceso/u1", None),
+])
+def test_direct_mode_blocks_multi_client_endpoints(monkeypatch, direct_client, method, path, body):
+    db = DB([])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    kwargs = {"json": body} if body is not None else {}
+    response = getattr(direct_client, method)(path, **kwargs)
+    assert response.status_code == 403
+    assert response.json()["detail"] == "No disponible en el panel de cliente directo"
+    assert db.updates == [] and db.inserts == [] and db.upserts == [] and db.deletes == []
+
+
+def test_direct_mode_keeps_the_rest_of_the_console(monkeypatch, direct_client):
+    db = DB([{"id": "c1", "agency_id": "agency-gba"}, [{"id": "c1", "voice_style": "sobrio"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = direct_client.patch("/portal/clientes/c1/estilo-voz", json={"voice_style": "sobrio"})
+    assert response.status_code == 200
+
+
+def test_direct_mode_cannot_reach_another_agency(monkeypatch, direct_client):
+    db = DB([{"id": "cuan", "agency_id": "agency-1"}])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    assert direct_client.patch("/portal/clientes/cuan/estilo-voz", json={"voice_style": None}).status_code == 403
+
+
+def test_direct_mode_bulk_creates_only_the_first_and_only_client(monkeypatch, direct_client):
+    db = DB([[], [], [{"id": "c-new"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    response = direct_client.post("/portal/clientes/alta-masiva", json={"clientes": [
+        {"name": "GBA", "drive_folder_id": "1s06Hii0qBM8Rs7rK5O0w_DMtj1P3F7st"}]})
+    assert response.status_code == 200
+    assert response.json()["resultados"][0]["status"] == "creado"
+
+
+@pytest.mark.parametrize("existing, entries", [([{"id": "c1"}], 1), ([], 2)], ids=["already-has-one", "two-at-once"])
+def test_direct_mode_bulk_rejects_a_second_client(monkeypatch, direct_client, existing, entries):
+    db = DB([existing])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    clientes = [{"name": f"Negocio {i}", "drive_folder_id": "1s06Hii0qBM8Rs7rK5O0w_DMtj1P3F7st"} for i in range(entries)]
+    response = direct_client.post("/portal/clientes/alta-masiva", json={"clientes": clientes})
+    assert response.status_code == 403
+    assert db.inserts == []
+
+
+def test_multi_mode_still_lists_employees(monkeypatch, client):
+    db = DB([[{"id": "emp-1", "name": "PM", "email": "pm@example.com"}]])
+    monkeypatch.setattr("app.routers.portal.get_admin_client", lambda: db)
+    assert client.get("/portal/empleados").status_code == 200
+
+
+def test_portal_frontend_has_direct_mode():
+    page = Path("templates/portal.html").read_text(encoding="utf-8")
+    source = TestClient(app).get("/static/portal.js").text
+    assert "html.direct-mode .multi-only{display:none!important}" in page
+    for marker in ('class="team-field multi-only"><label for="client-pm"', 'id="client-list" class="client-list multi-only"',
+                   'class="nav-item multi-only" id="nav-home"', 'class="team-field access-field multi-only"'):
+        assert marker in page
+    assert "agency_mode === 'direct'" in source and "'Mi negocio'" in source
+    assert "isDirectMode() ? Promise.resolve([]) : api('/portal/empleados')" in source

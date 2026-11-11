@@ -206,3 +206,12 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - En la consola: `GET /portal/estilos-voz` devuelve `[{key, label, hint}]` y `PATCH /portal/clientes/{id}/estilo-voz` recibe `{voice_style}` (clave o null; una clave desconocida da 422). El panel del cliente todavía no edita el estilo de voz.
 - `POST /portal/clientes/{id}/historias/generar` acepta dos campos opcionales: `formato`, una clave de `FORMATOS` (otra da 422), y `tema`, de hasta 200 caracteres (vacío = null). Llegan a `generar_texto_para_imagen(config, image_bytes, formato=None, tema=None)`. Con tema, el tema manda y la foto se elige primero entre las que coinciden por nombre o subcarpeta (`content_jobs.priorizar_por_tema`, sin visión). Si no viene ninguno de los dos, el endpoint y el prompt quedan como antes.
 
+## 10. Dos paneles: agencia multi-cliente y cliente directo — a83
+
+- `agencies.mode` (text, default `'multi'`, check `multi`/`direct`). `multi` es la consola de siempre: varios clientes, PMs y empleados. `direct` es un negocio que usa Storias solo: una agencia con UN cliente.
+- El modo viaja en el JWT del empleado (`agency_mode`, que lo lee `auth._agency_mode` al hacer login con Google). Si falla la lectura o la columna no está migrada, queda `multi`. Después de cambiar el modo hay que volver a entrar. `GET /portal/me` lo devuelve.
+- La consola es la misma (`/portal`, `portal.js`). En modo directo esconde (`html.direct-mode .multi-only`) la lista de clientes, búsqueda y filtros, Inicio, PM asignado, asignar PM, alta masiva y Acceso del cliente. Abre directo la ficha del único negocio y "Clientes" pasa a llamarse "Mi negocio".
+- El backend también lo hace cumplir: en modo directo `GET /portal/empleados`, `PATCH /clientes/{id}/pm`, `POST /asignar-pm` y `/clientes/{id}/acceso` responden 403 "No disponible en el panel de cliente directo". `POST /clientes/alta-masiva` solo crea el primer y único cliente. El aislamiento entre agencias sigue siendo el de siempre (`_client_or_error`, 403 fuera de la agencia).
+- Alta de un cliente directo (a mano, por ahora): una fila en `agencies` con `mode = 'direct'`, el dueño en `employees` con `role = 'admin'` (entra con Google) y su único cliente en `clients`. Los INSERT de ejemplo están en `migrations/20261022_a83_agency_mode.sql`.
+- El panel `/app` de a81 sigue disponible para clientes de una agencia multi que solo revisan y aprueban.
+

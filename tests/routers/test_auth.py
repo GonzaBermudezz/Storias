@@ -125,3 +125,45 @@ def test_google_callback_logs_mismatched_session_state(monkeypatch, caplog):
     assert response.json() == {"detail": "State inválido — posible CSRF"}
     assert "OAuth state mismatch" in caplog.text
     assert "callback sin oauth_state en sesión" not in caplog.text
+
+
+# a83: el modo de la agencia viaja en el JWT del empleado.
+class _AgencyQuery:
+    def __init__(self, data=None, boom=False):
+        self.data, self.boom = data, boom
+
+    def select(self, *a): return self
+    def eq(self, *a): return self
+    def maybe_single(self): return self
+
+    def execute(self):
+        if self.boom:
+            raise RuntimeError("column agencies.mode does not exist")
+        return None if self.data is None else type("R", (), {"data": self.data})()
+
+
+class _AgencyDB:
+    def __init__(self, query): self.query = query
+    def table(self, name): return self.query
+
+
+def test_agency_mode_reads_direct():
+    assert auth._agency_mode(_AgencyDB(_AgencyQuery({"mode": "direct"})), "a1") == "direct"
+
+
+def test_agency_mode_falls_back_to_multi():
+    assert auth._agency_mode(_AgencyDB(_AgencyQuery({"mode": "multi"})), "a1") == "multi"
+    assert auth._agency_mode(_AgencyDB(_AgencyQuery(None)), "a1") == "multi"
+    assert auth._agency_mode(_AgencyDB(_AgencyQuery({"mode": "raro"})), "a1") == "multi"
+    assert auth._agency_mode(_AgencyDB(_AgencyQuery(boom=True)), "a1") == "multi"
+
+
+def test_employee_jwt_carries_agency_mode():
+    import asyncio
+    from app.deps import require_employee
+
+    base = {"sub": "e1", "email": "a@b.com", "name": "A", "agency_id": "a1", "role": "admin"}
+    direct = asyncio.run(require_employee(auth._make_jwt({**base, "agency_mode": "direct"})))
+    legacy = asyncio.run(require_employee(auth._make_jwt(base)))
+    assert direct.agency_mode == "direct"
+    assert legacy.agency_mode == "multi"

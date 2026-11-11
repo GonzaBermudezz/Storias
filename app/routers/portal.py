@@ -250,16 +250,32 @@ def _without_secrets(row: dict) -> dict:
     return {key: value for key, value in row.items() if key not in _CLIENT_SECRET_COLUMNS}
 
 
+_DIRECT_MODE_DETAIL = "No disponible en el panel de cliente directo"
+
+
+def _require_multi(employee) -> None:
+    """a83: PMs, teammates and client-access links only exist in a multi-client
+    agency. A direct agency (one business using Storias on its own) gets 403."""
+    if employee.agency_mode == "direct":
+        raise HTTPException(status_code=403, detail=_DIRECT_MODE_DETAIL)
+
+
 @router.get("/me")
 def get_me(employee: EmployeeDep):
     return {"id": employee.id, "name": employee.name, "email": employee.email,
-            "role": employee.role, "agency_id": employee.agency_id}
+            "role": employee.role, "agency_id": employee.agency_id,
+            "agency_mode": employee.agency_mode}
 
 
 @router.post("/clientes/alta-masiva")
 def create_clients_bulk(body: BulkClientsRequest, employee: AdminDep):
     """Create each supplied client independently, reporting one result per row."""
     db = get_admin_client()
+    if employee.agency_mode == "direct":
+        # A direct agency is exactly one business: it may create its first and only client.
+        has_client = db.table("clients").select("id").eq("agency_id", employee.agency_id).limit(1).execute().data
+        if has_client or len(body.clientes) != 1:
+            raise HTTPException(status_code=403, detail="El panel de cliente directo tiene un solo negocio")
     existing_names = {
         row["name"].strip().lower()
         for row in db.table("clients").select("name").eq(
@@ -528,6 +544,7 @@ def get_health(employee: EmployeeDep):
 @router.get("/empleados")
 def list_employees(employee: EmployeeDep):
     """Employees available to assign to clients in this agency."""
+    _require_multi(employee)
     db = get_admin_client()
     return db.table("employees").select("id,name,email").eq(
         "agency_id", employee.agency_id
@@ -624,6 +641,7 @@ def patch_client_pm(client_id: str, body: ClientPmPatch, employee: EmployeeDep):
     Upsert atómico sobre employee_clients (UNIQUE en client_id) en vez de
     delete+insert: dos reasignaciones concurrentes del mismo cliente nunca
     pueden dejar dos filas, porque no hay ventana entre borrar e insertar."""
+    _require_multi(employee)
     db = get_admin_client()
     _client_or_error(db, client_id, employee.agency_id)
     if body.employee_id is not None:
@@ -648,6 +666,7 @@ def assign_pm_bulk(body: BulkPmAssign, employee: AdminDep):
     employee_clients (UNIQUE en client_id) — pero por tandas, y validando
     primero que TODOS los clientes y el PM sean de la agencia: o se aplica
     todo o no se toca nada."""
+    _require_multi(employee)
     db = get_admin_client()
     client_ids = list(dict.fromkeys(body.client_ids))
     found: set[str] = set()
@@ -916,6 +935,7 @@ class ClientAccessCreate(BaseModel):
 def create_client_access(client_id: str, body: ClientAccessCreate, request: Request, employee: EmployeeDep):
     """Gives the client's own user a one-time login link for /app (a81). The
     team sends the URL by hand (WhatsApp); only the token's hash is stored."""
+    _require_multi(employee)
     db = get_admin_client()
     _client_or_error(db, client_id, employee.agency_id)
     try:
@@ -931,6 +951,7 @@ def create_client_access(client_id: str, body: ClientAccessCreate, request: Requ
 
 @router.get("/clientes/{client_id}/acceso")
 def list_client_access(client_id: str, employee: EmployeeDep):
+    _require_multi(employee)
     db = get_admin_client()
     _client_or_error(db, client_id, employee.agency_id)
     return client_access.list_client_users(db, client_id)
@@ -938,6 +959,7 @@ def list_client_access(client_id: str, employee: EmployeeDep):
 
 @router.delete("/clientes/{client_id}/acceso/{user_id}")
 def delete_client_access(client_id: str, user_id: str, employee: EmployeeDep):
+    _require_multi(employee)
     db = get_admin_client()
     _client_or_error(db, client_id, employee.agency_id)
     if not client_access.deactivate_client_user(db, client_id, user_id):

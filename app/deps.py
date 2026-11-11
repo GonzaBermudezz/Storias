@@ -72,6 +72,7 @@ async def require_employee(
         name=payload.get("name", ""),
         agency_id=payload["agency_id"],
         role=payload["role"],
+        agency_mode="direct" if payload.get("agency_mode") == "direct" else "multi",
     )
 
 
