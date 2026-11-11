@@ -100,3 +100,16 @@ def test_sin_keywords_no_soportadas_por_strict():
 
 def test_serializable():
     json.dumps(_tools())
+
+
+def test_descripcion_se_escribe_en_segunda_persona_como_instruccion_para_quien_escribe():
+    tool = _por_nombre()["proponer_descripcion"]
+    textos = tool["description"] + " " + tool["input_schema"]["properties"]["descripcion"]["description"]
+    assert "segunda persona" in textos
+    assert "Sos " in textos
+    assert "le hablás" in textos
+    assert "hablás" in textos
+    assert "oración completa" in textos
+    assert "500" in textos
+    assert set(tool["input_schema"]["properties"]) == {"descripcion", "motivo"}
+

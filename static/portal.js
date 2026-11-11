@@ -38,6 +38,7 @@
     'grip-vertical': '<circle cx="9" cy="12" r="1"/> <circle cx="9" cy="5" r="1"/> <circle cx="9" cy="19" r="1"/> <circle cx="15" cy="12" r="1"/> <circle cx="15" cy="5" r="1"/> <circle cx="15" cy="19" r="1"/>',
     target: '<circle cx="12" cy="12" r="10"/> <circle cx="12" cy="12" r="6"/> <circle cx="12" cy="12" r="2"/>',
     plus: '<path d="M5 12h14"/> <path d="M12 5v14"/>',
+    'message-square': '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/>',
   };
   function icon(name, size = 16) {
     return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -147,7 +148,7 @@
   }
   function driveUrl(folderId) { return folderId ? `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}` : null; }
   // Phase 1 layout: a client's work is split into sections reachable from the menu.
-  const CLIENT_TABS = ['semana', 'marca', 'fotos', 'historial', 'ajustes'];
+  const CLIENT_TABS = ['semana', 'marca', 'fotos', 'historial', 'ajustes', 'cm'];
   function storedClientTab() {
     try { const saved = localStorage.getItem('storias.clientTab'); return CLIENT_TABS.includes(saved) ? saved : 'semana'; } catch (_) { return 'semana'; }
   }
@@ -167,12 +168,16 @@
     window.scrollTo({top: 0});
   }
   function showClientTabContent(tab) {
+    if (tab === 'cm' && !state.cmEnabled) tab = 'semana'; // the CM tab only exists when the agency has it
+    state.clientTab = tab;
     document.querySelectorAll('.client-tab').forEach((el) => el.classList.toggle('hidden', el.dataset.tab !== tab));
     if (tab === 'marca') { $('content-panel').classList.remove('collapsed'); setStylePanelCollapsed(false); }
     if (tab === 'fotos' && state.client) loadPhotos();
+    if (tab === 'cm') window.StoriasCM?.show();
     markClientNav(tab);
   }
   function clearSelection() {
+    window.StoriasCM?.setClient(null);
     state.selectionVersion += 1; state.selectedClientId = null; state.client = null; state.groups = []; state.editingStory = null;
     $('client-view').classList.add('hidden'); $('empty').classList.remove('hidden'); $('empty').textContent = isDirectMode() ? 'Todavía no está cargado tu negocio. Escribinos y lo damos de alta.' : 'Seleccioná un cliente para gestionar su contenido.';
     $('client-nav').classList.add('hidden');
@@ -766,6 +771,8 @@
   function isDirectMode() { return state.me?.agency_mode === 'direct'; }
   function applyAgencyMode(me) {
     state.me = me;
+    state.cmEnabled = me?.cm_enabled === true; // a missing key means the CM is off
+    $('nav-cm').classList.toggle('hidden', !state.cmEnabled);
     const direct = me?.agency_mode === 'direct';
     document.documentElement.classList.toggle('direct-mode', direct);
     if (direct) {
@@ -995,6 +1002,7 @@
   }
   async function selectClient(clientId) {
     const selectionVersion = ++state.selectionVersion;
+    if (clientId !== state.selectedClientId) window.StoriasCM?.setClient(null);
     state.selectedClientId = clientId; state.client = null; state.groups = []; state.editingStory = null; draftDates = new Set(); setControlsDisabled(true);
     $('client-view').classList.add('is-switching');
     if ($('story-dialog').open) $('story-dialog').close();
@@ -1014,6 +1022,8 @@
       ]);
       if (selectionVersion !== state.selectionVersion || clientId !== state.selectedClientId) return;
       state.client = client; state.groups = groups;
+      window.StoriasCM?.setClient(client);
+      if (state.clientTab === 'cm') window.StoriasCM?.show();
       $('client-nav-name').textContent = isDirectMode() ? 'Tu marca' : (client.name || '');
       state.photos = null;
       if (state.clientTab === 'fotos') loadPhotos();
@@ -1136,7 +1146,9 @@
     box.classList.remove('hidden');
   }
   function goToSetup(key) {
-    if (key === 'ia') { setClientTab('marca'); setBrandAiCollapsed(false); $('brand-ai').scrollIntoView({block: 'start', behavior: 'smooth'}); $('brand-ai-web').focus({preventScroll: true}); return; }
+    if (key === 'ia') {
+      if (state.cmEnabled) { openCmForBrand(); return; }
+      setClientTab('marca'); setBrandAiCollapsed(false); $('brand-ai').scrollIntoView({block: 'start', behavior: 'smooth'}); $('brand-ai-web').focus({preventScroll: true}); return; }
     if (key === 'drive') { setClientTab('ajustes'); $('client-drive-folder').focus(); return; }
     setClientTab('marca');
     if (key === 'descripcion' || key === 'temas') $('content-panel').classList.remove('collapsed');
@@ -2645,12 +2657,48 @@
   function brandNeedsSetup(client) {
     return !String(client?.business_description || '').trim() || !(client?.topics || []).length || !(client?.tone_examples || []).length;
   }
+  // When the agency has the CM, brand onboarding happens in the chat: the old panel gives way to a card.
+  function openCmForBrand() {
+    if (!state.client) return;
+    const text = state.client.website_url
+      ? `Armá la marca de ${state.client.name} a partir de su web.`
+      : `Armá la marca de ${state.client.name}. Te cuento sobre el negocio: `;
+    setClientTab('cm');
+    window.StoriasCM?.prefill(text);
+  }
+  // The CM changes brand/week data behind this page's back; reload the client so Marca and Semana show it.
+  // Marca fields the person may be typing in: [element id, saved value of a client].
+  function unsavedBrandFields(client) {
+    return [
+      ['business-description', (c) => c?.business_description || ''],
+      ['client-topics', (c) => (c?.topics || []).join('\n')],
+      ['client-website', (c) => c?.website_url || ''],
+    ].filter(([id, saved]) => $(id).value !== saved(client)).map(([id]) => [id, $(id).value]);
+  }
+  async function refreshClientAfterCm() {
+    const clientId = state.selectedClientId, selectionVersion = state.selectionVersion;
+    if (!clientId) return;
+    try {
+      const [client, groups] = await Promise.all([
+        api(`/portal/clientes/${encodeURIComponent(clientId)}`),
+        api(`/portal/clientes/${encodeURIComponent(clientId)}/historias`),
+      ]);
+      if (clientId !== state.selectedClientId || selectionVersion !== state.selectionVersion) return;
+      const dirty = unsavedBrandFields(state.client);
+      state.client = client; state.groups = groups;
+      renderClients(); renderClient();
+      dirty.forEach(([id, value]) => { $(id).value = value; $(id).dispatchEvent(new Event('input')); });
+    } catch (_) { /* the approval already succeeded; a later navigation reloads */ }
+  }
+  window.StoriasPortalHost = {api, showMessage, refreshClient: refreshClientAfterCm};
   function setBrandAiCollapsed(collapsed) {
     $('brand-ai').classList.toggle('collapsed', collapsed);
     $('brand-ai-toggle').setAttribute('aria-expanded', String(!collapsed));
   }
   function renderBrandAi() {
     if (!state.client) return;
+    $('brand-ai').classList.toggle('hidden', state.cmEnabled);
+    $('brand-cm').classList.toggle('hidden', !state.cmEnabled);
     if (brandDraft && brandDraft.clientId !== state.client.id) brandDraft = null;
     setBrandAiCollapsed(!brandDraft && !brandNeedsSetup(state.client));
     if (!brandDraft) {
@@ -3089,6 +3137,7 @@
   $('learn-clear').addEventListener('click', () => forgetLearning(null));
   $('brand-ai-toggle').addEventListener('click', () => setBrandAiCollapsed(!$('brand-ai').classList.contains('collapsed')));
   $('brand-ai-toggle').addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setBrandAiCollapsed(!$('brand-ai').classList.contains('collapsed')); } });
+  $('brand-cm-open').addEventListener('click', openCmForBrand);
   $('brand-ai-form').addEventListener('submit', proposeBrand);
   $('brand-ai-save').addEventListener('click', saveBrandDraft);
   $('brand-ai-discard').addEventListener('click', discardBrandDraft);

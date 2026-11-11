@@ -62,9 +62,17 @@ _V1 = [
     ),
     _herramienta(
         "proponer_descripcion",
-        "Propone una nueva descripción del negocio (hasta 500 caracteres). No la guarda: queda pendiente de aprobación.",
+        "Propone una nueva descripción del negocio (hasta 500 caracteres). No la guarda: queda pendiente de aprobación. "
+        "Se escribe en segunda persona, como una instrucción para quien escribe las historias "
+        "(\"Sos {negocio}, ... le hablás a ..., hablás ...\"), y termina en una oración completa.",
         {
-            "descripcion": {"type": "string", "description": "Descripción nueva, hasta 500 caracteres."},
+            "descripcion": {
+                "type": "string",
+                "description": (
+                    "Descripción nueva, hasta 500 caracteres, en segunda persona como instrucción para quien escribe "
+                    "las historias (\"Sos {negocio}, ... le hablás a ..., hablás ...\"). Termina en una oración completa."
+                ),
+            },
             "motivo": _MOTIVO,
         },
     ),
