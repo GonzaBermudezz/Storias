@@ -13,6 +13,8 @@ Un solo repo, dos zonas con dueño y responsabilidad separados:
 - **`app/engine/`** — dueño: Gonza + Claude. Funciones puras de generación y edición de contenido (prompt a Claude Vision, composición de imagen con Pillow, subida a Cloudinary, publicación en Meta). **Nunca toca Supabase ni Drive directamente para leer/escribir estado** — recibe todo lo que necesita como parámetro y devuelve datos. Es el mismo motor de `C:\Cuan\main.py`, generalizado para recibir el prompt/config por cliente en vez de tenerlo hardcodeado.
 - **Todo lo demás** (`app/routers/`, `app/services/`, `app/models/`, `app/db/`, `templates/`, tareas de Celery) — dueño: Matías + Codex. Dueño de la base de datos, la cola de trabajo, la auth, el portal de empleados y de conectar Drive para armar el pool de imágenes disponibles. Es quien **llama** a las funciones de `app/engine` y persiste lo que devuelven.
 
+Hoy una sola persona mantiene las dos zonas; la división se mantiene igual porque el motor puro es más fácil de probar.
+
 Regla dura: ningún archivo se edita desde los dos lados a la vez. Si hace falta un cambio de contrato (agregar un campo, cambiar una firma), se actualiza este documento primero y se avisa al otro lado.
 
 ---
@@ -133,6 +135,28 @@ class ResultadoPublicacion(BaseModel):
     ok: bool
     ig_media_id: str | None = None
     error: str | None = None
+
+class ContextoCM(BaseModel):            # CM con IA (sección 16): lo que cambia entre turnos
+    hoy: str                            # fecha ISO, America/Argentina/Buenos_Aires
+    semana: str                         # resumen compacto de la semana, armado por el portal
+    acciones_decididas: list[dict] = [] # [{id, tipo, estado}] desde el último turno de la persona
+
+class InicioCM(BaseModel):
+    system: str                         # system prompt congelado de la conversación
+    version_herramientas: str           # clave de HERRAMIENTAS_CM, congelada igual
+
+class LlamadaHerramienta(BaseModel):
+    id: str                             # id del tool_use
+    name: str
+    input: dict
+
+class TurnoCM(BaseModel):
+    texto: str                          # solo bloques text, para mostrar
+    llamadas: list[LlamadaHerramienta]  # vacía si ejecutable es False
+    stop_reason: str
+    usage: dict
+    content_blocks: list[dict]          # bloques crudos: el portal los persiste y reenvía SIN cambios
+    ejecutable: bool = True             # False si stop_reason es max_tokens/refusal/…: no correr herramientas
 ```
 
 ## 4. Funciones públicas del motor (`app/engine/content.py`)
@@ -188,6 +212,31 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
     """
     Publica UNA historia en Instagram. No decide cuándo — eso es de Celery/portal,
     que llama a esto una vez por historia del hilo del día.
+    """
+
+def iniciar_conversacion_cm(config: ClientContentConfig) -> InicioCM:
+    """
+    CM con IA (sección 16). System prompt congelado de una conversación nueva (persona,
+    reglas, marca, tono y aprendizajes; todo texto del cliente va delimitado como dato no
+    confiable) y la versión de herramientas. Determinista. El portal lo guarda y lo reusa
+    siempre igual.
+    """
+
+def armar_turno_usuario(contexto: ContextoCM | None, texto: str, resultados: list[dict]) -> dict:
+    """
+    Mensaje de rol user para guardar tal cual y reenviar sin cambios: los tool_result
+    pendientes (`{tool_use_id, content, is_error?}`) primero y, si hay texto, un bloque
+    `<contexto_actual>` seguido del texto de la persona. Con texto vacío solo devuelve los
+    resultados (continuación del bucle). ValueError si no hay ni texto ni resultados.
+    """
+
+def turno_cm(system: str, mensajes: list[dict], version_herramientas: str) -> TurnoCM:
+    """
+    UNA llamada a Claude con el historial (el bucle es del portal). No ejecuta herramientas
+    ni toca la base. Devuelve texto, llamadas y los bloques crudos de la respuesta. Si
+    stop_reason es max_tokens o refusal, `llamadas` viene vacía y `ejecutable` False.
+    ValueError si la versión de herramientas no existe; ClaudeGenerationError si la API
+    falla. No reintenta: el cliente va con `max_retries=0` y un techo de 60 s (`CM_TIMEOUT_SECONDS`), por debajo del `busy_until` de 90 s. Los `tool_result` que arma `armar_turno_usuario` van envueltos en `<datos_no_confiables>`.
     """
 ```
 
@@ -282,3 +331,32 @@ def publicar_historia(image_url: str, instagram_account_id: str, meta_access_tok
 - El motor (`content.proponer_marca`) devuelve una `PropuestaMarca` ya recortada a los límites que valida `ClientPatch`: descripción de hasta 500 caracteres, hasta 3 ejemplos de 4 historias de hasta 140 y hasta 8 temas.
 - En Marca, el panel "Armá la marca con IA" está abierto si falta la descripción, los ejemplos o los temas, y plegado si no. El aviso "Falta completar" de Semana tiene un botón que lleva ahí. En el borrador, la descripción y los temas reemplazan lo actual y los ejemplos se suman a los que ya había (hasta 6); cada parte se puede destildar antes de guardar.
 - Si el pedido no trae `web`, el portal usa `clients.website_url` (Ajustes). El panel "Armá la marca con IA" precarga ese valor; proponer con otra web no lo guarda: guardarlo es explícito, en Ajustes.
+
+## 16. CM con IA — conversación con el equipo
+
+Un chat dentro de la ficha del cliente: el CM con IA lee la marca, la semana, las fotos y el historial, y **propone** cambios. Nunca escribe solo: toda propuesta queda pendiente hasta que una persona la aprueba. v1 es solo para empleados de la consola (incluido el dueño en modo directo), no para el panel `/app`. Hay varias conversaciones por cliente.
+
+**Engine (`app/engine/cm.py`, `app/engine/cm_tools.py`)** — funciones puras: una llamada a Claude por turno, sin base, sin Drive, sin ejecutar herramientas, sin retry ni logging de negocio.
+- `iniciar_conversacion_cm(config) -> InicioCM`, `armar_turno_usuario(contexto, texto, resultados) -> dict` y `turno_cm(system, mensajes, version_herramientas) -> TurnoCM`. Firmas y esquemas (`ContextoCM`, `InicioCM`, `LlamadaHerramienta`, `TurnoCM`) en las secciones 3 y 4.
+- El `system` y la `version_herramientas` se congelan al crear la conversación (`cm_conversations.system_prompt`, `.tools_version`). Todo lo que cambia (fecha, semana, acciones ya decididas) viaja en el turno de la persona dentro de `<contexto_actual>`, que se guarda tal cual y se reenvía igual. Así el prefijo cacheado y los bloques de razonamiento no cambian.
+- `TurnoCM.content_blocks` son los bloques crudos de la respuesta: el portal los persiste (jsonb) y los reenvía SIN filtrar, reordenar ni truncar (incluidos `thinking` / `redacted_thinking`). Al portal le sirven `texto` para mostrar y `llamadas` para ejecutar.
+- Si `stop_reason` es `max_tokens` o `refusal`, `llamadas` viene vacía y `ejecutable` en `False`: el portal no corre ninguna herramienta, guarda la fila con `replay = false` (solo auditoría) y devuelve un error.
+- Claude: `CLAUDE_MODEL`, `thinking = {"type": "adaptive"}` (nunca `budget_tokens`), `output_config = {"effort": "medium"}`, `max_tokens = 4000`, sin `tool_choice` forzado, cache en el system y en el último bloque del último mensaje (sobre una copia).
+- Todo texto que viene de afuera (marca, web, nombres de fotos, historias) va dentro de `<datos_no_confiables origen="...">` y el prompt lo trata como dato, nunca como instrucción.
+
+**Herramientas `HERRAMIENTAS_CM["v1"]`** — ordenadas por nombre, `strict: True`, `additionalProperties: False`. Ninguna recibe `client_id`, `agency_id` ni URL: el portal las ata al cliente de la conversación.
+- Lectura: `leer_marca`, `leer_semana`, `leer_historial`, `leer_fotos` (`solo_disponibles`) y `leer_web` (sin argumentos: lee `clients.website_url` con las defensas SSRF de `web_text`).
+- Propuesta (no escriben): `proponer_descripcion {descripcion, motivo}`, `proponer_temas {temas, motivo}`, `proponer_ejemplo_tono {historias, motivo}`, `proponer_enfoque_semana {enfoque, formato}` (`formato` = clave de `FORMATOS` o vacío) y `proponer_texto_historia {historia_id, texto, motivo}`. Los límites (500 caracteres, 8 temas, 4 historias de 140…) los valida el portal.
+
+**Tablas (las crea el lado portal; migración planeada `migrations/20261111_cm_agent.sql`)** — RLS activado y sin políticas: solo service role.
+- `agencies.cm_enabled` (boolean, default false) y `Settings.cm_enabled` (env). Apagado = 404 en todos los endpoints del CM.
+- `cm_conversations`: `id`, `client_id`, `created_by`, `title`, `system_prompt`, `tools_version`, `busy_until` (reclamo de 90 s contra concurrencia), `user_turns`, `created_at`, `updated_at`, `closed_at`.
+- `cm_messages`: `id`, `conversation_id`, `client_id`, `seq` (único por conversación), `role` (`user`/`assistant`), `kind` (`mensaje`/`tool_result`/`respuesta`), `content` (jsonb: los bloques tal cual), `replay` (false = solo auditoría), `usage`, `stop_reason`, `created_by`, `created_at`.
+- `cm_pending_actions`: `id`, `conversation_id`, `client_id`, `tool_use_id` (único por conversación), `kind`, `payload`, `before` (foto del valor al proponer), `status` (`pending`, `applying`, `approved`, `discarded`, `stale`, `failed`), `error`, `decided_by`, `decided_at`, `created_at`.
+
+**Reglas de aprobación (portal)**
+- Las herramientas `proponer_*` solo insertan una fila `pending` en `cm_pending_actions`; el resultado que vuelve al modelo es "propuesta creada, esperando aprobación". Lo que diga un texto de la web, de una foto o de una historia nunca ejecuta una escritura.
+- Aprobar: reclamo atómico `pending → applying` (`update … where status = 'pending'`, un segundo intento da 409), revalidar agencia, cliente activo y estado de la historia, comparar `before` con el valor actual (si cambió: `stale`) y aplicar con los MISMOS servicios que la edición manual (el texto de una historia vuelve a componer la imagen y alimenta `learned_edits`). Resultado: `approved` o `failed` con detalle. `decided_by` es el empleado que aprobó.
+- El `client_id` sale siempre de la conversación; una conversación o acción de otra agencia responde 404. Una `historia_id` que no es del cliente de la conversación es un `is_error` para el modelo.
+- El resultado de las acciones decididas viaja en `acciones_decididas` del siguiente turno.
+- Límites (`Settings`): 6 llamadas a Claude por mensaje, 5 herramientas por llamada (las extras reciben `is_error`), 40 turnos de la persona por conversación, 60 por cliente por día, texto de hasta 2000 caracteres. Un fallo de Claude da 422 y conserva el mensaje de la persona.

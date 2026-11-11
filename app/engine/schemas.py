@@ -53,3 +53,30 @@ class ResultadoPublicacion(BaseModel):
     ok: bool
     ig_media_id: str | None = None
     error: str | None = None
+
+
+class ContextoCM(BaseModel):
+    """Lo que cambia de un turno a otro del CM; viaja en el turno del usuario."""
+    hoy: str                            # fecha ISO en America/Argentina/Buenos_Aires
+    semana: str                         # resumen compacto de la semana, armado por el portal
+    acciones_decididas: list[dict] = []  # [{id, tipo, estado}] desde el ultimo turno del usuario
+
+
+class InicioCM(BaseModel):
+    system: str                         # system prompt congelado de la conversacion
+    version_herramientas: str           # clave de cm_tools.HERRAMIENTAS_CM, congelada igual
+
+
+class LlamadaHerramienta(BaseModel):
+    id: str                             # tool_use id
+    name: str
+    input: dict
+
+
+class TurnoCM(BaseModel):
+    texto: str                          # solo bloques text, para mostrar
+    llamadas: list[LlamadaHerramienta]  # vacia si ejecutable es False
+    stop_reason: str
+    usage: dict
+    content_blocks: list[dict]          # bloques crudos: persistir y reenviar SIN cambios
+    ejecutable: bool = True             # False (max_tokens/refusal/...): el portal no corre herramientas
